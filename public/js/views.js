@@ -171,7 +171,7 @@ Views.room = {
           <div class="order-items">${shownItems.length ? shownItems.map(orderItemHtml).join('') : emptyState('🍽️', "Hali taom buyurtma qilinmagan. O'ngdagi menyudan tanlang.")}</div>
           ${order ? `<div class="totals num">
             <span>Taomlar</span><span class="right">${money(order.subtotal)}</span>
-            <span>Xizmat haqi ${order.service_pct}%</span><span class="right">${money(order.service_amount)}</span>
+            <span>${serviceLabel(order)}</span><span class="right">${money(order.service_amount)}</span>
             <span class="grand">Jami</span><span class="grand right">${money(order.total)}</span></div>
             <div class="row" style="margin-top:12px">
               ${can('waiter', 'owner', 'admin') ? `<button class="btn ${order.bill_requested ? '' : 'accent'}" id="req-bill" ${order.bill_requested ? 'disabled' : ''}>🧾 ${order.bill_requested ? "Hisob so'raldi" : "Hisob so'rash"}</button>` : ''}
@@ -192,7 +192,7 @@ Views.room = {
               return `<button class="dish ${d.available ? '' : 'out'}" data-dish="${d.id}" ${d.available ? '' : 'disabled'}>
                 ${inCart ? `<span class="qty"><span class="badge">${inCart.qty}</span></span>` : ''}
                 <span class="ic">${esc(d.icon || '🍽️')}</span><span class="nm">${esc(d.name)}</span>
-                <span class="eta">${d.needs_kitchen ? `⏱ ~${d.eta_minutes} daq` : '⚡ Darhol'}${d.stock != null ? ` · ${d.stock} ta qoldi` : ''}</span>
+                <span class="eta">${d.needs_kitchen && moduleOn('kitchen') ? `⏱ ~${d.eta_minutes} daq` : '⚡ Darhol'}${d.stock != null ? ` · ${d.stock} ta qoldi` : ''}</span>
                 <span class="pr">${money(d.price)}</span></button>`;
             }).join('') || emptyState('🔎', 'Taom topilmadi')}</div>
           </div>
@@ -239,7 +239,7 @@ Views.room = {
     guests.onchange = async () => {
       const g = Math.max(1, Number(guests.value) || 1);
       if (!order) { Carts[`g${room.id}`] = g; return; }
-      try { await PUT(`/api/orders/${order.id}`, { guests: g }); toast('Mehmonlar soni saqlandi', 'ok'); } catch (e) { toastError(e); }
+      try { await PUT(`/api/orders/${order.id}`, { guests: g }); toast('Mehmonlar soni saqlandi', 'ok'); refreshView(); } catch (e) { toastError(e); }
     };
 
     const send = root.querySelector('#send');
@@ -300,7 +300,11 @@ function openPayment(order) {
     title: `To'lov · Chek #${order.id} · ${order.room.name}`,
     body: `${pending.length ? `<p class="toast warn">⚠ Tayyor bo'lmagan taomlar: ${pending.map((i) => esc(i.name)).join(', ')}. Avval ularni tayyorlang yoki bekor qiling.</p>` : ''}
       <div class="form-grid">
-        <label class="field">Xizmat haqi, %<input type="number" name="service_pct" min="0" max="50" step="0.5" value="${order.service_pct}"></label>
+        <label class="field">Xizmat haqi turi<select name="service_type">
+          <option value="percent" ${order.service_type !== 'per_guest' ? 'selected' : ''}>Foizda (%)</option>
+          <option value="per_guest" ${order.service_type === 'per_guest' ? 'selected' : ''}>Odam boshiga</option></select></label>
+        <label class="field"><span id="rate-label"></span><input type="number" name="service_rate" min="0" step="any" value="${order.service_pct}"></label>
+        <label class="field">Mehmonlar soni<input type="number" name="guests" min="1" value="${order.guests}" readonly title="Buyurtma oynasida o'zgartiriladi"></label>
         <label class="field">Chegirma (${esc(App.settings.currency)})<input type="number" name="discount" min="0" value="0"></label>
       </div>
       <div class="totals num" id="pay-totals"></div>
@@ -321,7 +325,7 @@ function openPayment(order) {
       { label: "✅ To'lovni yakunlash", cls: 'ok', onClick: async (f) => {
         const d = formData(f);
         const r = await POST(`/api/orders/${order.id}/close`, {
-          service_pct: Number(d.service_pct) || 0, discount: Number(d.discount) || 0,
+          service_type: d.service_type, service_rate: Number(d.service_rate) || 0, discount: Number(d.discount) || 0,
           paid_cash: Number(d.paid_cash) || 0, paid_card: Number(d.paid_card) || 0, paid_transfer: Number(d.paid_transfer) || 0,
         });
         toast(`Chek #${r.id} yopildi${r.change ? ` · Qaytim: ${moneyText(r.change)}` : ''}`, 'ok', 8000);
@@ -333,17 +337,24 @@ function openPayment(order) {
   });
   const calc = () => {
     const d = formData(form);
-    const service = Math.round((order.subtotal * (Number(d.service_pct) || 0)) / 100);
+    const perGuest = d.service_type === 'per_guest';
+    form.querySelector('#rate-label').textContent = perGuest ? `Bir kishi uchun (${App.settings.currency})` : 'Foiz, %';
+    const rate = Number(d.service_rate) || 0;
+    const service = Math.round(perGuest ? rate * order.guests : (order.subtotal * rate) / 100);
     const total = Math.max(0, order.subtotal + service - (Number(d.discount) || 0));
     const paid = (Number(d.paid_cash) || 0) + (Number(d.paid_card) || 0) + (Number(d.paid_transfer) || 0);
     form.querySelector('#pay-totals').innerHTML = `<span>Taomlar</span><span class="right">${money(order.subtotal)}</span>
-      <span>Xizmat haqi</span><span class="right">${money(service)}</span>
+      <span>Xizmat haqi${perGuest ? ` (${order.guests} kishi × ${money(rate)})` : ` ${rate}%`}</span><span class="right">${money(service)}</span>
       ${d.discount ? `<span>Chegirma</span><span class="right">-${money(d.discount)}</span>` : ''}
       <span class="grand">To'lanadi</span><span class="grand right">${money(total)}</span>`;
     const ch = form.querySelector('#pay-change');
     ch.innerHTML = !paid ? '' : paid >= total
       ? `✅ Qaytim: <b>${money(paid - total)}</b>` : `<span style="color:var(--danger)">Yetishmaydi: <b>${money(total - paid)}</b></span>`;
     return total;
+  };
+  form.service_type.onchange = () => {
+    form.service_rate.value = form.service_type.value === 'per_guest' ? App.settings.service_per_guest : App.settings.service_pct;
+    calc();
   };
   form.addEventListener('input', calc);
   form.querySelectorAll('[data-all]').forEach((b) => b.onclick = () => {
@@ -469,24 +480,26 @@ Views.cashier = {
   title: 'Kassa', icon: '💳', roles: ['owner', 'admin', 'cashier'], nav: true, refreshOn: ['rooms', 'finance'], badge: 'bills',
   async load() {
     const from = dayStart().getTime();
+    const fin = moduleOn('finance');
     const [open, closed, shift, txs] = await Promise.all([
-      GET('/api/orders?status=open'), GET(`/api/orders?status=closed&from=${from}`), GET('/api/shifts/current'),
-      GET(`/api/transactions?from=${from}`),
+      GET('/api/orders?status=open'), GET(`/api/orders?status=closed&from=${from}`),
+      fin ? GET('/api/shifts/current') : null, fin ? GET(`/api/transactions?from=${from}`) : [],
     ]);
     return { open, closed, shift, txs };
   },
   render({ open, closed, shift, txs }) {
     const todaySales = closed.reduce((s, o) => s + o.total, 0);
     const exp = txs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    const fin = moduleOn('finance');
     return `<div class="page-head"><h1>Kassa</h1><span class="spacer"></span>
-      <button class="btn" id="add-income">➕ Kirim</button><button class="btn accent" id="add-expense">➖ Xarajat</button></div>
+      ${fin ? '<button class="btn" id="add-income">➕ Kirim</button><button class="btn accent" id="add-expense">➖ Xarajat</button>' : ''}</div>
       <div class="kpis">
         <div class="kpi prime"><div class="label">Bugungi savdo</div><div class="value">${money(todaySales)}</div><div class="sub">${closed.length} ta chek</div></div>
         <div class="kpi"><div class="label">Ochiq cheklar</div><div class="value">${open.length}</div><div class="sub">${money(open.reduce((s, o) => s + o.total, 0))}</div></div>
-        <div class="kpi bad"><div class="label">Bugungi xarajat</div><div class="value">${money(exp)}</div></div>
+        ${fin ? `<div class="kpi bad"><div class="label">Bugungi xarajat</div><div class="value">${money(exp)}</div></div>
         <div class="kpi ${shift ? 'good' : ''}"><div class="label">Kassa smenasi</div><div class="value" style="font-size:16px">${shift ? `Ochiq · ${esc(shift.cashier_name)}` : 'Yopiq'}</div>
           <div class="sub">${shift ? `Kassada bo'lishi kerak: <b>${money(shift.expected)}</b>` : ''}</div>
-          <div style="margin-top:8px">${shift ? '<button class="btn sm" id="close-shift">Smenani yopish</button>' : '<button class="btn sm primary" id="open-shift">Smenani ochish</button>'}</div></div>
+          <div style="margin-top:8px">${shift ? '<button class="btn sm" id="close-shift">Smenani yopish</button>' : '<button class="btn sm primary" id="open-shift">Smenani ochish</button>'}</div></div>` : ''}
       </div>
       <div class="card"><div class="card-head"><h2>Ochiq cheklar</h2></div>
         ${open.length ? `<div class="table-wrap"><table><tr><th>Xona</th><th>Ofitsant</th><th>Mehmon</th><th>Ochilgan</th><th>Summa</th><th></th></tr>
@@ -501,11 +514,11 @@ Views.cashier = {
           ${closed.length ? `<div class="table-wrap"><table><tr><th>#</th><th>Xona</th><th>Vaqt</th><th>Summa</th><th></th></tr>
           ${closed.map((o) => `<tr><td>${o.id}</td><td>${esc(o.room_name)}</td><td>${fmtTime(o.closed_at)}</td><td class="num">${money(o.total)}</td>
             <td class="actions"><button class="btn sm" data-reprint="${o.id}">🖨</button></td></tr>`).join('')}</table></div>` : emptyState('📭', "Hali yo'q")}</div>
-        <div class="card"><div class="card-head"><h2>Bugungi kirim-chiqim</h2></div>
+        ${fin ? `<div class="card"><div class="card-head"><h2>Bugungi kirim-chiqim</h2></div>
           ${txs.length ? `<div class="table-wrap"><table><tr><th>Vaqt</th><th>Turi</th><th>Kategoriya</th><th>Summa</th></tr>
           ${txs.slice(0, 40).map((t) => `<tr><td>${fmtTime(t.created_at)}</td><td>${t.type === 'income' ? '<span class="chip ready">Kirim</span>' : '<span class="chip cancelled" style="text-decoration:none">Chiqim</span>'}</td>
             <td>${esc(t.category)}<br><span class="small muted">${METHOD_NAMES[t.method]}${t.note ? ' · ' + esc(t.note) : ''}</span></td>
-            <td class="num">${t.type === 'expense' ? '−' : ''}${money(t.amount)}</td></tr>`).join('')}</table></div>` : emptyState('📭', "Hali yo'q")}</div>
+            <td class="num">${t.type === 'expense' ? '−' : ''}${money(t.amount)}</td></tr>`).join('')}</table></div>` : emptyState('📭', "Hali yo'q")}</div>` : ''}
       </div>`;
   },
   bind(root, { open, shift }) {
@@ -515,8 +528,10 @@ Views.cashier = {
     root.querySelectorAll('[data-reprint]').forEach((b) => b.onclick = async () => {
       try { printReceipt(await GET(`/api/orders/${b.dataset.reprint}`)); } catch (e) { toastError(e); }
     });
-    root.querySelector('#add-expense').onclick = () => openTransaction('expense');
-    root.querySelector('#add-income').onclick = () => openTransaction('income');
+    const ae = root.querySelector('#add-expense');
+    if (ae) ae.onclick = () => openTransaction('expense');
+    const ai = root.querySelector('#add-income');
+    if (ai) ai.onclick = () => openTransaction('income');
     const os = root.querySelector('#open-shift');
     if (os) os.onclick = () => openModal({ title: 'Smenani ochish', body: `<label class="field">Kassadagi boshlang'ich naqd pul<input type="number" name="opening_cash" min="0" value="0"></label>`,
       actions: [{ label: 'Bekor', onClick: () => {} }, { label: 'Ochish', cls: 'primary', onClick: async (f) => { await POST('/api/shifts/open', formData(f)); toast('Smena ochildi', 'ok'); refreshView(); } }] });

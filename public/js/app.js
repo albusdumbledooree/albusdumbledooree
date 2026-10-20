@@ -2,9 +2,9 @@
 /* App shell: routing, navigation, live event reactions (voice, banners, badges). */
 
 const NAV_ORDER = {
-  owner: ['dashboard', 'rooms', 'kitchen', 'cashier', 'reports', 'finance', 'payroll', 'reservations', 'stoplist', 'menuadmin', 'staff', 'halls', 'audit', 'settings'],
-  admin: ['dashboard', 'rooms', 'kitchen', 'cashier', 'reports', 'finance', 'reservations', 'stoplist', 'menuadmin', 'staff', 'halls', 'audit', 'settings'],
-  cashier: ['cashier', 'rooms', 'dashboard', 'reports', 'finance', 'reservations', 'stoplist', 'settings'],
+  owner: ['dashboard', 'rooms', 'kitchen', 'cashier', 'history', 'reports', 'finance', 'payroll', 'reservations', 'stoplist', 'menuadmin', 'staff', 'halls', 'audit', 'settings'],
+  admin: ['dashboard', 'rooms', 'kitchen', 'cashier', 'history', 'reports', 'finance', 'reservations', 'stoplist', 'menuadmin', 'staff', 'halls', 'audit', 'settings'],
+  cashier: ['cashier', 'history', 'rooms', 'dashboard', 'reports', 'finance', 'reservations', 'stoplist', 'settings'],
   waiter: ['rooms', 'ready', 'settings'],
   chef: ['kitchen', 'stoplist', 'settings'],
 };
@@ -13,7 +13,13 @@ let currentParams = [];
 let currentData = null;
 let loadSeq = 0;
 
-function homeRoute() { return `#/${NAV_ORDER[App.user.role][0]}`; }
+// Which platform section (switched on/off per choyxona) each screen belongs to.
+const VIEW_MODULE = {
+  kitchen: 'kitchen', ready: 'kitchen', stoplist: 'stoplist', dashboard: 'reports', reports: 'reports', finance: 'finance',
+  payroll: 'payroll', reservations: 'reservations', audit: 'audit', history: 'history',
+};
+function navKeys() { return NAV_ORDER[App.user.role].filter((k) => moduleOn(VIEW_MODULE[k])); }
+function homeRoute() { return `#/${navKeys()[0]}`; }
 
 function applyTheme() {
   const t = store('cp_theme') || 'auto';
@@ -28,7 +34,7 @@ function parseHash() {
 
 function navHtml() {
   const { name } = parseHash();
-  return NAV_ORDER[App.user.role].map((k) => {
+  return navKeys().map((k) => {
     const v = Views[k];
     const b = v.badge && App.badges[v.badge] ? `<span class="badge">${App.badges[v.badge]}</span>` : '';
     const active = name === k || (k === 'rooms' && name === 'room');
@@ -81,7 +87,7 @@ async function render() {
     return;
   }
   const view = Views[name];
-  if (!view || view.public || !view.roles.includes(App.user.role)) { location.hash = homeRoute(); return; }
+  if (!view || view.public || !view.roles.includes(App.user.role) || !moduleOn(VIEW_MODULE[name])) { location.hash = homeRoute(); return; }
   if (!document.getElementById('view')) {
     app.innerHTML = shellHtml();
     app.querySelectorAll('[data-logout]').forEach((b) => b.onclick = async () => {
@@ -161,7 +167,15 @@ Live.on('*', (type) => {
   if (currentView && currentView.refreshOn && currentView.refreshOn.includes(type)) refreshSoon();
   if (['rooms', 'kitchen', 'kitchen_new', 'item_ready'].includes(type)) refreshBadges();
 });
-Live.on('settings', async () => { try { App.settings = (await GET('/api/me')).settings; } catch { /* ignore */ } });
+Live.on('settings', async () => {
+  try {
+    const me = await GET('/api/me');
+    const changed = JSON.stringify(me.disabled) !== JSON.stringify(App.disabled);
+    App.settings = me.settings;
+    App.disabled = me.disabled || [];
+    if (changed) { updateNav(); render(); }
+  } catch { /* ignore */ }
+});
 
 Live.on('item_ready', (d) => {
   if (d.waiter_id !== App.user.id) return;
@@ -204,7 +218,7 @@ async function refreshBadges() {
       App.readyItems = await GET('/api/my/ready');
       App.badges.ready = App.readyItems.length;
     }
-    if (['chef', 'owner', 'admin'].includes(role)) {
+    if (['chef', 'owner', 'admin'].includes(role) && moduleOn('kitchen')) {
       const k = await GET('/api/kitchen');
       App.badges.kitchen = k.load.pending;
     }
@@ -242,6 +256,7 @@ async function afterLogin() {
   App.user = me.user;
   App.settings = me.settings;
   App.tenant = me.tenant;
+  App.disabled = me.disabled || [];
   document.getElementById('app').innerHTML = '';
   Live.start();
   refreshBadges();

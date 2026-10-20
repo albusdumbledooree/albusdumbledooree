@@ -243,3 +243,65 @@ test('payroll: daily pay with attendance, % of sales, bonus, fine, payment', asy
   row = (await call('GET', '/api/payroll', boss)).data.staff.find((s) => s.id === w.id);
   assert.equal(row.accrued_base, 0);
 });
+
+test('service charge per guest, checks history with export', async () => {
+  const boss = await login('ega', 'ega123');
+  const rooms = (await call('GET', '/api/rooms', boss)).data;
+  const menu = (await call('GET', '/api/menu', boss)).data;
+  const non = menu.dishes.find((d) => d.name === 'Tandir non');
+  const room = rooms.find((r) => !r.order);
+
+  await call('PUT', '/api/settings', boss, { service_type: 'per_guest', service_per_guest: 5000 });
+  const o = (await call('POST', '/api/orders', boss, { room_id: room.id, guests: 10 })).data;
+  const withItems = (await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: non.id, qty: 2 }] })).data;
+  assert.equal(withItems.service_type, 'per_guest');
+  assert.equal(withItems.service_amount, 50000, '10 guests x 5 000');
+  assert.equal(withItems.total, 10000 + 50000);
+
+  // The cashier may switch to percent for this one check.
+  const closed = (await call('POST', `/api/orders/${o.id}/close`, boss, { service_type: 'percent', service_rate: 10, paid_cash: 11000 })).data;
+  assert.equal(closed.service_amount, 1000);
+  assert.equal(closed.total, 11000);
+  await call('PUT', '/api/settings', boss, { service_type: 'percent' });
+
+  const s = new Date(); s.setHours(0, 0, 0, 0);
+  const today = (await call('GET', `/api/checks?from=${s.getTime()}&to=${s.getTime() + 86400000}`, boss)).data;
+  assert.ok(today.rows.some((r) => r.id === o.id));
+  assert.equal(today.sums.count, today.rows.length);
+  const yesterday = (await call('GET', `/api/checks?from=${s.getTime() - 86400000}&to=${s.getTime()}`, boss)).data;
+  assert.equal(yesterday.rows.length, 0, 'a new day starts empty');
+  const all = (await call('GET', '/api/checks', boss)).data;
+  assert.ok(all.sums.count >= today.sums.count);
+  assert.equal((await call('GET', `/api/checks?q=${o.id}`, boss)).data.rows[0].id, o.id);
+
+  const res = await fetch(`${base}/api/checks/export`, { headers: { Authorization: `Bearer ${boss}` } });
+  assert.match(res.headers.get('content-type'), /text\/csv/);
+  const csv = await res.text();
+  assert.ok(csv.includes('Tandir non x2'));
+  assert.equal((await call('GET', '/api/checks', await login('jasur', '1234'))).status, 403);
+});
+
+test('platform owner switches sections off per choyxona', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  const demo = (await call('GET', '/api/platform/tenants', admin)).data.find((t) => t.code === 'demo');
+  const boss = await login('ega', 'ega123');
+  assert.equal((await call('PUT', `/api/platform/tenants/${demo.id}`, admin, { disabled_modules: ['nimadir'] })).status, 400);
+  await call('PUT', `/api/platform/tenants/${demo.id}`, admin, { disabled_modules: ['payroll', 'kitchen', 'history'] });
+
+  assert.deepEqual((await call('GET', '/api/me', boss)).data.disabled.sort(), ['history', 'kitchen', 'payroll']);
+  const r = await call('GET', '/api/payroll', boss);
+  assert.equal(r.status, 403);
+  assert.match(r.data.error, /Ish haqi/);
+  assert.equal((await call('GET', '/api/checks', boss)).status, 403);
+  assert.equal((await call('GET', '/api/reports?from=1&to=2', boss)).status, 200, 'other sections still work');
+
+  // Without the kitchen screen, dishes go straight to "served" so checks can be closed.
+  const rooms = (await call('GET', '/api/rooms', boss)).data;
+  const shorva = (await call('GET', '/api/menu', boss)).data.dishes.find((d) => d.name === "Sho'rva");
+  const o = (await call('POST', '/api/orders', boss, { room_id: rooms.find((x) => !x.order).id })).data;
+  const after = (await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: shorva.id, qty: 1 }] })).data;
+  assert.equal(after.items[0].status, 'served');
+
+  await call('PUT', `/api/platform/tenants/${demo.id}`, admin, { disabled_modules: [] });
+  assert.equal((await call('GET', '/api/payroll', boss)).status, 200);
+});

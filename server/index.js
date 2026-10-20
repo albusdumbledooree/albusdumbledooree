@@ -49,7 +49,15 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       const query = Object.fromEntries(url.searchParams);
       const ip = (process.env.TRUST_PROXY === '1' && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress;
       const body = req.method === 'GET' ? {} : await readJson(req);
-      const reply = (result) => send(res, 200, result === undefined ? null : result);
+      const reply = (result) => {
+        // Handlers may return a file download instead of JSON.
+        if (result && result.__file) {
+          const f = result.__file;
+          res.writeHead(200, { 'Content-Type': f.type, 'Content-Disposition': `attachment; filename="${f.name}"`, 'Cache-Control': 'no-store' });
+          return res.end(f.body);
+        }
+        send(res, 200, result === undefined ? null : result);
+      };
 
       // Site owner's panel: choyxonas, subscriptions, boss accounts.
       if (pathname.startsWith('/api/platform/')) return reply(platform.handle(req.method, pathname, { body, query, token, ip }));

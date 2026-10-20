@@ -10,6 +10,28 @@ const KITCHEN = ['owner', 'admin', 'chef'];
 const ROLE_NAMES = { owner: 'Boshliq', admin: 'Admin', cashier: 'Kassir', waiter: 'Ofitsant', chef: 'Oshpaz' };
 const METHODS = ['cash', 'card', 'transfer'];
 const MIN = 60_000;
+// Sections the platform owner can switch off per choyxona (e.g. for cheaper plans).
+const MODULES = {
+  kitchen: 'Oshxona ekrani',
+  stoplist: 'Stop-list',
+  reports: 'Hisobotlar va boshqaruv paneli',
+  finance: 'Kirim-chiqim va kassa smenasi',
+  payroll: 'Ish haqi',
+  reservations: 'Bronlar',
+  history: 'Cheklar tarixi',
+  audit: 'Amallar tarixi',
+};
+function routeModule(pattern) {
+  if (/^\/api\/(kitchen|items\/:id\/(accept|ready))$/.test(pattern)) return 'kitchen';
+  if (pattern === '/api/dishes/:id/availability') return 'stoplist';
+  if (pattern === '/api/reports' || pattern === '/api/dashboard') return 'reports';
+  if (/^\/api\/(transactions|shifts)/.test(pattern)) return 'finance';
+  if (/^\/api\/(payroll|my\/payroll)/.test(pattern)) return 'payroll';
+  if (/^\/api\/reservations/.test(pattern)) return 'reservations';
+  if (pattern === '/api/audit') return 'audit';
+  if (/^\/api\/checks/.test(pattern)) return 'history';
+  return null;
+}
 
 // opts.hub: live-event hub of this choyxona; opts.tokenPrefix marks which choyxona a session token belongs to;
 // opts.tenant(): the choyxona's platform record (code, name, paid_until).
@@ -41,6 +63,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     const out = {};
     for (const r of q('SELECT key, value FROM settings').all()) out[r.key] = r.value;
     out.service_pct = Number(out.service_pct) || 0;
+    out.service_type = out.service_type === 'per_guest' ? 'per_guest' : 'percent';
+    out.service_per_guest = Number(out.service_per_guest) || 0;
     out.demo = out.demo || '0';
     out.expense_categories = JSON.parse(out.expense_categories || '[]');
     out.income_categories = JSON.parse(out.income_categories || '[]');
@@ -88,9 +112,16 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     return { ok: true };
   }
 
+  function disabledModules() {
+    const t = tenant();
+    try { return t && t.disabled_modules ? JSON.parse(t.disabled_modules) : []; } catch { return []; }
+  }
+  const moduleOn = (m) => !disabledModules().includes(m);
+
   function me({ user }) {
     const t = tenant();
-    return { user: publicUser(user), settings: settings(), tenant: t && { code: t.code, name: t.name, paid_until: t.paid_until } };
+    return { user: publicUser(user), settings: settings(), modules: MODULES, disabled: disabledModules(),
+      tenant: t && { code: t.code, name: t.name, paid_until: t.paid_until } };
   }
 
   function changeOwnPassword({ user, body }) {
@@ -105,7 +136,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
 
   // ---------- Settings ----------
   function updateSettings({ user, body }) {
-    const allowed = ['name', 'address', 'phone', 'service_pct', 'currency', 'receipt_footer', 'receipt_width', 'expense_categories', 'income_categories'];
+    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'expense_categories', 'income_categories'];
     const set = q('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     for (const k of allowed) {
       if (body[k] === undefined) continue;
@@ -114,6 +145,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
         v = Number(v);
         if (!(v >= 0 && v <= 50)) throw new HttpError(400, "Xizmat haqi 0–50% oralig'ida bo'lsin");
       }
+      if (k === 'service_type' && !['percent', 'per_guest'].includes(v)) throw new HttpError(400, "Xizmat haqi turi noto'g'ri");
+      if (k === 'service_per_guest') v = int(v, 'Odam boshiga xizmat haqi', { max: 10_000_000 });
       if (k === 'receipt_width' && !['58', '80'].includes(String(v))) throw new HttpError(400, "Chek kengligi 58 yoki 80 mm bo'lsin");
       if (k.endsWith('_categories')) {
         if (!Array.isArray(v)) throw new HttpError(400, "Kategoriyalar ro'yxat bo'lishi kerak");
@@ -393,12 +426,20 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     throw new HttpError(403, 'Bu buyurtma sizga tegishli emas');
   }
 
+  // Service charge is either a percent of the dishes or a fixed amount per guest.
+  // orders.service_pct keeps the rate: percent for 'percent', amount per guest for 'per_guest'.
   function totals(order, items, overrides = {}) {
     const subtotal = items.filter((i) => i.status !== 'cancelled').reduce((s, i) => s + i.price * i.qty, 0);
-    const service_pct = overrides.service_pct ?? (order.status === 'open' ? settings().service_pct : order.service_pct);
-    const service_amount = Math.round((subtotal * service_pct) / 100);
+    const open = order.status === 'open';
+    const st = open ? settings() : null;
+    const service_type = overrides.service_type ?? (open ? st.service_type : order.service_type || 'percent');
+    const service_pct = overrides.service_rate
+      ?? (open ? (service_type === 'per_guest' ? st.service_per_guest : st.service_pct) : order.service_pct);
+    const service_amount = service_type === 'per_guest'
+      ? Math.round(service_pct * order.guests)
+      : Math.round((subtotal * service_pct) / 100);
     const discount = Math.min(overrides.discount ?? order.discount ?? 0, subtotal + service_amount);
-    return { subtotal, service_pct, service_amount, discount, total: subtotal + service_amount - discount };
+    return { subtotal, service_type, service_pct, service_amount, discount, total: subtotal + service_amount - discount };
   }
 
   function orderDetails(id) {
@@ -409,7 +450,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     const waiter = q('SELECT id, name FROM users WHERE id = ?').get(order.waiter_id);
     const cashier = order.cashier_id ? q('SELECT id, name FROM users WHERE id = ?').get(order.cashier_id) : null;
     const t = order.status === 'open' ? totals(order, items) : order;
-    return { ...order, ...{ subtotal: t.subtotal, service_pct: t.service_pct, service_amount: t.service_amount, discount: t.discount, total: t.total },
+    return { ...order, ...{ subtotal: t.subtotal, service_type: t.service_type || 'percent', service_pct: t.service_pct,
+      service_amount: t.service_amount, discount: t.discount, total: t.total },
       items, room, waiter, cashier };
   }
 
@@ -492,7 +534,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
           q('UPDATE dishes SET stock = ?, available = ? WHERE id = ?').run(left, left > 0 ? 1 : 0, d.id);
           if (left === 0) events.publish('stoplist', { name: d.name, by: 'Tizim' });
         }
-        const kitchen = d.needs_kitchen === 1;
+        const kitchen = d.needs_kitchen === 1 && moduleOn('kitchen');
         const id = q(`INSERT INTO order_items (order_id, dish_id, name, price, cost, qty, note, status, needs_kitchen, prep_minutes, created_at, eta_at, served_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
           o.id, d.id, d.name, d.price, d.cost, qty, str(it.note, 'Izoh', { max: 200 }), kitchen ? 'new' : 'served', kitchen ? 1 : 0,
@@ -605,11 +647,17 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     if (unfinished.length) throw new HttpError(409, `Hali tayyor bo'lmagan taomlar bor: ${unfinished.map((i) => i.name).join(', ')}`);
     const live = items.filter((i) => i.status !== 'cancelled');
     if (!live.length) throw new HttpError(400, "Chekda taom yo'q. Bo'sh buyurtmani bekor qiling");
-    const service_pct = body.service_pct !== undefined ? Number(body.service_pct) : settings().service_pct;
-    if (!(service_pct >= 0 && service_pct <= 50)) throw new HttpError(400, "Xizmat haqi noto'g'ri");
+    const st = settings();
+    const service_type = body.service_type !== undefined ? str(body.service_type, 'Xizmat haqi turi') : st.service_type;
+    if (!['percent', 'per_guest'].includes(service_type)) throw new HttpError(400, "Xizmat haqi turi noto'g'ri");
+    let rate = service_type === 'per_guest' ? st.service_per_guest : st.service_pct;
+    if (body.service_rate !== undefined) rate = Number(body.service_rate);
+    else if (body.service_pct !== undefined && service_type === 'percent') rate = Number(body.service_pct);
+    const maxRate = service_type === 'percent' ? 50 : 10_000_000;
+    if (!(rate >= 0 && rate <= maxRate)) throw new HttpError(400, "Xizmat haqi noto'g'ri");
     const discount = int(body.discount, 'Chegirma');
     if (discount && !['owner', 'admin', 'cashier'].includes(user.role)) throw new HttpError(403, "Chegirma berish huquqi yo'q");
-    const t = totals(o, items, { service_pct, discount });
+    const t = totals(o, items, { service_type, service_rate: rate, discount });
     const paid = { cash: int(body.paid_cash, 'Naqd'), card: int(body.paid_card, 'Karta'), transfer: int(body.paid_transfer, "O'tkazma") };
     const sumPaid = paid.cash + paid.card + paid.transfer;
     if (sumPaid < t.total) throw new HttpError(400, `To'lov yetarli emas: ${t.total - sumPaid} kam`);
@@ -620,9 +668,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     const ts = now();
     tx(() => {
       q("UPDATE order_items SET status = 'served', served_at = ? WHERE order_id = ? AND status = 'ready'").run(ts, o.id);
-      q(`UPDATE orders SET status = 'closed', closed_at = ?, cashier_id = ?, subtotal = ?, service_pct = ?, service_amount = ?,
+      q(`UPDATE orders SET status = 'closed', closed_at = ?, cashier_id = ?, subtotal = ?, service_type = ?, service_pct = ?, service_amount = ?,
         discount = ?, total = ?, paid_cash = ?, paid_card = ?, paid_transfer = ?, bill_requested = 0 WHERE id = ?`).run(
-        ts, user.id, t.subtotal, t.service_pct, t.service_amount, t.discount, t.total, paid.cash, paid.card, paid.transfer, o.id
+        ts, user.id, t.subtotal, t.service_type, t.service_pct, t.service_amount, t.discount, t.total, paid.cash, paid.card, paid.transfer, o.id
       );
       const ins = q("INSERT INTO transactions (type, category, amount, method, note, order_id, user_id, created_at) VALUES ('income', 'Savdo', ?, ?, ?, ?, ?, ?)");
       for (const m of METHODS) if (paid[m] > 0) ins.run(paid[m], m, `Chek #${o.id}`, o.id, user.id, ts);
@@ -666,6 +714,62 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     events.publish('rooms');
     events.publish('kitchen');
     return orderDetails(o.id);
+  }
+
+  // ---------- Checks history ----------
+  function checksWhere(query) {
+    const status = ['closed', 'cancelled'].includes(query.status) ? query.status : 'closed';
+    let where = 'o.status = ?';
+    const params = [status];
+    if (query.from) { where += ' AND o.closed_at >= ?'; params.push(Number(query.from)); }
+    if (query.to) { where += ' AND o.closed_at < ?'; params.push(Number(query.to)); }
+    const search = str(query.q, 'Qidiruv', { max: 60 });
+    if (search) {
+      where += ' AND (CAST(o.id AS TEXT) = ? OR r.name LIKE ? OR r.number = ? OR w.name LIKE ?)';
+      params.push(search.replace(/^#/, ''), `%${search}%`, search, `%${search}%`);
+    }
+    return { where, params };
+  }
+  const CHECK_FROM = `FROM orders o JOIN rooms r ON r.id = o.room_id JOIN users w ON w.id = o.waiter_id LEFT JOIN users c ON c.id = o.cashier_id`;
+
+  function listChecks({ query }) {
+    const { where, params } = checksWhere(query);
+    const limit = Math.min(Number(query.limit) || 100, 500);
+    const offset = Math.max(Number(query.offset) || 0, 0);
+    const rows = q(`SELECT o.*, r.name room_name, r.number room_number, w.name waiter_name, c.name cashier_name,
+      (SELECT COALESCE(SUM(qty), 0) FROM order_items i WHERE i.order_id = o.id AND i.status != 'cancelled') items_count
+      ${CHECK_FROM} WHERE ${where} ORDER BY o.closed_at DESC, o.id DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
+    const sums = q(`SELECT COUNT(*) count, COALESCE(SUM(o.total), 0) total, COALESCE(SUM(o.subtotal), 0) subtotal,
+      COALESCE(SUM(o.service_amount), 0) service, COALESCE(SUM(o.discount), 0) discount, COALESCE(SUM(o.guests), 0) guests,
+      COALESCE(SUM(o.paid_cash), 0) cash, COALESCE(SUM(o.paid_card), 0) card, COALESCE(SUM(o.paid_transfer), 0) transfer,
+      MIN(o.closed_at) first_at ${CHECK_FROM} WHERE ${where}`).get(...params);
+    return { rows, sums, offset, limit };
+  }
+
+  // Excel-friendly CSV (semicolon, UTF-8 BOM) of every check in the filter, with its dishes.
+  function exportChecks({ query }) {
+    const { where, params } = checksWhere(query);
+    const rows = q(`SELECT o.*, r.name room_name, r.number room_number, w.name waiter_name, c.name cashier_name
+      ${CHECK_FROM} WHERE ${where} ORDER BY o.closed_at, o.id`).all(...params);
+    const items = new Map();
+    for (const i of q(`SELECT i.order_id, i.name, i.qty, i.price FROM order_items i JOIN orders o ON o.id = i.order_id JOIN rooms r ON r.id = o.room_id
+      JOIN users w ON w.id = o.waiter_id LEFT JOIN users c ON c.id = o.cashier_id WHERE ${where} AND i.status != 'cancelled' ORDER BY i.id`).all(...params)) {
+      if (!items.has(i.order_id)) items.set(i.order_id, []);
+      items.get(i.order_id).push(`${i.name} x${i.qty}`);
+    }
+    const dt = (ts) => {
+      if (!ts) return '';
+      const d = new Date(ts);
+      const p2 = (n) => String(n).padStart(2, '0');
+      return `${p2(d.getDate())}.${p2(d.getMonth() + 1)}.${d.getFullYear()} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+    };
+    const head = ['Chek', 'Holat', 'Ochilgan', 'Yopilgan', 'Xona', 'Ofitsant', 'Kassir', 'Mehmon', 'Taomlar', 'Taomlar summasi',
+      'Xizmat haqi', 'Chegirma', 'Jami', 'Naqd', 'Karta', "O'tkazma", 'Bekor sababi'];
+    const lines = rows.map((o) => [o.id, o.status === 'closed' ? 'Yopilgan' : 'Bekor', dt(o.opened_at), dt(o.closed_at),
+      `${o.room_number} ${o.room_name}`, o.waiter_name, o.cashier_name || '', o.guests, (items.get(o.id) || []).join(', '),
+      o.subtotal, o.service_amount, o.discount, o.total, o.paid_cash, o.paid_card, o.paid_transfer, o.cancel_reason || '']);
+    const csv = '\ufeff' + [head, ...lines].map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
+    return { __file: { name: `cheklar_${dt(Date.now()).slice(0, 10)}.csv`, type: 'text/csv; charset=utf-8', body: csv } };
   }
 
   // ---------- Kitchen ----------
@@ -983,10 +1087,12 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     ['POST', '/api/payroll/attendance', ['owner'], payroll.setAttendance],
     ['GET', '/api/payroll/users/:id', ['owner'], payroll.userLedger],
     ['GET', '/api/my/payroll', ALL, payroll.myPayroll],
+    ['GET', '/api/checks', MONEY, listChecks],
+    ['GET', '/api/checks/export', MONEY, exportChecks],
   ].map(([method, pattern, roles, handler]) => {
     const keys = [];
     const re = new RegExp('^' + pattern.replace(/:(\w+)/g, (_, k) => { keys.push(k); return '(\\d+)'; }) + '$');
-    return { method, re, keys, roles, handler };
+    return { method, re, keys, roles, handler, module: routeModule(pattern) };
   });
 
   function match(method, pathname) {
@@ -996,6 +1102,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
       if (!m) continue;
       const params = {};
       r.keys.forEach((k, i) => { params[k] = Number(m[i + 1]); });
+      if (r.module && !moduleOn(r.module)) {
+        throw new HttpError(403, `"${MODULES[r.module]}" bo'limi sizning paketingizda yoqilmagan`);
+      }
       return { route: r, params };
     }
     return null;
@@ -1004,4 +1113,4 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
   return { match, authenticate, settings, ROLES };
 }
 
-module.exports = { createApi };
+module.exports = { createApi, MODULES };

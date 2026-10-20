@@ -43,6 +43,8 @@ function toLocalInput(ts) {
   const d = new Date(ts);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
+// False when the platform owner switched this section off for the choyxona.
+function moduleOn(m) { return !m || !(App.disabled || []).includes(m); }
 function localDay(ts = Date.now()) { const d = new Date(ts); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 function dayStart(d = new Date()) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 
@@ -298,6 +300,10 @@ function printDoc(title, body) {
   document.body.appendChild(frame);
 }
 
+function serviceLabel(o) {
+  return o.service_type === 'per_guest' ? `Xizmat haqi (${o.guests} kishi × ${money(o.service_pct)})` : `Xizmat haqi ${o.service_pct}%`;
+}
+
 function printReceipt(o) {
   const s = App.settings;
   const live = o.items.filter((i) => i.status !== 'cancelled');
@@ -308,7 +314,7 @@ function printReceipt(o) {
     <div>Ochildi: ${fmtDateTime(o.opened_at)}</div>${o.closed_at ? `<div>Yopildi: ${fmtDateTime(o.closed_at)}</div>` : ''}
     <hr><table>${lines}</table><hr><table>
     <tr><td>Taomlar</td><td class="r">${money(o.subtotal)}</td></tr>
-    <tr><td>Xizmat haqi ${o.service_pct}%</td><td class="r">${money(o.service_amount)}</td></tr>
+    <tr><td>${serviceLabel(o)}</td><td class="r">${money(o.service_amount)}</td></tr>
     ${o.discount ? `<tr><td>Chegirma</td><td class="r">-${money(o.discount)}</td></tr>` : ''}
     <tr class="big"><td>JAMI</td><td class="r">${money(o.total)}</td></tr>
     ${o.status === 'closed' ? ['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => `<tr><td>${METHOD_NAMES[m]}</td><td class="r">${money(o[`paid_${m}`])}</td></tr>`).join('') : ''}

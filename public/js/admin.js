@@ -417,7 +417,7 @@ Views.menuadmin = {
 Views.settings = {
   title: 'Sozlamalar', icon: '⚙️', roles: ['owner', 'admin', 'cashier', 'waiter', 'chef'], nav: true,
   async load() {
-    const pay = App.user.role === 'owner' ? null : await GET('/api/my/payroll').catch(() => null);
+    const pay = App.user.role === 'owner' || !moduleOn('payroll') ? null : await GET('/api/my/payroll').catch(() => null);
     return { s: App.settings, pay };
   },
   render({ s, pay }) {
@@ -462,7 +462,11 @@ Views.settings = {
           <label class="field">Nomi<input name="name" value="${esc(s.name)}"></label>
           <label class="field">Manzil<input name="address" value="${esc(s.address)}"></label>
           <label class="field">Telefon<input name="phone" value="${esc(s.phone)}"></label>
+          <label class="field">Xizmat haqi turi<select name="service_type">
+            <option value="percent" ${s.service_type !== 'per_guest' ? 'selected' : ''}>Foizda (taomlar summasidan)</option>
+            <option value="per_guest" ${s.service_type === 'per_guest' ? 'selected' : ''}>Odam boshiga</option></select></label>
           <label class="field">Xizmat haqi, %<input type="number" name="service_pct" min="0" max="50" step="0.5" value="${s.service_pct}"></label>
+          <label class="field">Odam boshiga (${esc(s.currency)})<input type="number" name="service_per_guest" min="0" step="500" value="${s.service_per_guest}"></label>
           <label class="field">Valyuta<input name="currency" value="${esc(s.currency)}"></label>
         </div>
         <div class="form-grid" style="margin-top:12px">
@@ -688,3 +692,115 @@ async function payHistory(r) {
     }),
   });
 }
+
+// ---------- Checks history ----------
+// Opens on today's checks; a new day starts empty. "Hammasi" shows everything since the first check.
+const HIST_PERIODS = [['today', 'Bugun'], ['yesterday', 'Kecha'], ['d7', '1 hafta'], ['d30', '1 oy'], ['all', 'Hammasi'], ['custom', 'Sana tanlash']];
+UI.hist = { period: 'today', from: '', to: '', status: 'closed', q: '' };
+
+function histRange() {
+  const h = UI.hist;
+  const t = dayStart().getTime();
+  const day = 24 * 60 * MIN;
+  switch (h.period) {
+    case 'yesterday': return { from: t - day, to: t };
+    case 'd7': return { from: t - 6 * day, to: t + day };
+    case 'd30': return { from: t - 29 * day, to: t + day };
+    case 'all': return {};
+    case 'custom': return {
+      from: h.from ? new Date(`${h.from}T00:00`).getTime() : t,
+      to: (h.to ? new Date(`${h.to}T00:00`).getTime() : t) + day,
+    };
+    default: return { from: t, to: t + day };
+  }
+}
+function histQuery(extra = {}) {
+  const r = histRange();
+  const p = new URLSearchParams({ status: UI.hist.status, ...(UI.hist.q ? { q: UI.hist.q } : {}), ...extra });
+  if (r.from) p.set('from', r.from);
+  if (r.to) p.set('to', r.to);
+  return p.toString();
+}
+
+Views.history = {
+  title: 'Cheklar tarixi', icon: '🧾', roles: ['owner', 'admin', 'cashier'], nav: true, refreshOn: ['finance'],
+  async load() { return GET(`/api/checks?${histQuery({ limit: 100 })}`); },
+  render(d) {
+    const h = UI.hist;
+    const r = histRange();
+    const s = d.sums;
+    const cancelled = h.status === 'cancelled';
+    const label = h.period === 'all' ? (s.first_at ? `${fmtDate(s.first_at)} dan beri` : '') : `${fmtDate(r.from)}${r.to - r.from > 24 * 60 * MIN ? ` — ${fmtDate(r.to - 1)}` : ''}`;
+    return `<div class="page-head"><h1>Cheklar tarixi</h1><span class="muted small">${label}</span><span class="spacer"></span>
+      <button class="btn" id="hist-export" ${s.count ? '' : 'disabled'}>⬇ Excel'ga yuklash</button></div>
+      <div class="row" style="margin-bottom:10px"><div class="tabs">${HIST_PERIODS.map(([k, n]) => `<button class="tab ${h.period === k ? 'active' : ''}" data-hp="${k}">${n}</button>`).join('')}</div>
+        ${h.period === 'custom' ? `<input type="date" id="h-from" value="${h.from || localDay()}" style="width:auto"> — <input type="date" id="h-to" value="${h.to || localDay()}" style="width:auto">` : ''}</div>
+      <div class="row" style="margin-bottom:14px">
+        <div class="tabs"><button class="tab ${!cancelled ? 'active' : ''}" data-hs="closed">Yopilgan</button><button class="tab ${cancelled ? 'active' : ''}" data-hs="cancelled">Bekor qilingan</button></div>
+        <input type="search" id="h-q" placeholder="🔎 Chek raqami, xona yoki ofitsant" value="${esc(h.q)}" style="max-width:300px"></div>
+      <div class="kpis">
+        ${kpi('Cheklar', s.count, `${s.guests} mehmon`, 'prime')}
+        ${cancelled ? '' : `${kpi('Jami summa', money(s.total), s.count ? `o'rtacha ${money(Math.round(s.total / s.count))}` : '', 'good')}
+        ${kpi('💵 Naqd', money(s.cash))}${kpi('💳 Karta', money(s.card))}${kpi("📱 O'tkazma", money(s.transfer))}
+        ${kpi('Xizmat haqi / chegirma', `${money(s.service)}`, `chegirma: ${money(s.discount)}`)}`}
+      </div>
+      <div class="card">${d.rows.length ? `<div class="table-wrap"><table>
+        <tr><th>#</th><th>${cancelled ? 'Bekor qilingan' : 'Yopilgan'}</th><th>Xona</th><th>Ofitsant</th>${cancelled ? '<th>Sabab</th>' : '<th>Kassir</th>'}
+          <th class="right">Mehmon</th><th class="right">Taom</th><th class="right">Jami</th><th>To'lov</th><th></th></tr>
+        ${d.rows.map((o) => `<tr><td><b>${o.id}</b></td><td>${fmtDateTime(o.closed_at)}</td><td>${esc(o.room_number)} · ${esc(o.room_name)}</td>
+          <td>${esc(o.waiter_name)}</td><td>${cancelled ? esc(o.cancel_reason || '—') : esc(o.cashier_name || '—')}</td>
+          <td class="right">${o.guests}</td><td class="right">${o.items_count}</td><td class="right num"><b>${money(o.total)}</b></td>
+          <td class="small">${['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => METHOD_NAMES[m]).join(', ') || '—'}</td>
+          <td class="actions"><button class="btn sm" data-view="${o.id}">👁</button>${cancelled ? '' : ` <button class="btn sm" data-reprint="${o.id}">🖨</button>`}</td></tr>`).join('')}
+      </table></div>
+      ${d.rows.length < s.count ? `<div class="row" style="justify-content:center;margin-top:12px"><button class="btn" id="h-more">Yana yuklash (${d.rows.length} / ${s.count})</button></div>` : ''}`
+      : emptyState('🧾', h.period === 'today' ? "Bugun hali chek yopilmagan" : "Bu davrda chek yo'q")}</div>`;
+  },
+  bind(root, d) {
+    const h = UI.hist;
+    root.querySelectorAll('[data-hp]').forEach((b) => b.onclick = () => { h.period = b.dataset.hp; refreshView(); });
+    root.querySelectorAll('[data-hs]').forEach((b) => b.onclick = () => { h.status = b.dataset.hs; refreshView(); });
+    const f = root.querySelector('#h-from'); const t = root.querySelector('#h-to');
+    if (f) f.onchange = t.onchange = () => { h.from = f.value; h.to = t.value; refreshView(); };
+    const q = root.querySelector('#h-q');
+    let timer;
+    q.oninput = () => { clearTimeout(timer); timer = setTimeout(() => { h.q = q.value.trim(); refreshView(); }, 350); };
+    const more = root.querySelector('#h-more');
+    if (more) more.onclick = async () => {
+      more.disabled = true;
+      try {
+        const next = await GET(`/api/checks?${histQuery({ limit: 200, offset: d.rows.length })}`);
+        renderView({ ...d, rows: [...d.rows, ...next.rows] });
+      } catch (e) { toastError(e); more.disabled = false; }
+    };
+    root.querySelectorAll('[data-reprint]').forEach((b) => b.onclick = async () => { try { printReceipt(await GET(`/api/orders/${b.dataset.reprint}`)); } catch (e) { toastError(e); } });
+    root.querySelectorAll('[data-view]').forEach((b) => b.onclick = async () => {
+      let o;
+      try { o = await GET(`/api/orders/${b.dataset.view}`); } catch (e) { return toastError(e); }
+      openModal({
+        title: `Chek #${o.id} · ${o.room.name}`, wide: true,
+        body: `<p class="small muted">Ochildi: ${fmtDateTime(o.opened_at)} · ${o.status === 'closed' ? 'Yopildi' : 'Bekor qilindi'}: ${fmtDateTime(o.closed_at)}
+          · Ofitsant: ${esc(o.waiter.name)}${o.cashier ? ` · Kassir: ${esc(o.cashier.name)}` : ''} · Mehmonlar: ${o.guests}</p>
+          <div class="order-items">${o.items.map(orderItemHtml).join('')}</div>
+          <div class="totals num"><span>Taomlar</span><span class="right">${money(o.subtotal)}</span>
+            <span>${serviceLabel(o)}</span><span class="right">${money(o.service_amount)}</span>
+            ${o.discount ? `<span>Chegirma</span><span class="right">-${money(o.discount)}</span>` : ''}
+            <span class="grand">Jami</span><span class="grand right">${money(o.total)}</span>
+            ${['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => `<span>${METHOD_NAMES[m]}</span><span class="right">${money(o[`paid_${m}`])}</span>`).join('')}</div>`,
+        actions: [{ label: 'Yopish', onClick: () => {} }, ...(o.status === 'closed' ? [{ label: '🖨 Chop etish', cls: 'primary', onClick: () => { printReceipt(o); return false; } }] : [])],
+        onMount: (form) => form.querySelectorAll('.oi .actions, .oi [data-serve], .oi [data-cancel-item]').forEach((x) => x.remove()),
+      });
+    });
+    root.querySelector('#hist-export').onclick = async () => {
+      try {
+        const res = await fetch(`/api/checks/export?${histQuery()}`, { headers: { Authorization: `Bearer ${App.token}` } });
+        if (!res.ok) throw new Error((await res.json()).error);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(await res.blob());
+        a.download = `cheklar_${HIST_PERIODS.find(([k]) => k === h.period)[1].replace(/\s/g, '_')}_${localDay()}.csv`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      } catch (e) { toastError(e); }
+    };
+  },
+};

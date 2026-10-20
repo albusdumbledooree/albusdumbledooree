@@ -182,6 +182,8 @@ const DEFAULT_SETTINGS = {
   address: '',
   phone: '',
   service_pct: '10',
+  service_type: 'percent',
+  service_per_guest: '5000',
   currency: "so'm",
   receipt_footer: 'Xaridingiz uchun rahmat! Yana kutib qolamiz.',
   receipt_width: '80',
@@ -290,6 +292,8 @@ function seed(db, opts = {}) {
 function migrate(db) {
   const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   if (!cols.includes('left_at')) db.exec('ALTER TABLE users ADD COLUMN left_at INTEGER');
+  const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
+  if (!orderCols.includes('service_type')) db.exec("ALTER TABLE orders ADD COLUMN service_type TEXT NOT NULL DEFAULT 'percent'");
   // The single "salary" field of the first release becomes a monthly pay rate.
   const legacy = db.prepare(`SELECT id, salary, created_at FROM users WHERE salary > 0
     AND id NOT IN (SELECT user_id FROM pay_rates)`).all();

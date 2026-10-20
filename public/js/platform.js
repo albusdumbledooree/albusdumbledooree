@@ -1,7 +1,7 @@
 'use strict';
 /* Platform panel for the site owner: create choyxonas, give each boss a login, track subscriptions. */
 
-const P = { admin: null, tenants: [], search: '' };
+const P = { admin: null, tenants: [], search: '', modules: {} };
 const DAY_MS = 24 * 60 * MIN;
 const TOKEN_KEY = 'cp_ptoken';
 
@@ -76,7 +76,8 @@ function tenantRow(t) {
       <a class="small" href="${esc(siteUrl(t.code))}" target="_blank" rel="noopener">ochish ↗</a></td>
     <td>${esc(t.contact_name || '—')}<br><span class="small muted">${esc(t.phone || '')}</span>
       <br><span class="small muted">Login: ${(t.owners || []).map(esc).join(', ') || '—'}</span></td>
-    <td>${t.status === 'active' ? '<span class="chip ready">Faol</span>' : '<span class="chip cancelled" style="text-decoration:none">Bloklangan</span>'}</td>
+    <td>${t.status === 'active' ? '<span class="chip ready">Faol</span>' : '<span class="chip cancelled" style="text-decoration:none">Bloklangan</span>'}
+      <br><span class="small muted" title="${esc((t.disabled_modules || []).map((m) => P.modules[m]).join(', '))}">Bo'limlar: ${Object.keys(P.modules).length - (t.disabled_modules || []).length}/${Object.keys(P.modules).length}</span></td>
     <td>${due}</td>
     <td class="right num">${t.monthly_fee ? money(t.monthly_fee) : '—'}</td>
     <td class="small">${t.error ? `<span style="color:var(--danger)">${esc(t.error)}</span>` : `👥 ${t.staff} xodim · 🏠 ${t.rooms} xona<br>
@@ -123,7 +124,25 @@ function mainHtml() {
 function emptyStateP(icon, text) { return `<div class="empty"><span class="big">${icon}</span>${text}</div>`; }
 
 async function load() {
-  P.tenants = await GET('/api/platform/tenants');
+  [P.tenants, P.modules] = await Promise.all([GET('/api/platform/tenants'), GET('/api/platform/modules')]);
+}
+
+// Checkboxes: ticked = the section is on for this choyxona.
+function modulesHtml(disabled = []) {
+  return `<h3 style="margin-top:14px">Bo'limlar (paket)</h3>
+    <p class="small muted" style="margin:0 0 8px">Belgini olib tashlasangiz, bu choyxonada o'sha bo'lim yopiladi. Xonalar, buyurtma, menyu, kassa va xodimlar doim ishlaydi.</p>
+    <div class="row" style="margin-bottom:8px"><button type="button" class="btn sm" data-mods="all">Hammasi</button><button type="button" class="btn sm" data-mods="none">Faqat asosiy</button></div>
+    <div class="form-grid">${Object.entries(P.modules).map(([k, n]) => `<label class="check"><input type="checkbox" name="mod_${k}" ${disabled.includes(k) ? '' : 'checked'}> ${esc(n)}</label>`).join('')}</div>`;
+}
+function bindModules(form) {
+  form.querySelectorAll('[data-mods]').forEach((b) => b.onclick = () => {
+    form.querySelectorAll('input[name^="mod_"]').forEach((c) => { c.checked = b.dataset.mods === 'all'; });
+  });
+}
+function readModules(d) {
+  const off = Object.keys(P.modules).filter((k) => !d[`mod_${k}`]);
+  for (const k of Object.keys(P.modules)) delete d[`mod_${k}`];
+  return off;
 }
 
 async function render() {
@@ -214,6 +233,7 @@ function addTenant() {
     </div>
     <p class="small muted" id="code-url" style="margin:8px 0 0"></p>
     <label class="check" style="margin-top:12px"><input type="checkbox" name="sample" checked> Namuna menyu va xonalar qo'shilsin (boshliq keyin o'zgartiradi)</label>
+    ${modulesHtml()}
     <label class="field" style="margin-top:12px">Izoh (faqat sizga ko'rinadi)<textarea name="notes" rows="2"></textarea></label>`,
     actions: [{ label: 'Bekor', onClick: () => {} }, { label: 'Yaratish', cls: 'primary', onClick: async (f) => {
       const d = formData(f);
@@ -221,12 +241,14 @@ function addTenant() {
       d.monthly_fee = Number(d.monthly_fee) || 0;
       d.code = d.code.trim().toLowerCase();
       if (d.phone.trim() === '+998') d.phone = '';
+      d.disabled_modules = readModules(d);
       const t = await POST('/api/platform/tenants', d);
       await load(); render();
       showCredentials(t, d.owner_username, d.owner_password);
       return false;
     } }],
   });
+  bindModules(form);
   let codeTouched = false;
   const showUrl = () => { form.querySelector('#code-url').textContent = form.code.value ? `Kirish havolasi: ${siteUrl(form.code.value.toLowerCase())}` : ''; };
   form.code.oninput = () => { codeTouched = true; showUrl(); };
@@ -243,11 +265,15 @@ function editTenant(t) {
       <label class="field">To'langan muddat (gacha)<input type="date" name="paid_until" value="${t.paid_until ? isoDate(t.paid_until) : ''}"></label>
       <label class="field">Oylik narx<input type="number" name="monthly_fee" min="0" value="${t.monthly_fee || 0}"></label>
     </div><label class="field" style="margin-top:12px">Izoh<textarea name="notes" rows="3">${esc(t.notes || '')}</textarea></label>
+    ${modulesHtml(t.disabled_modules)}
     <p class="small muted">Kod: <b>${esc(t.code)}</b> (o'zgartirilmaydi) · Yaratilgan: ${fmtDate(t.created_at)}</p>`,
+    wide: true,
+    onMount: bindModules,
     actions: [{ label: 'Bekor', onClick: () => {} }, { label: 'Saqlash', cls: 'primary', onClick: async (f) => {
       const d = formData(f);
       d.paid_until = dateEndTs(d.paid_until);
       d.monthly_fee = Number(d.monthly_fee) || 0;
+      d.disabled_modules = readModules(d);
       await PUT(`/api/platform/tenants/${t.id}`, d);
       toast('Saqlandi', 'ok'); reload();
     } }],

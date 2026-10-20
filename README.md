@@ -24,6 +24,11 @@ Platformadagi boshqa amallar:
 | ⛔ **Bloklash** | To'lov qilinmasa: barcha xodimlar darhol chiqariladi, kirish yopiladi. Ma'lumotlar o'chmaydi, ✅ bilan qayta ochiladi |
 | 🔗 | Choyxona kirish havolasini nusxalash |
 
+**Bo'limlarni yoqish/o'chirish (paketlar).** ✏️ oynasida har bir choyxona uchun bo'limlarni belgilaysiz:
+Oshxona ekrani, Stop-list, Hisobotlar, Kirim-chiqim, Ish haqi, Bronlar, Cheklar tarixi, Amallar tarixi.
+O'chirilgan bo'lim choyxonaning menyusidan darhol yo'qoladi va server ham uni yopadi. Xonalar, buyurtma, menyu, kassa va xodimlar doim ishlaydi.
+Oshxona ekrani o'chirilsa, taomlar oshxonaga bormasdan darhol "berildi" bo'ladi. Shu bilan arzon va qimmat paketlar qilish mumkin.
+
 Har bir choyxona bo'yicha xodimlar, xonalar, oxirgi 30 kundagi cheklar va savdo, oxirgi faollik ko'rinadi.
 Muddat 5 kundan kam qolganda boshliqning ekranida eslatma chiqadi.
 
@@ -114,6 +119,7 @@ Non, choy, ichimliklar kabi oshxonada tayyorlanmaydigan mahsulotlar darhol "beri
 | Taomli chekni bekor qilish | ✅ | ✅ | | | |
 | Kirim-chiqim yozuvini o'chirish | ✅ | | | | |
 | Amallar tarixi (audit) | ✅ | ✅ | | | |
+| Cheklar tarixi, Excel'ga yuklash | ✅ | ✅ | ✅ | | |
 | Ish haqi, bonus, jarima, davomat | ✅ | | | | |
 | O'z ish haqini ko'rish | | ✅ | ✅ | ✅ | ✅ |
 
@@ -127,6 +133,18 @@ Ofitsant faqat oshpaz hali qabul qilmagan taomni bekor qila oladi. Barcha bekor 
   bekor qilingan taomlar, kunlik/soatlik grafik. **Excel (CSV)** ga yuklab olish va chop etish.
 - **Kirim-chiqim**: xarajatlar (mahsulot, go'sht, ish haqi, ijara, kommunal, gaz...) va qo'shimcha kirimlar; kategoriyalar sozlamalarda o'zgartiriladi.
 - **Kassa smenasi (Z-hisobot)**: smena ochishda kassadagi naqd, yopishda sanalgan naqd kiritiladi — tizim kutilgan summa bilan farqni ko'rsatadi.
+
+## Xizmat haqi
+
+Sozlamalar → Muassasa: **foizda** (masalan 10% taomlar summasidan) yoki **odam boshiga** (masalan 5 000 so'm × 10 kishi = 50 000).
+Kassir to'lov oynasida aynan shu chek uchun turini va miqdorini o'zgartirishi mumkin. Chekda "Xizmat haqi (10 kishi × 5 000)" deb yoziladi.
+
+## Cheklar tarixi
+
+Ochilganda **bugungi** yopilgan cheklar ko'rinadi — yangi kun boshlanishi bilan ro'yxat bo'sh bo'ladi.
+Filtrlar: **Kecha, 1 hafta, 1 oy, Hammasi** (birinchi chekdan beri hammasi saqlanadi) va **Sana tanlash**.
+Bekor qilingan cheklar alohida, chek raqami / xona / ofitsant bo'yicha qidiruv, har bir chekni ko'rish va qayta chop etish.
+**⬇ Excel'ga yuklash** — tanlangan davrdagi barcha cheklar taomlari bilan birga CSV faylga (Excel'da ochiladi).
 
 ## Ish haqi (faqat boshliq)
 

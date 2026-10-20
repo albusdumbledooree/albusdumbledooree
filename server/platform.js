@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 const { open } = require('./db');
-const { createApi } = require('./api');
+const { createApi, MODULES } = require('./api');
 const { createHub } = require('./events');
 const { hashPassword, verifyPassword, newToken, HttpError, str, int } = require('./util');
 
@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   paid_until INTEGER,
   monthly_fee INTEGER NOT NULL DEFAULT 0,
   notes TEXT DEFAULT '',
+  disabled_modules TEXT NOT NULL DEFAULT '[]',
   created_at INTEGER NOT NULL
 );
 `;
@@ -50,6 +51,9 @@ function createPlatform(dataDir) {
   const pdb = new DatabaseSync(path.join(dataDir, 'platform.db'));
   pdb.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
   pdb.exec(SCHEMA);
+  if (!pdb.prepare('PRAGMA table_info(tenants)').all().some((c) => c.name === 'disabled_modules')) {
+    pdb.exec("ALTER TABLE tenants ADD COLUMN disabled_modules TEXT NOT NULL DEFAULT '[]'");
+  }
   const q = (sql) => pdb.prepare(sql);
   const now = () => Date.now();
 
@@ -170,8 +174,19 @@ function createPlatform(dataDir) {
     }
   }
 
+  function parseModules(t) {
+    try { return JSON.parse(t.disabled_modules || '[]'); } catch { return []; }
+  }
+
+  function modulesInput(v) {
+    if (!Array.isArray(v)) throw new HttpError(400, "Bo'limlar ro'yxati noto'g'ri");
+    const bad = v.find((m) => !MODULES[m]);
+    if (bad) throw new HttpError(400, `Noma'lum bo'lim: ${bad}`);
+    return JSON.stringify([...new Set(v)]);
+  }
+
   function listTenants() {
-    return q('SELECT * FROM tenants ORDER BY id DESC').all().map((t) => ({ ...t, ...stats(t) }));
+    return q('SELECT * FROM tenants ORDER BY id DESC').all().map((t) => ({ ...t, disabled_modules: parseModules(t), ...stats(t) }));
   }
 
   function createTenant({ body }) {
@@ -188,11 +203,12 @@ function createPlatform(dataDir) {
     const file = `tenants/${code}.db`;
     if (fs.existsSync(path.join(dataDir, file))) throw new HttpError(409, 'Bu kod uchun fayl allaqachon bor');
     open(path.join(dataDir, file), { name, owner, sample: !!body.sample }).close();
-    const id = q(`INSERT INTO tenants (code, name, contact_name, phone, file, paid_until, monthly_fee, notes, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    const disabled = body.disabled_modules !== undefined ? modulesInput(body.disabled_modules) : '[]';
+    const id = q(`INSERT INTO tenants (code, name, contact_name, phone, file, paid_until, monthly_fee, notes, created_at, disabled_modules)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       code, name, owner.name, str(body.phone, 'Telefon', { max: 30 }), file,
       body.paid_until ? int(body.paid_until, "To'lov muddati", { min: 1, max: 8.64e15 }) : null,
-      int(body.monthly_fee, 'Oylik narx'), str(body.notes, 'Izoh', { max: 500 }), now()
+      int(body.monthly_fee, 'Oylik narx'), str(body.notes, 'Izoh', { max: 500 }), now(), disabled
     ).lastInsertRowid;
     return tenantRow(id);
   }
@@ -202,7 +218,7 @@ function createPlatform(dataDir) {
     if (!t) throw new HttpError(404, 'Choyxona topilmadi');
     const status = body.status !== undefined ? str(body.status, 'Holat') : t.status;
     if (!['active', 'blocked'].includes(status)) throw new HttpError(400, "Holat noto'g'ri");
-    q('UPDATE tenants SET name = ?, contact_name = ?, phone = ?, status = ?, paid_until = ?, monthly_fee = ?, notes = ? WHERE id = ?').run(
+    q('UPDATE tenants SET name = ?, contact_name = ?, phone = ?, status = ?, paid_until = ?, monthly_fee = ?, notes = ?, disabled_modules = ? WHERE id = ?').run(
       body.name !== undefined ? str(body.name, 'Nomi', { required: true, max: 80 }) : t.name,
       body.contact_name !== undefined ? str(body.contact_name, 'Boshliq', { max: 80 }) : t.contact_name,
       body.phone !== undefined ? str(body.phone, 'Telefon', { max: 30 }) : t.phone,
@@ -210,9 +226,12 @@ function createPlatform(dataDir) {
       body.paid_until !== undefined ? (body.paid_until ? int(body.paid_until, "To'lov muddati", { min: 1, max: 8.64e15 }) : null) : t.paid_until,
       body.monthly_fee !== undefined ? int(body.monthly_fee, 'Oylik narx') : t.monthly_fee,
       body.notes !== undefined ? str(body.notes, 'Izoh', { max: 500 }) : t.notes,
+      body.disabled_modules !== undefined ? modulesInput(body.disabled_modules) : t.disabled_modules,
       t.id
     );
     refresh(t.id);
+    // Open screens re-read their menu of sections right away.
+    if (contexts.has(t.id)) contexts.get(t.id).hub.publish('settings');
     // Blocking logs everyone of that choyxona out immediately.
     if (status === 'blocked' && contexts.has(t.id)) contexts.get(t.id).hub.disconnectUser();
     return tenantRow(t.id);
@@ -246,6 +265,7 @@ function createPlatform(dataDir) {
     ['POST', '/api/platform/logout', true, ({ token }) => { q('DELETE FROM admin_sessions WHERE token = ?').run(token); return { ok: true }; }],
     ['GET', '/api/platform/me', true, ({ admin }) => publicAdmin(admin)],
     ['PUT', '/api/platform/me/password', true, changePassword],
+    ['GET', '/api/platform/modules', true, () => MODULES],
     ['GET', '/api/platform/tenants', true, listTenants],
     ['POST', '/api/platform/tenants', true, createTenant],
     ['PUT', '/api/platform/tenants/:id', true, updateTenant],
