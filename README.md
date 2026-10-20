@@ -3,18 +3,36 @@
 Buyurtma qabul qilish, oshxona ekrani, kassa, kirim-chiqim va kunlik / haftalik / oylik hisobotlar — bitta tizimda.
 Telefon, planshet va kompyuterda brauzer orqali ishlaydi (telefonga ilova sifatida o'rnatish mumkin — PWA).
 
-## Ishga tushirish
+## Ishga tushirish (kompyuterda)
 
-Faqat **Node.js 22.5+** kerak — qo'shimcha kutubxona o'rnatish shart emas (ma'lumotlar bazasi: o'rnatilgan SQLite).
+**Windows — eng oson yo'l (git va buyruqlar shart emas):**
 
-```bash
-npm start            # http://localhost:3000
-PORT=8080 npm start  # boshqa port
-npm test             # avtomatik testlar
-```
+1. https://nodejs.org saytidan **LTS** versiyani yuklab o'rnating (hamma "Next" ni bosing). O'rnatgandan keyin kompyuterni qayta yoqing.
+2. Dasturni ZIP qilib yuklab oling:
+   https://github.com/albusdumbledooree/albusdumbledooree/archive/refs/heads/claude/restaurant-management-system-0i70j3.zip
+   (yoki GitHub sahifasida yashil **Code → Download ZIP** tugmasi).
+3. ZIP ustida o'ng tugma → **Extract All** (Hammasini chiqarish). ZIP ichidan to'g'ridan-to'g'ri ochmang.
+4. Ochilgan papkadagi **`start.bat`** faylini ikki marta bosing. Qora oyna ochiladi va brauzerda dastur chiqadi.
+   Oynani yopmang — yopsangiz dastur to'xtaydi.
+5. Windows "Firewall" ruxsat so'rasa — **Allow / Ruxsat berish** ni bosing (telefonlar ulanishi uchun).
+   Qora oynada ko'rsatilgan `http://192.168....:3000` manzilini telefonlarda oching.
 
-Restorandagi barcha qurilmalar bitta Wi-Fi tarmoqda bo'lsa, ofitsantlar telefonda `http://<kompyuter-IP>:3000` manzilini ochadi.
+**macOS:** xuddi shunday, lekin `start.command` faylini ikki marta bosing.
+
+**Buyruq qatori orqali** (dasturchilar uchun): `npm start` → http://localhost:3000, testlar: `npm test`.
+
 Ma'lumotlar `data/choyxona.db` faylida saqlanadi (zaxira nusxa uchun shu faylni nusxalang).
+
+**Ko'p uchraydigan xatolar:**
+
+| Xato | Yechim |
+|---|---|
+| `'node' is not recognized` / `node topilmadi` | Node.js o'rnatilmagan yoki kompyuter qayta yoqilmagan |
+| `'git' is not recognized` | Git kerak emas — yuqoridagi ZIP usulidan foydalaning |
+| `npm.ps1 cannot be loaded ... running scripts is disabled` | PowerShell cheklovi — `start.bat` ni ishlating |
+| `Node.js versiyasi eski` | nodejs.org dan yangi LTS versiyani o'rnating |
+| `port band` | Dastur allaqachon ochiq — brauzerda http://localhost:3000 ni oching |
+| Telefondan ochilmayapti | Telefon va kompyuter bitta Wi-Fi da bo'lsin; Firewall'da Node.js ga ruxsat bering |
 
 | Muhit o'zgaruvchisi | Ma'nosi |
 |---|---|

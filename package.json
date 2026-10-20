@@ -4,7 +4,7 @@
   "description": "Restoran va choyxonalar uchun boshqaruv tizimi: buyurtmalar, oshxona, kassa, hisobotlar",
   "main": "server/index.js",
   "private": true,
-  "engines": { "node": ">=22.5" },
+  "engines": { "node": ">=22.13" },
   "scripts": {
     "start": "node --no-warnings server/index.js",
     "dev": "node --no-warnings --watch server/index.js",

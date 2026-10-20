@@ -1,5 +1,6 @@
 'use strict';
 process.env.TZ = process.env.TZ || 'Asia/Tashkent';
+if (require.main === module) require('./check-node')();
 
 const http = require('node:http');
 const fs = require('node:fs');
@@ -80,8 +81,19 @@ function createServer({ dbFile = process.env.DB_FILE || path.join(__dirname, '..
 
 if (require.main === module) {
   const port = Number(process.env.PORT) || 3000;
-  createServer().listen(port, () => {
-    console.log(`Choyxona Pro ishga tushdi: http://localhost:${port}`);
+  const server = createServer();
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n  XATO: ${port}-port band. Dastur allaqachon ochiq bo'lishi mumkin — brauzerda http://localhost:${port} ni oching.\n  Yoki boshqa port bilan ishga tushiring: PORT=3001\n`);
+    } else console.error(err);
+    process.exit(1);
+  });
+  server.listen(port, () => {
+    const lan = Object.values(require('node:os').networkInterfaces()).flat()
+      .filter((a) => a && a.family === 'IPv4' && !a.internal).map((a) => `http://${a.address}:${port}`);
+    console.log(`\n  Choyxona Pro ishga tushdi!\n\n  Shu kompyuterda:   http://localhost:${port}`);
+    if (lan.length) console.log(`  Telefonlardan (shu Wi-Fi):  ${lan.join('   ')}`);
+    console.log(`\n  To'xtatish uchun shu oynani yoping yoki Ctrl+C bosing.\n`);
   });
 }
 
