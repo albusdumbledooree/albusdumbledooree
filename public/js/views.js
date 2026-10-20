@@ -16,12 +16,14 @@ Views.login = {
     return `<div class="login-wrap"><form class="card login" id="login-form">
       <div class="brand"><img src="/icon.svg" alt=""><div><b>${esc((App.info && App.info.name) || 'Choyxona Pro')}</b><span>Boshqaruv tizimi</span></div></div>
       <div class="stack">
+        <label class="field">Choyxona kodi<input name="code" id="login-code" autocapitalize="none" autocomplete="organization" value="${esc(store('cp_code') || '')}" placeholder="masalan: navruz" required></label>
+        ${App.info && App.info.blocked ? `<p class="toast error" style="margin:0">Bu choyxona vaqtincha bloklangan</p>` : ''}
         <label class="field">Login<input name="username" autocomplete="username" autocapitalize="none" required></label>
         <label class="field">Parol<input name="password" type="password" autocomplete="current-password" required></label>
         <button class="btn primary lg block" type="submit">Kirish</button>
       </div>
       ${App.info && App.info.demo ? `<div class="demo">Sinov uchun hisoblar:<br>
-        ${[['ega', 'ega123', 'Ega'], ['admin', 'admin123', 'Admin'], ['kassir', 'kassir123', 'Kassir'], ['jasur', '1234', 'Ofitsant'], ['oshpaz', '1234', 'Oshpaz']]
+        ${[['ega', 'ega123', 'Boshliq'], ['admin', 'admin123', 'Admin'], ['kassir', 'kassir123', 'Kassir'], ['jasur', '1234', 'Ofitsant'], ['oshpaz', '1234', 'Oshpaz']]
           .map(([u, p, n]) => `<button type="button" class="btn sm" data-u="${u}" data-p="${p}">${n}</button>`).join('')}
       </div>` : ''}
     </form></div>`;
@@ -31,10 +33,31 @@ Views.login = {
     root.querySelectorAll('[data-u]').forEach((b) => b.onclick = () => {
       form.username.value = b.dataset.u; form.password.value = b.dataset.p; form.requestSubmit();
     });
+    // Show the choyxona's name (and demo shortcuts) as soon as a valid code is typed.
+    form.code.onchange = async () => {
+      const code = form.code.value.trim().toLowerCase();
+      if (!code) return;
+      try {
+        App.info = await GET(`/api/info?code=${encodeURIComponent(code)}`);
+        store('cp_code', code);
+        // Re-render for the new name/demo buttons, keeping whatever was typed meanwhile.
+        const { username, password } = form;
+        const keep = { u: username.value, p: password.value, focus: document.activeElement && document.activeElement.name };
+        render();
+        const f = document.getElementById('login-form');
+        if (f) {
+          f.username.value = keep.u; f.password.value = keep.p;
+          if (keep.focus && f[keep.focus]) f[keep.focus].focus();
+        }
+      } catch (err) { App.info = null; toastError(err); }
+    };
     form.onsubmit = async (e) => {
       e.preventDefault();
       try {
-        const r = await POST('/api/login', formData(form));
+        const d = formData(form);
+        d.code = d.code.trim().toLowerCase();
+        const r = await POST('/api/login', d);
+        store('cp_code', d.code);
         App.token = r.token;
         store('cp_token', r.token);
         await afterLogin();

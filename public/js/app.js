@@ -47,10 +47,22 @@ function shellHtml() {
     <main class="main">
       <div class="mobile-top"><img src="/icon.svg" alt=""><b>${esc(App.settings.name)}</b><span class="spacer"></span>
         <span class="small muted">${esc(App.user.name)}</span><span class="conn"></span><button class="btn sm" data-logout>Chiqish</button></div>
+      ${subscriptionBanner()}
       <div id="view"></div>
     </main>
     <nav class="bottom-nav">${navHtml()}</nav>
   </div><div id="ready-banner"></div>`;
+}
+
+// Reminds the boss when the subscription set on the platform is about to run out.
+function subscriptionBanner() {
+  const until = App.tenant && App.tenant.paid_until;
+  if (!until || !['owner', 'admin'].includes(App.user.role)) return '';
+  const days = Math.ceil((until - Date.now()) / (24 * 60 * MIN));
+  if (days > 5) return '';
+  return `<div class="toast ${days < 0 ? 'error' : 'warn'}" style="margin-bottom:12px">${days < 0
+    ? `⚠ Obuna muddati ${fmtDate(until)} da tugagan. Iltimos, to'lovni amalga oshiring.`
+    : `⏳ Obuna muddati ${days} kundan keyin (${fmtDate(until)}) tugaydi.`}</div>`;
 }
 
 function updateNav() {
@@ -224,6 +236,7 @@ async function afterLogin() {
   const me = await GET('/api/me');
   App.user = me.user;
   App.settings = me.settings;
+  App.tenant = me.tenant;
   document.getElementById('app').innerHTML = '';
   Live.start();
   refreshBadges();
@@ -235,7 +248,16 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && Ap
 (async function boot() {
   applyTheme();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-  try { App.info = await GET('/api/info'); } catch { App.info = null; }
+  // A personal link https://site/c/<code> remembers the choyxona code on this device.
+  const m = /^\/c\/([a-z0-9-]+)\/?$/i.exec(location.pathname);
+  if (m && m[1].toLowerCase() !== store('cp_code')) { store('cp_code', m[1].toLowerCase()); store('cp_token', null); }
+  const code = store('cp_code');
+  if (code) {
+    try { App.info = await GET(`/api/info?code=${encodeURIComponent(code)}`); } catch (e) {
+      App.info = null;
+      if (!store('cp_token')) setTimeout(() => toast(`${e.message}: "${code}". Kodni tekshiring.`, 'error', 8000), 300);
+    }
+  }
   App.token = store('cp_token');
   if (App.token) {
     try { await afterLogin(); } catch { App.token = null; store('cp_token', null); }

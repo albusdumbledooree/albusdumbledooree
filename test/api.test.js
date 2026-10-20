@@ -1,6 +1,9 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { createServer } = require('../server/index');
 
 let base;
@@ -16,14 +19,14 @@ async function call(method, path, token, body) {
   return { status: res.status, data };
 }
 
-async function login(username, password) {
-  const r = await call('POST', '/api/login', null, { username, password });
+async function login(username, password, code = 'demo') {
+  const r = await call('POST', '/api/login', null, { code, username, password });
   assert.equal(r.status, 200, JSON.stringify(r.data));
   return r.data.token;
 }
 
 test.before(async () => {
-  server = createServer({ dbFile: ':memory:' });
+  server = createServer({ dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'choyxona-test-')) });
   await new Promise((r) => server.listen(0, r));
   base = `http://127.0.0.1:${server.address().port}`;
 });
@@ -118,8 +121,64 @@ test('stop-list and roles', async () => {
 });
 
 test('login page info and brute-force lock', async () => {
-  const info = (await call('GET', '/api/info')).data;
+  const info = (await call('GET', '/api/info?code=demo')).data;
   assert.equal(info.demo, true);
-  for (let i = 0; i < 8; i++) assert.equal((await call('POST', '/api/login', null, { username: 'kassir', password: 'xato' })).status, 401);
-  assert.equal((await call('POST', '/api/login', null, { username: 'kassir', password: 'kassir123' })).status, 429);
+  assert.equal((await call('GET', '/api/info?code=yoq')).status, 404);
+  const bad = { code: 'demo', username: 'kassir', password: 'xato' };
+  for (let i = 0; i < 8; i++) assert.equal((await call('POST', '/api/login', null, bad)).status, 401);
+  assert.equal((await call('POST', '/api/login', null, { ...bad, password: 'kassir123' })).status, 429);
+});
+
+test('platform: site owner creates a choyxona, its boss adds staff, data stays separate', async () => {
+  const p = await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' });
+  assert.equal(p.status, 200);
+  const admin = p.data.token;
+  assert.equal(p.data.admin.default_password, true);
+
+  // Choyxona logins cannot reach the platform panel.
+  const demoOwner = await login('ega', 'ega123');
+  assert.equal((await call('GET', '/api/platform/tenants', demoOwner)).status, 401);
+
+  const created = await call('POST', '/api/platform/tenants', admin, {
+    name: 'Navruz choyxonasi', code: 'navruz', owner_name: 'Akmal aka', owner_username: 'akmal', owner_password: 'akmal2026',
+    phone: '+998901234567', paid_until: Date.now() + 30 * 86400000, monthly_fee: 300000,
+  });
+  assert.equal(created.status, 200, JSON.stringify(created.data));
+  assert.equal((await call('POST', '/api/platform/tenants', admin, { name: 'X', code: 'navruz', owner_name: 'a', owner_username: 'a', owner_password: '123456' })).status, 409);
+
+  // Same staff login names in two choyxonas do not clash; the code decides.
+  assert.equal((await call('POST', '/api/login', null, { code: 'navruz', username: 'ega', password: 'ega123' })).status, 401);
+  const boss = await login('akmal', 'akmal2026', 'navruz');
+  const me = (await call('GET', '/api/me', boss)).data;
+  assert.equal(me.user.role, 'owner');
+  assert.equal(me.settings.name, 'Navruz choyxonasi');
+  assert.equal(me.tenant.code, 'navruz');
+  assert.equal((await call('POST', '/api/users', boss, { name: 'Jasur', username: 'jasur', password: '1234', role: 'waiter' })).status, 200);
+  assert.equal((await call('POST', '/api/rooms', boss, { number: '1', name: 'Banket 1' })).status, 200);
+  await login('jasur', '1234', 'navruz');
+
+  const navruzRooms = (await call('GET', '/api/rooms', boss)).data;
+  const demoRooms = (await call('GET', '/api/rooms', demoOwner)).data;
+  assert.equal(navruzRooms.length, 1);
+  assert.equal(demoRooms.length, 8);
+  assert.ok(!(await call('GET', '/api/users', demoOwner)).data.some((u) => u.username === 'akmal'));
+
+  const list = (await call('GET', '/api/platform/tenants', admin)).data;
+  const nav = list.find((t) => t.code === 'navruz');
+  assert.equal(nav.staff, 2);
+  assert.deepEqual(nav.owners, ['akmal']);
+
+  // Forgotten boss password is reset from the platform.
+  assert.equal((await call('POST', `/api/platform/tenants/${nav.id}/reset-owner`, admin, { password: 'yangi2026' })).status, 200);
+  assert.equal((await call('GET', '/api/me', boss)).status, 401, 'old session ended');
+  const boss2 = await login('akmal', 'yangi2026', 'navruz');
+
+  // Blocking stops logins and ends current sessions.
+  assert.equal((await call('PUT', `/api/platform/tenants/${nav.id}`, admin, { status: 'blocked' })).status, 200);
+  assert.equal((await call('GET', '/api/me', boss2)).status, 401);
+  const blocked = await call('POST', '/api/login', null, { code: 'navruz', username: 'akmal', password: 'yangi2026' });
+  assert.equal(blocked.status, 403);
+  assert.match(blocked.data.error, /bloklangan/);
+  await call('PUT', `/api/platform/tenants/${nav.id}`, admin, { status: 'active' });
+  await login('akmal', 'yangi2026', 'navruz');
 });

@@ -11,7 +11,7 @@ const App = {
   badges: {},
 };
 
-const ROLE_NAMES = { owner: 'Ega', admin: 'Admin', cashier: 'Kassir', waiter: 'Ofitsant', chef: 'Oshpaz' };
+const ROLE_NAMES = { owner: 'Boshliq', admin: 'Admin', cashier: 'Kassir', waiter: 'Ofitsant', chef: 'Oshpaz' };
 const STATUS_NAMES = { new: 'Yangi', cooking: 'Tayyorlanmoqda', ready: 'Tayyor', served: 'Berildi', cancelled: 'Bekor' };
 const METHOD_NAMES = { cash: 'Naqd', card: 'Karta', transfer: "O'tkazma" };
 const ROOM_TYPES = { banket: ['Banket', '🎉'], vip: ['VIP', '⭐'], supa: ['Supa', '🛋️'], stol: ['Stol', '🍽️'], zal: ['Zal', '🏛️'], boshqa: ['Boshqa', '📍'] };

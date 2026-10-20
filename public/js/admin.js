@@ -267,7 +267,7 @@ Views.staff = {
   render({ users }) {
     const order = ['owner', 'admin', 'cashier', 'waiter', 'chef'];
     return `<div class="page-head"><h1>Xodimlar</h1><span class="spacer"></span><button class="btn primary" id="add">➕ Xodim qo'shish</button></div>
-      <p class="muted">Ega — barcha huquqlarga ega va adminlarni tayinlaydi. Admin — kassir, ofitsant va oshpazlarni tayinlaydi. Ofitsantni xonaga biriktirish: <a href="#/halls">Xonalar sozlamasi</a>.</p>
+      <p class="muted">Boshliq — barcha huquqlarga ega va adminlarni tayinlaydi. Admin — kassir, ofitsant va oshpazlarni tayinlaydi. Ofitsantni xonaga biriktirish: <a href="#/halls">Xonalar sozlamasi</a>.</p>
       ${order.map((role) => {
         const list = users.filter((u) => u.role === role);
         if (!list.length) return '';

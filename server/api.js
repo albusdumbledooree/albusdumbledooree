@@ -1,17 +1,19 @@
 'use strict';
 const { hashPassword, verifyPassword, newToken, HttpError, str, int } = require('./util');
-const events = require('./events');
 
 const ROLES = ['owner', 'admin', 'cashier', 'waiter', 'chef'];
 const MANAGERS = ['owner', 'admin'];
 const MONEY = ['owner', 'admin', 'cashier'];
 const STOPLIST = ['owner', 'admin', 'cashier', 'chef'];
 const KITCHEN = ['owner', 'admin', 'chef'];
-const ROLE_NAMES = { owner: 'Ega', admin: 'Admin', cashier: 'Kassir', waiter: 'Ofitsant', chef: 'Oshpaz' };
+const ROLE_NAMES = { owner: 'Boshliq', admin: 'Admin', cashier: 'Kassir', waiter: 'Ofitsant', chef: 'Oshpaz' };
 const METHODS = ['cash', 'card', 'transfer'];
 const MIN = 60_000;
 
-function createApi(db) {
+// opts.hub: live-event hub of this choyxona; opts.tokenPrefix marks which choyxona a session token belongs to;
+// opts.tenant(): the choyxona's platform record (code, name, paid_until).
+function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
+  const events = hub;
   const q = (sql) => db.prepare(sql);
   const now = () => Date.now();
 
@@ -72,7 +74,7 @@ function createApi(db) {
       throw new HttpError(401, "Login yoki parol noto'g'ri");
     }
     failures.delete(key);
-    const token = newToken();
+    const token = tokenPrefix + newToken();
     q('INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)').run(token, user.id, now());
     audit(user, 'login');
     return { token, user: publicUser(user) };
@@ -83,14 +85,9 @@ function createApi(db) {
     return { ok: true };
   }
 
-  // Public info for the login screen. Demo shortcuts are shown only on a demo database.
-  function info() {
-    const s = settings();
-    return { name: s.name, demo: s.demo === '1' };
-  }
-
   function me({ user }) {
-    return { user: publicUser(user), settings: settings() };
+    const t = tenant();
+    return { user: publicUser(user), settings: settings(), tenant: t && { code: t.code, name: t.name, paid_until: t.paid_until } };
   }
 
   function changeOwnPassword({ user, body }) {
@@ -925,7 +922,6 @@ function createApi(db) {
   // ---------- Route table ----------
   const ALL = ROLES;
   const routes = [
-    ['GET', '/api/info', null, info],
     ['POST', '/api/login', null, login],
     ['POST', '/api/logout', ALL, logout],
     ['GET', '/api/me', ALL, me],
@@ -992,7 +988,7 @@ function createApi(db) {
     return null;
   }
 
-  return { match, authenticate, ROLES };
+  return { match, authenticate, settings, ROLES };
 }
 
 module.exports = { createApi };

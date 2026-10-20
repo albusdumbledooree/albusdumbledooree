@@ -3,6 +3,30 @@
 Buyurtma qabul qilish, oshxona ekrani, kassa, kirim-chiqim va kunlik / haftalik / oylik hisobotlar — bitta tizimda.
 Telefon, planshet va kompyuterda brauzer orqali ishlaydi (telefonga ilova sifatida o'rnatish mumkin — PWA).
 
+**Bitta sayt — ko'p choyxona.** Sayt egasi `/platform` sahifasida choyxonalarni qo'shadi va har biriga boshliq login-parolini beradi.
+Boshliq o'z choyxonasiga xodimlarni o'zi qo'shadi. Har bir choyxonaning ma'lumotlari alohida faylda saqlanadi va boshqalariga ko'rinmaydi.
+
+## Platforma (sayt egasi uchun)
+
+1. `https://sayt/platform` ni oching. Birinchi kirish: `superadmin` / `super123` → **darhol parolni o'zgartiring** (🔒 Parol).
+2. **➕ Yangi choyxona**: nomi, kodi (masalan `navruz`), boshliq ismi, login va parol, to'langan muddat, oylik narx.
+   "Namuna menyu va xonalar" belgilansa, choyxona tayyor menyu bilan ochiladi.
+3. Chiqqan matnni (havola + kod + login + parol) **Nusxa olish** bilan Telegram orqali boshliqqa yuboring.
+4. Boshliq `https://sayt/c/navruz` havolasini ochadi (kod avtomatik to'ladi), kiradi va **Xodimlar** bo'limida
+   admin, kassir, ofitsant va oshpazlarni qo'shadi. Xodimlar ham shu havola orqali kiradi.
+
+Platformadagi boshqa amallar:
+
+| Tugma | Vazifasi |
+|---|---|
+| **+1 oy** | To'langan muddatni bir oyga uzaytirish (to'lov qabul qilinganda) |
+| 🔑 | Boshliq parolini unutsa — yangi parol berish |
+| ⛔ **Bloklash** | To'lov qilinmasa: barcha xodimlar darhol chiqariladi, kirish yopiladi. Ma'lumotlar o'chmaydi, ✅ bilan qayta ochiladi |
+| 🔗 | Choyxona kirish havolasini nusxalash |
+
+Har bir choyxona bo'yicha xodimlar, xonalar, oxirgi 30 kundagi cheklar va savdo, oxirgi faollik ko'rinadi.
+Muddat 5 kundan kam qolganda boshliqning ekranida eslatma chiqadi.
+
 ## Ishga tushirish (kompyuterda)
 
 **Windows — eng oson yo'l (git va buyruqlar shart emas):**
@@ -21,7 +45,7 @@ Telefon, planshet va kompyuterda brauzer orqali ishlaydi (telefonga ilova sifati
 
 **Buyruq qatori orqali** (dasturchilar uchun): `npm start` → http://localhost:3000, testlar: `npm test`.
 
-Ma'lumotlar `data/choyxona.db` faylida saqlanadi (zaxira nusxa uchun shu faylni nusxalang).
+Ma'lumotlar `data/` papkasida saqlanadi (zaxira: `npm run backup`). Eski versiyadagi `data/choyxona.db` avtomatik ravishda `asosiy` kodli choyxona bo'ladi.
 
 **Ko'p uchraydigan xatolar:**
 
@@ -37,23 +61,27 @@ Ma'lumotlar `data/choyxona.db` faylida saqlanadi (zaxira nusxa uchun shu faylni 
 | Muhit o'zgaruvchisi | Ma'nosi |
 |---|---|
 | `PORT` | Port (standart 3000) |
-| `DB_FILE` | Baza fayli yo'li |
+| `DATA_DIR` | Bazalar papkasi (standart `data/`: `platform.db` va `tenants/<kod>.db`) |
 | `TZ` | Vaqt mintaqasi (standart `Asia/Tashkent`) |
-| `OWNER_PASSWORD` | Birinchi ishga tushishda ega paroli (standart `ega123`) |
-| `SEED_DEMO=0` | Sinov xodimlari, xonalar va menyusiz bo'sh baza (kirish sahifasida sinov tugmalari ham chiqmaydi) |
+| `PLATFORM_USER`, `PLATFORM_PASSWORD` | Birinchi ishga tushishda platforma administratori (standart `superadmin` / `super123`) |
+| `SEED_DEMO=0` | `demo` kodli sinov choyxonasi yaratilmasin |
 | `TRUST_PROXY=1` | Caddy/Nginx orqasida ishlaganda mijozning haqiqiy IP manzilini olish |
 
 ### Sinov hisoblari
 
+Choyxona kodi: **`demo`** (havola: `http://localhost:3000/c/demo`).
+
 | Lavozim | Login | Parol |
 |---|---|---|
-| Ega | `ega` | `ega123` |
+| Boshliq | `ega` | `ega123` |
 | Admin | `admin` | `admin123` |
 | Kassir | `kassir` | `kassir123` |
 | Ofitsant | `jasur`, `bobur` | `1234` |
 | Oshpaz | `oshpaz` | `1234` |
 
-> ⚠️ Haqiqiy ishga tushirishdan oldin parollarni o'zgartiring yoki `SEED_DEMO=0` bilan bo'sh baza yarating.
+Platforma: `http://localhost:3000/platform` — `superadmin` / `super123`.
+
+> ⚠️ Haqiqiy ishga tushirishda `SEED_DEMO=0` ishlating va platforma parolini o'zgartiring.
 
 ## Buyurtma jarayoni
 
@@ -71,7 +99,7 @@ Non, choy, ichimliklar kabi oshxonada tayyorlanmaydigan mahsulotlar darhol "beri
 
 ## Lavozimlar va huquqlar
 
-| Imkoniyat | Ega | Admin | Kassir | Ofitsant | Oshpaz |
+| Imkoniyat | Boshliq | Admin | Kassir | Ofitsant | Oshpaz |
 |---|:-:|:-:|:-:|:-:|:-:|
 | Admin tayinlash | ✅ | | | | |
 | Kassir, ofitsant, oshpaz tayinlash | ✅ | ✅ | | | |
@@ -131,31 +159,31 @@ Tavsiya: kichik VPS server (1 CPU, 1 GB RAM, Ubuntu 24.04 — oyiga ~5$) + domen
    sudo cp /opt/choyxona/deploy/Caddyfile /etc/caddy/Caddyfile
    sudo systemctl reload caddy
    ```
-3. `https://domeningiz` ni oching, `ega` / `ega123` bilan kiring va **darhol parolni o'zgartiring** (Sozlamalar).
-   Xizmat `SEED_DEMO=0` bilan ishlaydi — baza bo'sh boshlanadi, sinov hisoblari va parollar ko'rinmaydi.
-   Keyin: Sozlamalar → muassasa nomi, Menyu, Xonalar sozlamasi, Xodimlar.
-4. Kunlik zaxira nusxa (har kecha 03:00, oxirgi 30 kun saqlanadi):
+3. `https://domeningiz/platform` ni oching, `superadmin` / `super123` bilan kiring va **darhol parolni o'zgartiring**.
+   Xizmat `SEED_DEMO=0` bilan ishlaydi — sinov choyxonasi yaratilmaydi. Keyin "Yangi choyxona" bilan mijozlarni qo'shing.
+4. Kunlik zaxira nusxa — platforma va barcha choyxonalar bazasi (har kecha 03:00, oxirgi 30 kun saqlanadi):
    ```bash
    echo '0 3 * * * cd /opt/choyxona && node --no-warnings scripts/backup.js' | sudo -u choyxona crontab -
    ```
    Nusxalar `/opt/choyxona/data/backups/` da. Vaqti-vaqti bilan boshqa joyga ham ko'chirib qo'ying.
 5. Yangilash: `cd /opt/choyxona && sudo -u choyxona git pull && sudo systemctl restart choyxona`.
 
-**Faqat choyxona ichida ishlatish** (internetsiz): bitta kompyuterda `SEED_DEMO=0 npm start`, xodimlar shu Wi-Fi orqali
+**Faqat choyxona ichida ishlatish** (internetsiz): bitta kompyuterda `npm start` (yoki `start.bat`), so'ng `/platform` da choyxona yarating, xodimlar shu Wi-Fi orqali
 `http://<kompyuter-IP>:3000` ga kiradi. Bu holda ega uydan hisobotni ko'ra olmaydi va bildirishnomalar (HTTPS talab qiladi) ishlamaydi.
 
-Xavfsizlik: login 8 marta xato kiritilsa 10 daqiqaga bloklanadi; parollar scrypt bilan shifrlangan; ishdan ketgan xodimni
+Xavfsizlik: login 8 marta xato kiritilsa 10 daqiqaga bloklanadi (platformada 5 marta — 15 daqiqa); parollar scrypt bilan shifrlangan; ishdan ketgan xodimni
 Xodimlar bo'limida "Faol" belgisini olib tashlab o'chiring — u darhol tizimdan chiqariladi.
 
 ## Texnik tuzilma
 
 ```
 server/
-  index.js   HTTP server, statik fayllar, marshrutlash
-  api.js     Barcha biznes-mantiq va huquqlar
-  db.js      SQLite sxemasi va boshlang'ich ma'lumotlar
-  events.js  Server-Sent Events (jonli yangilanishlar)
-  util.js    Parol xeshlash (scrypt), kiritishni tekshirish
+  index.js     HTTP server, statik fayllar, so'rovni kerakli choyxonaga yo'naltirish
+  platform.js  Platforma: choyxonalar ro'yxati, sayt egasi, har choyxona uchun alohida baza
+  api.js       Bitta choyxona ichidagi biznes-mantiq va huquqlar
+  db.js        Choyxona bazasi sxemasi va boshlang'ich ma'lumotlar
+  events.js    Server-Sent Events (jonli yangilanishlar, har choyxona alohida)
+  util.js      Parol xeshlash (scrypt), kiritishni tekshirish
 public/      Brauzer ilovasi (HTML/CSS/JS, kutubxonasiz)
 test/        API integratsion testlari (node:test)
 ```

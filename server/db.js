@@ -162,27 +162,20 @@ const DEFAULT_SETTINGS = {
   income_categories: JSON.stringify(['Banket avansi', 'Boshqa kirim']),
 };
 
-function seed(db) {
-  const now = Date.now();
-  const hasUsers = db.prepare('SELECT COUNT(*) c FROM users').get().c > 0;
+function seedSettings(db, name) {
   for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) {
     db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)').run(k, v);
   }
-  if (hasUsers) return;
+  if (name) db.prepare("UPDATE settings SET value = ? WHERE key = 'name'").run(name);
+}
 
-  const addUser = db.prepare(
-    'INSERT INTO users (name, username, pass_hash, role, phone, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-  );
-  addUser.run('Ega', 'ega', hashPassword(process.env.OWNER_PASSWORD || 'ega123'), 'owner', '', now);
-  if (process.env.SEED_DEMO === '0') return;
-  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('demo', '1')").run();
+function addUser(db, name, username, password, role) {
+  return db.prepare('INSERT INTO users (name, username, pass_hash, role, phone, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(name, username, hashPassword(password), role, '', Date.now()).lastInsertRowid;
+}
 
-  addUser.run('Administrator', 'admin', hashPassword('admin123'), 'admin', '', now);
-  addUser.run('Kassir Dilnoza', 'kassir', hashPassword('kassir123'), 'cashier', '', now);
-  const w1 = addUser.run('Ofitsant Jasur', 'jasur', hashPassword('1234'), 'waiter', '', now).lastInsertRowid;
-  const w2 = addUser.run('Ofitsant Bobur', 'bobur', hashPassword('1234'), 'waiter', '', now).lastInsertRowid;
-  addUser.run('Oshpaz Rustam', 'oshpaz', hashPassword('1234'), 'chef', '', now);
-
+// Sample rooms and menu; waiters (if given) are spread over the rooms.
+function seedRoomsAndMenu(db, waiterIds = []) {
   const addRoom = db.prepare('INSERT INTO rooms (number, name, type, capacity) VALUES (?, ?, ?, ?)');
   const assign = db.prepare('INSERT INTO room_waiters (room_id, user_id) VALUES (?, ?)');
   const rooms = [
@@ -192,7 +185,7 @@ function seed(db) {
   ];
   rooms.forEach((r, i) => {
     const id = addRoom.run(...r).lastInsertRowid;
-    assign.run(id, i < 4 ? w1 : w2);
+    if (waiterIds.length) assign.run(id, waiterIds[Math.floor((i * waiterIds.length) / rooms.length)]);
   });
 
   const addCat = db.prepare('INSERT INTO categories (name, icon, sort) VALUES (?, ?, ?)');
@@ -231,12 +224,35 @@ function seed(db) {
   });
 }
 
-function open(file) {
+/*
+ * opts.owner: { name, username, password } — first boss account of a new choyxona.
+ * opts.demo: demo staff (ega/admin/kassir/jasur/bobur/oshpaz), rooms and menu.
+ * opts.sample: sample rooms and menu only.
+ */
+function seed(db, opts = {}) {
+  seedSettings(db, opts.name);
+  if (db.prepare('SELECT COUNT(*) c FROM users').get().c > 0) return;
+  if (opts.demo) {
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('demo', '1')").run();
+    addUser(db, 'Boshliq', 'ega', 'ega123', 'owner');
+    addUser(db, 'Administrator', 'admin', 'admin123', 'admin');
+    addUser(db, 'Kassir Dilnoza', 'kassir', 'kassir123', 'cashier');
+    const w1 = addUser(db, 'Ofitsant Jasur', 'jasur', '1234', 'waiter');
+    const w2 = addUser(db, 'Ofitsant Bobur', 'bobur', '1234', 'waiter');
+    addUser(db, 'Oshpaz Rustam', 'oshpaz', '1234', 'chef');
+    seedRoomsAndMenu(db, [w1, w2]);
+    return;
+  }
+  if (opts.owner) addUser(db, opts.owner.name, opts.owner.username, opts.owner.password, 'owner');
+  if (opts.sample) seedRoomsAndMenu(db);
+}
+
+function open(file, opts) {
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
   db.exec(SCHEMA);
-  seed(db);
+  seed(db, opts);
   return db;
 }
 
