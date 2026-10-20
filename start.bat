@@ -12,6 +12,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-start "" http://localhost:3000
+rem Open the browser 2 seconds later, when the server is already listening.
+start "" /b cmd /c "timeout /t 2 /nobreak >nul & start http://localhost:3000"
 node --no-warnings server\index.js
 pause
