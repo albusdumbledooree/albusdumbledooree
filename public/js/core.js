@@ -54,7 +54,11 @@ async function api(method, path, body) {
     logoutLocal();
     throw new Error('Sessiya tugadi, qayta kiring');
   }
-  if (!res.ok) throw new Error((data && data.error) || `Xatolik (${res.status})`);
+  if (!res.ok) {
+    const err = new Error((data && data.error) || `Xatolik (${res.status})`);
+    err.data = data;
+    throw err;
+  }
   return data;
 }
 const GET = (p) => api('GET', p);

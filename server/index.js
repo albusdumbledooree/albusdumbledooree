@@ -84,7 +84,16 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
         if (!user) throw new HttpError(401, 'Tizimga kiring');
         if (!route.roles.includes(user.role)) throw new HttpError(403, "Sizda bu amal uchun huquq yo'q");
       }
-      reply(route.handler({ user, params, body, query, token, ip }));
+      try {
+        reply(route.handler({ user, params, body, query, token, ip }));
+      } catch (err) {
+        // The site owner typed the platform login on the staff page: point them to /platform.
+        // Checked only after a counted failed login, so the staff lockout still limits guessing.
+        if (pathname === '/api/login' && err.status === 401 && platform.isAdminLogin(body.username, body.password)) {
+          return send(res, 409, { error: "Bu sayt egasining logini. Platforma sahifasiga o'tkazilmoqda…", redirect: '/platform' });
+        }
+        throw err;
+      }
     } catch (err) {
       if (err instanceof HttpError) return send(res, err.status, { error: err.message });
       console.error(err);

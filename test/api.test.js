@@ -182,3 +182,11 @@ test('platform: site owner creates a choyxona, its boss adds staff, data stays s
   await call('PUT', `/api/platform/tenants/${nav.id}`, admin, { status: 'active' });
   await login('akmal', 'yangi2026', 'navruz');
 });
+
+test('site owner credentials on the staff login point to /platform', async () => {
+  const r = await call('POST', '/api/login', null, { code: 'demo', username: 'superadmin', password: 'super123' });
+  assert.equal(r.status, 409);
+  assert.equal(r.data.redirect, '/platform');
+  const wrong = await call('POST', '/api/login', null, { code: 'demo', username: 'superadmin', password: 'xato' });
+  assert.equal(wrong.status, 401);
+});

@@ -132,6 +132,12 @@ function createPlatform(dataDir) {
     return { id: a.id, name: a.name, username: a.username, default_password: !!a.default_password };
   }
 
+  // True when these are the site owner's own credentials (typed into a choyxona login by mistake).
+  function isAdminLogin(username, password) {
+    const a = q('SELECT * FROM admins WHERE username = ?').get(String(username || '').trim());
+    return !!a && verifyPassword(String(password || ''), a.pass_hash);
+  }
+
   function authenticate(token) {
     if (!token || !token.startsWith('p_')) return null;
     return q('SELECT a.* FROM admin_sessions s JOIN admins a ON a.id = s.admin_id WHERE s.token = ?').get(token) || null;
@@ -266,7 +272,7 @@ function createPlatform(dataDir) {
     pdb.close();
   }
 
-  return { handle, byCode, byToken, assertActive, close };
+  return { handle, byCode, byToken, assertActive, isAdminLogin, close };
 }
 
 module.exports = { createPlatform };

@@ -22,6 +22,7 @@ Views.login = {
         <label class="field">Parol<input name="password" type="password" autocomplete="current-password" required></label>
         <button class="btn primary lg block" type="submit">Kirish</button>
       </div>
+      <p class="demo" style="text-align:center">Sayt egasimisiz? <a href="/platform">Platformaga kirish →</a></p>
       ${App.info && App.info.demo ? `<div class="demo">Sinov uchun hisoblar:<br>
         ${[['ega', 'ega123', 'Boshliq'], ['admin', 'admin123', 'Admin'], ['kassir', 'kassir123', 'Kassir'], ['jasur', '1234', 'Ofitsant'], ['oshpaz', '1234', 'Oshpaz']]
           .map(([u, p, n]) => `<button type="button" class="btn sm" data-u="${u}" data-p="${p}">${n}</button>`).join('')}
@@ -62,7 +63,10 @@ Views.login = {
         store('cp_token', r.token);
         await afterLogin();
         location.hash = homeRoute();
-      } catch (err) { toastError(err); }
+      } catch (err) {
+        toastError(err);
+        if (err.data && err.data.redirect) setTimeout(() => { location.href = err.data.redirect; }, 1500);
+      }
     };
   },
 };
