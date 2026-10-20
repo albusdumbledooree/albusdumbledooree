@@ -2,7 +2,7 @@
 /* App shell: routing, navigation, live event reactions (voice, banners, badges). */
 
 const NAV_ORDER = {
-  owner: ['dashboard', 'rooms', 'kitchen', 'cashier', 'reports', 'finance', 'reservations', 'stoplist', 'menuadmin', 'staff', 'halls', 'audit', 'settings'],
+  owner: ['dashboard', 'rooms', 'kitchen', 'cashier', 'reports', 'finance', 'payroll', 'reservations', 'stoplist', 'menuadmin', 'staff', 'halls', 'audit', 'settings'],
   admin: ['dashboard', 'rooms', 'kitchen', 'cashier', 'reports', 'finance', 'reservations', 'stoplist', 'menuadmin', 'staff', 'halls', 'audit', 'settings'],
   cashier: ['cashier', 'rooms', 'dashboard', 'reports', 'finance', 'reservations', 'stoplist', 'settings'],
   waiter: ['rooms', 'ready', 'settings'],
@@ -175,6 +175,7 @@ Live.on('item_accepted', (d) => {
   toast(`👨‍🍳 ${d.chef} qabul qildi: ${d.name} (${d.room}) — taxminan ${fmtTime(d.eta_at)} da tayyor`, 'info', 6000);
 });
 Live.on('kitchen_new', (d) => {
+  if (store('cp_kprint')) printKitchenTicket(d);
   if (App.user.role !== 'chef') return;
   const list = d.items.map((i) => `${i.name}, ${uzNumber(i.qty)}`).join('; ');
   Voice.say(`Yangi buyurtma. ${d.room}. ${list}.`, 'new');
@@ -189,6 +190,10 @@ Live.on('bill_requested', (d) => {
   if (App.user.role !== 'cashier') { toast(`🧾 ${d.room} hisob so'ramoqda`, 'info'); return; }
   Voice.say(`${d.room} hisob so'ramoqda.`, 'new');
   toast(`🧾 ${d.room} hisob so'ramoqda`, 'warn', 8000);
+});
+Live.on('payroll', (d) => {
+  const text = { payment: `💵 Sizga ${moneyText(d.amount)} ish haqi berildi`, bonus: `🎁 Sizga ${moneyText(d.amount)} bonus yozildi`, fine: `⚠ Sizga ${moneyText(d.amount)} jarima yozildi` }[d.type];
+  if (text) toast(text, d.type === 'fine' ? 'warn' : 'ok', 8000);
 });
 Live.on('stoplist', (d) => toast(`⛔ "${d.name}" tugadi (${d.by})`, 'warn', 6000));
 

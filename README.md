@@ -114,6 +114,8 @@ Non, choy, ichimliklar kabi oshxonada tayyorlanmaydigan mahsulotlar darhol "beri
 | Taomli chekni bekor qilish | ✅ | ✅ | | | |
 | Kirim-chiqim yozuvini o'chirish | ✅ | | | | |
 | Amallar tarixi (audit) | ✅ | ✅ | | | |
+| Ish haqi, bonus, jarima, davomat | ✅ | | | | |
+| O'z ish haqini ko'rish | | ✅ | ✅ | ✅ | ✅ |
 
 Ofitsant faqat oshpaz hali qabul qilmagan taomni bekor qila oladi. Barcha bekor qilishlar sababi bilan yoziladi.
 
@@ -126,6 +128,31 @@ Ofitsant faqat oshpaz hali qabul qilmagan taomni bekor qila oladi. Barcha bekor 
 - **Kirim-chiqim**: xarajatlar (mahsulot, go'sht, ish haqi, ijara, kommunal, gaz...) va qo'shimcha kirimlar; kategoriyalar sozlamalarda o'zgartiriladi.
 - **Kassa smenasi (Z-hisobot)**: smena ochishda kassadagi naqd, yopishda sanalgan naqd kiritiladi — tizim kutilgan summa bilan farqni ko'rsatadi.
 
+## Ish haqi (faqat boshliq)
+
+**Ish haqi** bo'limida har bir xodim uchun:
+
+- **Maosh**: *oylik* (har kuni bir kunlik ulushi hisoblanadi), *kunlik* (faqat kelgan kunlar uchun) yoki *faqat foiz*.
+  Ofitsantga qo'shimcha **savdodan foiz** (uning yopilgan cheklari summasidan) berish mumkin. Maosh o'zgarsa, eski kunlar eski stavkada qoladi.
+- **Davomat**: xodim o'sha kuni tizimga kirsa — avtomatik "keldi" belgilanadi. Boshliq jadvaldagi katakni bosib tuzatadi.
+- **Bonus** va **jarima** (jarima sababi majburiy).
+- **To'lash**: berilgan pul kassada "Ish haqi" xarajati bo'lib yoziladi va hisobotga tushadi.
+- **Umumiy holat**: hisoblangan + bonus − jarima − berilgan.
+  Musbat bo'lsa — *choyxona qarzi* (xodimga berish kerak), manfiy bo'lsa — *avans* (xodim ortiqcha olgan).
+- Xodim o'z ish haqini **Sozlamalar → Mening ish haqim** da ko'radi va to'lov/bonus/jarima yozilganda xabar oladi.
+- Ishdan ketgan xodimni "Faol" emas qilsangiz, oyligi shu kundan hisoblanmaydi, qarzi esa ko'rinib turadi.
+
+## Chek printerlari
+
+- 58 mm yoki 80 mm termo-printerlar (Xprinter, Rongta, Sunmi va h.k.) Windows'ga **printer sifatida o'rnatilsa** ishlaydi
+  (printer bilan kelgan drayverni o'rnating va uni **asosiy printer** qiling). Kenglik: Sozlamalar → Muassasa → Chek printeri kengligi.
+- **Mijoz cheki**: to'lov oynasida "Chekni chop etish" yoki kassadagi 🖨 tugmasi.
+- **Oshxona cheki**: Oshxona sahifasida **🖨 Avtomatik chop etish** ni yoqing — har yangi buyurtma oshxona printeriga chiqadi
+  (xona, ofitsant, taom, soni, izoh; narxsiz). Har bir taomni 🖨 tugmasi bilan qayta chop etish mumkin.
+- **Oynasiz chop etish**: Chrome yorlig'ida o'ng tugma → Xususiyatlar → "Объект/Target" oxiriga ` --kiosk-printing` qo'shing.
+  Shunda chek dialog oynasisiz darhol chiqadi.
+- Hozircha chek **fiskal emas** (soliq kassasi o'rnini bosmaydi).
+
 ## Qo'shimcha zamonaviy imkoniyatlar
 
 - ⚡ Real vaqt rejimida yangilanish (sahifani yangilash shart emas)
@@ -134,7 +161,7 @@ Ofitsant faqat oshpaz hali qabul qilmagan taomni bekor qila oladi. Barcha bekor 
 - ⏱ Taxminiy tayyor bo'lish vaqti oshxona yuklamasi va oshpazlar soniga qarab hisoblanadi; kechikkan taomlar qizil rangda
 - 📅 Banket bronlari: mijoz, telefon, mehmonlar soni, avans (avans kirim sifatida yoziladi), ustma-ust bron tekshiruvi
 - ↔ Chekni boshqa xonaga ko'chirish
-- 🖨 80 mm termo-printer uchun chek
+- 🖨 58/80 mm termo-printer uchun mijoz va oshxona cheklari
 - 🕵️ Amallar tarixi: chegirma, bekor qilish, narx o'zgarishi kim tomonidan qachon qilinganini nazorat qilish
 - 🌙 Qorong'i mavzu, telefon uchun moslashgan dizayn, PWA (bosh ekranga o'rnatish)
 
@@ -181,6 +208,7 @@ server/
   index.js     HTTP server, statik fayllar, so'rovni kerakli choyxonaga yo'naltirish
   platform.js  Platforma: choyxonalar ro'yxati, sayt egasi, har choyxona uchun alohida baza
   api.js       Bitta choyxona ichidagi biznes-mantiq va huquqlar
+  payroll.js   Ish haqi: stavkalar tarixi, davomat, bonus, jarima, to'lovlar
   db.js        Choyxona bazasi sxemasi va boshlang'ich ma'lumotlar
   events.js    Server-Sent Events (jonli yangilanishlar, har choyxona alohida)
   util.js      Parol xeshlash (scrypt), kiritishni tekshirish

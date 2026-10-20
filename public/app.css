@@ -52,7 +52,6 @@ a { color: var(--primary); }
 .num { font-variant-numeric: tabular-nums; }
 .right { text-align: right; }
 .hidden { display: none !important; }
-#print-frame { position: absolute; width: 0; height: 0; border: 0; visibility: hidden; }
 
 /* ---------- Layout ---------- */
 .shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
@@ -311,3 +310,13 @@ td.actions { white-space: nowrap; text-align: right; }
 .grid > .card + .card { margin-top: 0; }
 .grid + .card, .card + .grid, .kpis + .card { margin-top: 16px; }
 .kpi .value { font-size: clamp(17px, 1.6vw, 22px); }
+
+/* Attendance grid */
+table.att th, table.att td { padding: 4px 2px; }
+table.att th.c, table.att td.c { text-align: center; min-width: 28px; }
+table.att td:first-child, table.att th:first-child { padding-left: 10px; white-space: nowrap; position: sticky; left: 0; background: var(--panel); z-index: 1; }
+table.att .today { background: var(--primary-soft); }
+.att-cell { width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; font-weight: 800; font-size: 13px; padding: 0; }
+.att-cell.on { background: var(--ok); border-color: var(--ok); color: #fff; }
+.att-cell.off { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
+.att-cell:disabled { opacity: .3; cursor: default; }

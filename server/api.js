@@ -1,5 +1,6 @@
 'use strict';
 const { hashPassword, verifyPassword, newToken, HttpError, str, int } = require('./util');
+const { createPayroll } = require('./payroll');
 
 const ROLES = ['owner', 'admin', 'cashier', 'waiter', 'chef'];
 const MANAGERS = ['owner', 'admin'];
@@ -16,6 +17,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
   const events = hub;
   const q = (sql) => db.prepare(sql);
   const now = () => Date.now();
+  const payroll = createPayroll(db, { audit, events: hub, now });
 
   function tx(fn) {
     db.exec('BEGIN');
@@ -53,6 +55,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
   function authenticate(token) {
     if (!token) return null;
     const row = q(`SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ? AND u.active = 1`).get(token);
+    if (row) payroll.markPresent(row.id);
     return row || null;
   }
 
@@ -102,7 +105,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
 
   // ---------- Settings ----------
   function updateSettings({ user, body }) {
-    const allowed = ['name', 'address', 'phone', 'service_pct', 'currency', 'receipt_footer', 'expense_categories', 'income_categories'];
+    const allowed = ['name', 'address', 'phone', 'service_pct', 'currency', 'receipt_footer', 'receipt_width', 'expense_categories', 'income_categories'];
     const set = q('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     for (const k of allowed) {
       if (body[k] === undefined) continue;
@@ -111,6 +114,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
         v = Number(v);
         if (!(v >= 0 && v <= 50)) throw new HttpError(400, "Xizmat haqi 0–50% oralig'ida bo'lsin");
       }
+      if (k === 'receipt_width' && !['58', '80'].includes(String(v))) throw new HttpError(400, "Chek kengligi 58 yoki 80 mm bo'lsin");
       if (k.endsWith('_categories')) {
         if (!Array.isArray(v)) throw new HttpError(400, "Kategoriyalar ro'yxat bo'lishi kerak");
         v = JSON.stringify(v.map((x) => str(x, 'Kategoriya', { max: 60 })).filter(Boolean));
@@ -169,12 +173,13 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
       throw new HttpError(409, 'Bu login band');
     }
     const active = body.active === undefined ? target.active : body.active ? 1 : 0;
-    q('UPDATE users SET name = ?, username = ?, role = ?, phone = ?, salary = ?, active = ? WHERE id = ?').run(
+    // left_at stops monthly pay from accruing after the worker is switched off.
+    const leftAt = active ? null : target.active ? now() : target.left_at;
+    q('UPDATE users SET name = ?, username = ?, role = ?, phone = ?, active = ?, left_at = ? WHERE id = ?').run(
       body.name !== undefined ? str(body.name, 'Ism', { required: true, max: 80 }) : target.name,
       username, role,
       body.phone !== undefined ? str(body.phone, 'Telefon', { max: 30 }) : target.phone,
-      body.salary !== undefined ? int(body.salary, 'Maosh') : target.salary,
-      active, target.id
+      active, leftAt, target.id
     );
     if (body.password) {
       const pw = str(body.password, 'Parol');
@@ -493,7 +498,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
           o.id, d.id, d.name, d.price, d.cost, qty, str(it.note, 'Izoh', { max: 200 }), kitchen ? 'new' : 'served', kitchen ? 1 : 0,
           d.prep_minutes, t, kitchen ? t + (d.prep_minutes + load.extra_minutes) * MIN : null, kitchen ? null : t
         ).lastInsertRowid;
-        out.push({ id, name: d.name, qty, kitchen });
+        out.push({ id, name: d.name, qty, kitchen, note: str(it.note, 'Izoh', { max: 200 }) });
       }
       q('UPDATE orders SET bill_requested = 0 WHERE id = ?').run(o.id);
       return out;
@@ -502,7 +507,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     const kitchenItems = added.filter((a) => a.kitchen);
     audit(user, 'items_add', `#${o.id}: ${added.map((a) => `${a.name}×${a.qty}`).join(', ')}`);
     if (kitchenItems.length) {
-      events.publish('kitchen_new', { order_id: o.id, room: room.name, items: kitchenItems }, { roles: KITCHEN });
+      const waiter = q('SELECT name FROM users WHERE id = ?').get(o.waiter_id);
+      events.publish('kitchen_new', { order_id: o.id, room: room.name, waiter: waiter && waiter.name, at: t, items: kitchenItems }, { roles: KITCHEN });
     }
     events.publish('rooms');
     if (added.some((a) => !a.kitchen)) events.publish('menu');
@@ -970,6 +976,13 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     ['POST', '/api/shifts/open', MONEY, openShift],
     ['POST', '/api/shifts/close', MONEY, closeShift],
     ['GET', '/api/audit', MANAGERS, listAudit],
+    ['GET', '/api/payroll', ['owner'], payroll.month],
+    ['PUT', '/api/payroll/rates/:id', ['owner'], payroll.setRate],
+    ['POST', '/api/payroll/entries', ['owner'], payroll.addEntry],
+    ['DELETE', '/api/payroll/entries/:id', ['owner'], payroll.deleteEntry],
+    ['POST', '/api/payroll/attendance', ['owner'], payroll.setAttendance],
+    ['GET', '/api/payroll/users/:id', ['owner'], payroll.userLedger],
+    ['GET', '/api/my/payroll', ALL, payroll.myPayroll],
   ].map(([method, pattern, roles, handler]) => {
     const keys = [];
     const re = new RegExp('^' + pattern.replace(/:(\w+)/g, (_, k) => { keys.push(k); return '(\\d+)'; }) + '$');

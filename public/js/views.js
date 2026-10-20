@@ -324,7 +324,7 @@ function openPayment(order) {
           service_pct: Number(d.service_pct) || 0, discount: Number(d.discount) || 0,
           paid_cash: Number(d.paid_cash) || 0, paid_card: Number(d.paid_card) || 0, paid_transfer: Number(d.paid_transfer) || 0,
         });
-        toast(`Chek #${r.id} yopildi${r.change ? ` · Qaytim: ${money(r.change).replace(/<[^>]+>/g, '')}` : ''}`, 'ok', 8000);
+        toast(`Chek #${r.id} yopildi${r.change ? ` · Qaytim: ${moneyText(r.change)}` : ''}`, 'ok', 8000);
         if (d.print) printReceipt(r);
         if (location.hash.startsWith('#/room/')) location.hash = App.user.role === 'cashier' ? '#/cashier' : '#/rooms';
         else refreshView();
@@ -390,6 +390,7 @@ function ticketHtml(i) {
       ${i.status === 'new' ? `<button class="btn primary lg" data-accept="${i.id}">👍 Qabul qilish</button>` : ''}
       ${i.status === 'cooking' ? `<button class="btn ok lg" data-ready="${i.id}">✅ Tayyor</button>` : ''}
       ${i.status === 'new' ? `<button class="btn lg" data-ready="${i.id}" title="Darhol tayyor">✅</button>` : ''}
+      ${i.status === 'new' || i.status === 'cooking' ? `<button class="btn lg" data-kprint="${i.id}" title="Chop etish" style="flex:0 0 auto">🖨</button>` : ''}
     </div></div>`;
 }
 
@@ -401,14 +402,24 @@ Views.kitchen = {
     const doneItems = col(['ready', 'served']).sort((a, b) => (b.ready_at || 0) - (a.ready_at || 0));
     return `<div class="page-head"><h1>Oshxona</h1>
       <span class="chip new">Yangi: ${load.pending}</span><span class="chip cooking">Tayyorlanmoqda: ${load.cooking}</span>
-      <span class="spacer"></span><a class="btn" href="#/stoplist">⛔ Stop-list</a></div>
+      <span class="spacer"></span>
+      <label class="check" title="Shu qurilmada yangi buyurtma tushganda oshxona cheki printerga chiqadi"><input type="checkbox" id="kprint" ${store('cp_kprint') ? 'checked' : ''}> 🖨 Avtomatik chop etish</label>
+      <a class="btn" href="#/stoplist">⛔ Stop-list</a></div>
       <div class="kds">
         <div class="kds-col"><h2>🆕 Yangi buyurtmalar <span class="badge">${col('new').length}</span></h2>${col('new').map(ticketHtml).join('') || emptyState('😌', "Yangi buyurtma yo'q")}</div>
         <div class="kds-col"><h2>🔥 Tayyorlanmoqda <span class="badge" style="background:var(--accent)">${col('cooking').length}</span></h2>${col('cooking').map(ticketHtml).join('') || emptyState('🍳', "Hozir hech narsa tayyorlanmayapti")}</div>
         <div class="kds-col"><h2>✅ Tayyor / berildi</h2>${doneItems.map(ticketHtml).join('') || emptyState('🍽️', "Bo'sh")}</div>
       </div>`;
   },
-  bind(root) {
+  bind(root, { items }) {
+    root.querySelector('#kprint').onchange = (e) => {
+      store('cp_kprint', e.target.checked || null);
+      toast(e.target.checked ? 'Yangi buyurtmalar shu qurilmada avtomatik chop etiladi' : "Avtomatik chop etish o'chirildi", 'ok');
+    };
+    root.querySelectorAll('[data-kprint]').forEach((b) => b.onclick = () => {
+      const i = items.find((x) => x.id === Number(b.dataset.kprint));
+      printKitchenTicket({ order_id: i.order_id, room: `${i.room_number} · ${i.room_name}`, waiter: i.waiter_name, at: i.created_at, items: [i] });
+    });
     root.querySelectorAll('[data-accept]').forEach((b) => b.onclick = async () => {
       b.disabled = true;
       try { await POST(`/api/items/${b.dataset.accept}/accept`); refreshView(); } catch (e) { toastError(e); b.disabled = false; }

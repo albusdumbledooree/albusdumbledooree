@@ -21,6 +21,10 @@ const MIN = 60000;
 function esc(v) {
   return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+// Plain text amount for toasts and alerts (no HTML escaping).
+function moneyText(n) {
+  return `${Math.round(Number(n) || 0).toLocaleString('ru-RU').replace(/,/g, ' ')} ${App.settings.currency || "so'm"}`;
+}
 function money(n) {
   return `${Math.round(Number(n) || 0).toLocaleString('ru-RU').replace(/,/g, ' ')} ${esc(App.settings.currency || "so'm")}`;
 }
@@ -39,6 +43,7 @@ function toLocalInput(ts) {
   const d = new Date(ts);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
+function localDay(ts = Date.now()) { const d = new Date(ts); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 function dayStart(d = new Date()) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 
 // ---------- API ----------
@@ -101,7 +106,7 @@ const Live = {
       }
     };
     for (const type of ['rooms', 'kitchen', 'menu', 'finance', 'settings', 'kitchen_new', 'kitchen_cancel', 'item_ready',
-      'item_accepted', 'bill_requested', 'stoplist']) {
+      'item_accepted', 'bill_requested', 'stoplist', 'payroll']) {
       this.es.addEventListener(type, (e) => {
         let data = {};
         try { data = JSON.parse(e.data); } catch { /* ignore */ }
@@ -274,17 +279,30 @@ function formData(form) {
 }
 
 // ---------- Receipt ----------
+// Thermal printers (58/80 mm) work through the normal system printer driver.
+// With Chrome started as "chrome --kiosk-printing" receipts print without the dialog.
+function printDoc(title, body) {
+  const narrow = String(App.settings.receipt_width) === '58';
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+    body{font:${narrow ? 11 : 12}px/1.35 "Courier New",monospace;width:${narrow ? 48 : 72}mm;margin:0 auto;padding:3mm 0;color:#000}
+    h1{font-size:${narrow ? 14 : 16}px;text-align:center;margin:0}.c{text-align:center}.r{text-align:right;white-space:nowrap}
+    table{width:100%;border-collapse:collapse}td{padding:2px 0;vertical-align:top}hr{border:0;border-top:1px dashed #000;margin:6px 0}
+    .big{font-size:${narrow ? 13 : 15}px;font-weight:bold}.huge{font-size:${narrow ? 16 : 20}px;font-weight:bold}
+    @page{size:${narrow ? 58 : 80}mm auto;margin:0}
+  </style></head><body>${body}</body></html>`;
+  // A fresh frame per print, so two receipts in a row never overwrite each other.
+  const frame = document.createElement('iframe');
+  frame.style.cssText = 'position:absolute;width:0;height:0;border:0;visibility:hidden';
+  frame.onload = () => { frame.contentWindow.focus(); frame.contentWindow.print(); setTimeout(() => frame.remove(), 60000); };
+  frame.srcdoc = html;
+  document.body.appendChild(frame);
+}
+
 function printReceipt(o) {
   const s = App.settings;
   const live = o.items.filter((i) => i.status !== 'cancelled');
   const lines = live.map((i) => `<tr><td>${esc(i.name)}<br><small>${i.qty} × ${money(i.price)}</small></td><td class="r">${money(i.qty * i.price)}</td></tr>`).join('');
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Chek #${o.id}</title><style>
-    body{font:12px/1.35 "Courier New",monospace;width:72mm;margin:0 auto;padding:4mm 0;color:#000}
-    h1{font-size:16px;text-align:center;margin:0}.c{text-align:center}.r{text-align:right;white-space:nowrap}
-    table{width:100%;border-collapse:collapse}td{padding:2px 0;vertical-align:top}hr{border:0;border-top:1px dashed #000;margin:6px 0}
-    .big{font-size:15px;font-weight:bold}@page{size:80mm auto;margin:0}
-  </style></head><body>
-    <h1>${esc(s.name)}</h1>${s.address ? `<div class="c">${esc(s.address)}</div>` : ''}${s.phone ? `<div class="c">${esc(s.phone)}</div>` : ''}
+  printDoc(`Chek #${o.id}`, `    <h1>${esc(s.name)}</h1>${s.address ? `<div class="c">${esc(s.address)}</div>` : ''}${s.phone ? `<div class="c">${esc(s.phone)}</div>` : ''}
     <hr><div>Chek: #${o.id}${o.status !== 'closed' ? ' (hisob)' : ''}</div><div>Xona: ${esc(o.room.number)} — ${esc(o.room.name)}</div>
     <div>Ofitsant: ${esc(o.waiter.name)}</div><div>Mehmonlar: ${o.guests}</div>
     <div>Ochildi: ${fmtDateTime(o.opened_at)}</div>${o.closed_at ? `<div>Yopildi: ${fmtDateTime(o.closed_at)}</div>` : ''}
@@ -294,11 +312,14 @@ function printReceipt(o) {
     ${o.discount ? `<tr><td>Chegirma</td><td class="r">-${money(o.discount)}</td></tr>` : ''}
     <tr class="big"><td>JAMI</td><td class="r">${money(o.total)}</td></tr>
     ${o.status === 'closed' ? ['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => `<tr><td>${METHOD_NAMES[m]}</td><td class="r">${money(o[`paid_${m}`])}</td></tr>`).join('') : ''}
-    </table><hr>${o.cashier ? `<div>Kassir: ${esc(o.cashier.name)}</div>` : ''}<div class="c">${esc(s.receipt_footer || '')}</div>
-  </body></html>`;
-  const frame = document.getElementById('print-frame');
-  frame.srcdoc = html;
-  frame.onload = () => { frame.contentWindow.focus(); frame.contentWindow.print(); frame.onload = null; };
+    </table><hr>${o.cashier ? `<div>Kassir: ${esc(o.cashier.name)}</div>` : ''}<div class="c">${esc(s.receipt_footer || '')}</div>`);
+}
+
+// Kitchen ticket: big room number, dishes and notes — no prices.
+function printKitchenTicket(t) {
+  printDoc(`Oshxona #${t.order_id}`, `<div class="c huge">${esc(t.room)}</div>
+    <div class="c">Chek #${t.order_id} · ${esc(t.waiter || '')} · ${fmtTime(t.at || Date.now())}</div><hr>
+    <table>${t.items.map((i) => `<tr class="big"><td>${i.qty} ×</td><td>${esc(i.name)}${i.note ? `<br><small>📝 ${esc(i.note)}</small>` : ''}</td></tr>`).join('')}</table><hr>`);
 }
 
 function downloadCsv(filename, rows) {

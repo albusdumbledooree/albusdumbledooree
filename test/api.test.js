@@ -190,3 +190,56 @@ test('site owner credentials on the staff login point to /platform', async () =>
   const wrong = await call('POST', '/api/login', null, { code: 'demo', username: 'superadmin', password: 'xato' });
   assert.equal(wrong.status, 401);
 });
+
+test('payroll: daily pay with attendance, % of sales, bonus, fine, payment', async () => {
+  const boss = await login('ega', 'ega123');
+  const admin = await login('admin', 'admin123');
+  const w = (await call('POST', '/api/users', boss, { name: 'Pay Test', username: 'paytest', password: '1234', role: 'waiter' })).data;
+  assert.equal((await call('PUT', `/api/payroll/rates/${w.id}`, boss, { pay_type: 'daily', amount: 100000, sales_pct: 5 })).status, 200);
+  assert.equal((await call('GET', '/api/payroll', admin)).status, 403, 'only the boss manages pay');
+
+  // Not at work yet: nothing earned.
+  let row = (await call('GET', '/api/payroll', boss)).data.staff.find((s) => s.id === w.id);
+  assert.equal(row.accrued, 0);
+
+  // Logging in marks today as a working day; a closed check adds 5% of its total.
+  const wt = await login('paytest', '1234');
+  const room = (await call('POST', '/api/rooms', boss, { number: '99', name: 'Pay xona', waiter_ids: [w.id] })).data;
+  const menu = (await call('GET', '/api/menu', wt)).data;
+  const non = menu.dishes.find((d) => d.name === 'Tandir non');
+  const order = (await call('POST', '/api/orders', wt, { room_id: room.id })).data;
+  await call('POST', `/api/orders/${order.id}/items`, wt, { items: [{ dish_id: non.id, qty: 4 }] });
+  const closed = (await call('POST', `/api/orders/${order.id}/close`, boss, { paid_cash: 1e6 })).data;
+
+  assert.equal((await call('POST', '/api/payroll/entries', boss, { user_id: w.id, type: 'fine', amount: 10000 })).status, 400, 'fine needs a reason');
+  await call('POST', '/api/payroll/entries', boss, { user_id: w.id, type: 'fine', amount: 10000, note: 'Kechikdi' });
+  await call('POST', '/api/payroll/entries', boss, { user_id: w.id, type: 'bonus', amount: 20000, note: 'Yaxshi ish' });
+  await call('POST', '/api/payroll/entries', boss, { user_id: w.id, type: 'payment', amount: 50000, method: 'cash' });
+
+  row = (await call('GET', '/api/payroll', boss)).data.staff.find((s) => s.id === w.id);
+  const pct = Math.round(closed.total * 0.05);
+  assert.equal(row.days_worked, 1);
+  assert.equal(row.accrued, 100000 + pct);
+  assert.equal(row.balance, 100000 + pct + 20000 - 10000 - 50000);
+
+  // The payment is an expense in the cash book; the worker sees their own pay.
+  const s = new Date(); s.setHours(0, 0, 0, 0);
+  const txs = (await call('GET', `/api/transactions?from=${s.getTime()}&type=expense`, boss)).data;
+  assert.ok(txs.some((t) => t.category === 'Ish haqi' && t.amount === 50000));
+  const mine = (await call('GET', '/api/my/payroll', wt)).data;
+  assert.equal(mine.balance, row.balance);
+  assert.equal(mine.entries.length, 3);
+
+  // Deleting a wrong payment also removes its expense.
+  const pay = mine.entries.find((e) => e.type === 'payment');
+  await call('DELETE', `/api/payroll/entries/${pay.id}`, boss);
+  assert.equal((await call('GET', '/api/my/payroll', wt)).data.balance, row.balance + 50000);
+  const after = (await call('GET', `/api/transactions?from=${s.getTime()}&type=expense`, boss)).data;
+  assert.ok(!after.some((t) => t.category === 'Ish haqi' && t.amount === 50000));
+
+  // Attendance can be corrected by the boss.
+  const today = (await call('GET', '/api/payroll', boss)).data.today;
+  await call('POST', '/api/payroll/attendance', boss, { user_id: w.id, day: today, present: false });
+  row = (await call('GET', '/api/payroll', boss)).data.staff.find((s) => s.id === w.id);
+  assert.equal(row.accrued_base, 0);
+});

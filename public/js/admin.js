@@ -291,11 +291,9 @@ Views.staff = {
           <label class="field">Login<input name="username" autocapitalize="none" value="${esc(u.username || '')}" required></label>
           <label class="field">${u.id ? 'Yangi parol (ixtiyoriy)' : 'Parol'}<input name="password" type="text" autocomplete="new-password" ${u.id ? '' : 'required'}></label>
           <label class="field">Telefon<input name="phone" type="tel" value="${esc(u.phone || '')}"></label>
-          <label class="field">Oylik maosh<input name="salary" type="number" min="0" value="${u.salary || 0}"></label>
         </div>${u.id && u.id !== App.user.id ? `<label class="check" style="margin-top:12px"><input type="checkbox" name="active" ${u.active ? 'checked' : ''}> Faol (o'chirsangiz tizimga kira olmaydi)</label>` : ''}`,
         actions: [{ label: 'Bekor', onClick: () => {} }, { label: 'Saqlash', cls: 'primary', onClick: async (f) => {
           const d = formData(f);
-          d.salary = Number(d.salary) || 0;
           if (!d.password) delete d.password;
           if (u.id) await PUT(`/api/users/${u.id}`, d); else await POST('/api/users', d);
           toast('Saqlandi', 'ok'); refreshView();
@@ -418,8 +416,11 @@ Views.menuadmin = {
 // ---------- Settings ----------
 Views.settings = {
   title: 'Sozlamalar', icon: '⚙️', roles: ['owner', 'admin', 'cashier', 'waiter', 'chef'], nav: true,
-  async load() { return { s: App.settings }; },
-  render({ s }) {
+  async load() {
+    const pay = App.user.role === 'owner' ? null : await GET('/api/my/payroll').catch(() => null);
+    return { s: App.settings, pay };
+  },
+  render({ s, pay }) {
     const v = Voice.prefs();
     const voices = Voice.voices();
     const picked = Voice.pick();
@@ -444,6 +445,18 @@ Views.settings = {
           <button class="btn primary">Parolni o'zgartirish</button></form>
         <h3 style="margin-top:16px">Mavzu</h3><div class="row">${[['auto', 'Avtomatik'], ['light', "☀️ Yorug'"], ['dark', '🌙 Qorong\'i']]
           .map(([k, n]) => `<button class="btn sm ${(store('cp_theme') || 'auto') === k ? 'primary' : ''}" data-theme="${k}">${n}</button>`).join('')}</div></div>
+      ${pay ? `<div class="card" style="grid-column:1/-1"><h2>💵 Mening ish haqim</h2>
+        <div class="kpis" style="margin-bottom:8px">
+          ${kpi('Maosh', rateText(pay.rate))}
+          ${kpi('Bu oy ishlagan kunlar', pay.days_worked)}
+          ${kpi('Bu oy hisoblangan', money(pay.accrued), pay.accrued_pct ? `shundan savdodan: ${money(pay.accrued_pct)}` : '')}
+          ${kpi('Bonus / jarima (oy)', `${money(pay.bonus)} / ${money(pay.fine)}`)}
+          ${kpi('Bu oy olingan', money(pay.paid))}
+          ${kpi('Umumiy holat', pay.balance > 0 ? `${money(pay.balance)} olishingiz kerak` : pay.balance < 0 ? `${money(-pay.balance)} avans olgansiz` : 'Teng', '', pay.balance >= 0 ? 'good' : 'bad')}
+        </div>
+        ${pay.entries.length ? `<div class="table-wrap"><table><tr><th>Sana</th><th>Turi</th><th class="right">Summa</th><th>Izoh</th></tr>
+          ${pay.entries.slice(0, 15).map((e) => `<tr><td>${esc(e.day)}</td><td><span class="chip ${ENTRY_TYPES[e.type][1]}" style="text-decoration:none">${ENTRY_TYPES[e.type][0]}</span></td>
+            <td class="right num">${money(e.amount)}</td><td>${esc(e.note)}</td></tr>`).join('')}</table></div>` : ''}</div>` : ''}
       ${manager ? `<div class="card" style="grid-column:1/-1"><h2>🏪 Muassasa</h2><form id="org-form">
         <div class="form-grid">
           <label class="field">Nomi<input name="name" value="${esc(s.name)}"></label>
@@ -452,7 +465,13 @@ Views.settings = {
           <label class="field">Xizmat haqi, %<input type="number" name="service_pct" min="0" max="50" step="0.5" value="${s.service_pct}"></label>
           <label class="field">Valyuta<input name="currency" value="${esc(s.currency)}"></label>
         </div>
-        <label class="field" style="margin-top:12px">Chek ostidagi matn<input name="receipt_footer" value="${esc(s.receipt_footer)}"></label>
+        <div class="form-grid" style="margin-top:12px">
+          <label class="field">Chek ostidagi matn<input name="receipt_footer" value="${esc(s.receipt_footer)}"></label>
+          <label class="field">Chek printeri kengligi<select name="receipt_width">${['80', '58'].map((w) => `<option value="${w}" ${String(s.receipt_width || '80') === w ? 'selected' : ''}>${w} mm</option>`).join('')}</select></label>
+        </div>
+        <p class="small muted">🖨 Termo-printer (Xprinter, Rongta va h.k.) Windows'ga printer sifatida o'rnatilsa ishlaydi. Uni "asosiy printer" qilib qo'ying.
+          Chop etish oynasisiz to'g'ridan-to'g'ri chiqishi uchun Chrome yorlig'i xususiyatlarida "Объект/Target" oxiriga <code>--kiosk-printing</code> qo'shing.
+          Oshxonada: Oshxona sahifasida "Avtomatik chop etish" ni yoqing.</p>
         <div class="form-grid" style="margin-top:12px">
           <label class="field">Xarajat kategoriyalari (har biri yangi qatorda)<textarea name="expense_categories" rows="7">${esc(s.expense_categories.join('\n'))}</textarea></label>
           <label class="field">Kirim kategoriyalari<textarea name="income_categories" rows="7">${esc(s.income_categories.join('\n'))}</textarea></label>
@@ -515,3 +534,157 @@ Views.audit = {
       </table></div></div>`;
   },
 };
+
+// ---------- Payroll (boss only) ----------
+const MONTHS = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
+const PAY_TYPES = { monthly: 'Oylik', daily: 'Kunlik', none: 'Faqat foiz' };
+const ENTRY_TYPES = { payment: ["To'lov", 'served'], bonus: ['Bonus', 'ready'], fine: ['Jarima', 'cancelled'] };
+UI.payMonth = UI.payMonth || localDay().slice(0, 7);
+
+function monthTitle(m) { const [y, mm] = m.split('-').map(Number); return `${MONTHS[mm - 1]} ${y}`; }
+function shiftMonth(m, n) { const [y, mm] = m.split('-').map(Number); const d = new Date(y, mm - 1 + n, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; }
+function rateText(r) {
+  if (!r) return '<span class="chip cancelled" style="text-decoration:none">Belgilanmagan</span>';
+  const base = r.pay_type === 'none' ? '' : `${PAY_TYPES[r.pay_type]}: ${money(r.amount)}`;
+  return `${base}${r.sales_pct ? `${base ? ' + ' : ''}${r.sales_pct}% savdodan` : ''}`;
+}
+function balanceHtml(b) {
+  if (b > 0) return `<b style="color:var(--accent)">Berish kerak: ${money(b)}</b>`;
+  if (b < 0) return `<b style="color:var(--info)">Avans: ${money(-b)}</b><br><span class="small muted">xodim qarzdor</span>`;
+  return '<span class="chip ready">Hisob-kitob teng</span>';
+}
+
+Views.payroll = {
+  title: 'Ish haqi', icon: '💵', roles: ['owner'], nav: true, refreshOn: ['finance'],
+  async load() { return GET(`/api/payroll?month=${UI.payMonth}`); },
+  render(d) {
+    const t = d.totals;
+    const att = new Map(d.attendance.map((a) => [`${a.user_id}|${a.day}`, a.source]));
+    return `<div class="page-head"><h1>Ish haqi</h1>
+      <button class="btn sm" data-month="-1">‹</button><b>${monthTitle(d.month)}</b><button class="btn sm" data-month="1">›</button>
+      <span class="spacer"></span></div>
+      <div class="kpis">
+        ${kpi('Hisoblangan (oy)', money(t.accrued), 'maosh + savdodan foiz')}
+        ${kpi('Bonuslar', money(t.bonus), '', 'good')}
+        ${kpi('Jarimalar', money(t.fine), '', 'bad')}
+        ${kpi('Berilgan (oy)', money(t.paid), "kassadan 'Ish haqi' xarajati")}
+        ${kpi('Choyxona qarzi', money(t.owed), 'xodimlarga berilishi kerak (jami)', t.owed ? 'bad' : 'good')}
+        ${kpi('Avanslar', money(t.advances), 'xodimlar ortiqcha olgan')}
+      </div>
+      <div class="card"><div class="card-head"><h2>Xodimlar</h2></div>
+      ${d.staff.length ? `<div class="table-wrap"><table>
+        <tr><th>Xodim</th><th>Maosh</th><th class="right">Ish kuni</th><th class="right">Hisoblangan</th><th class="right">Bonus</th><th class="right">Jarima</th><th class="right">Berilgan</th><th>Umumiy holat</th><th></th></tr>
+        ${d.staff.map((r) => `<tr style="${r.active ? '' : 'opacity:.6'}">
+          <td><b>${esc(r.name)}</b><br><span class="small muted">${ROLE_NAMES[r.role]}${r.active ? '' : ' · ishdan ketgan'}</span></td>
+          <td class="small">${rateText(r.rate)}</td>
+          <td class="right">${r.days_worked}</td>
+          <td class="right num">${money(r.accrued)}${r.accrued_pct ? `<br><span class="small muted">shundan foiz: ${money(r.accrued_pct)}</span>` : ''}</td>
+          <td class="right num">${r.bonus ? money(r.bonus) : '—'}</td>
+          <td class="right num">${r.fine ? money(r.fine) : '—'}</td>
+          <td class="right num">${r.paid ? money(r.paid) : '—'}</td>
+          <td>${balanceHtml(r.balance)}</td>
+          <td class="actions">
+            <button class="btn sm primary" data-pay="${r.id}">💵 To'lash</button>
+            <button class="btn sm" data-bonus="${r.id}" title="Bonus">🎁</button>
+            <button class="btn sm" data-fine="${r.id}" title="Jarima">⚠</button>
+            <button class="btn sm" data-rate="${r.id}" title="Maosh">⚙</button>
+            <button class="btn sm" data-hist="${r.id}" title="Tarix">📋</button></td></tr>`).join('')}
+      </table></div>` : emptyState('👥', "Xodimlar yo'q. Avval Xodimlar bo'limida qo'shing.")}</div>
+      <div class="card"><div class="card-head"><h2>Davomat</h2><span class="spacer"></span>
+        <span class="small muted">✓ — keldi (tizimga kirganda o'zi belgilanadi), bosib o'zgartiring</span></div>
+        <div class="table-wrap"><table class="att">
+          <tr><th>Xodim</th>${d.days.map((day) => `<th class="c ${day === d.today ? 'today' : ''}">${Number(day.slice(8))}</th>`).join('')}<th class="right">Jami</th></tr>
+          ${d.staff.filter((r) => r.active).map((r) => `<tr><td><b>${esc(r.name)}</b></td>${d.days.map((day) => {
+            const src = att.get(`${r.id}|${day}`);
+            const on = src && src !== 'absent';
+            const future = day > d.today;
+            return `<td class="c ${day === d.today ? 'today' : ''}"><button class="att-cell ${on ? 'on' : src === 'absent' ? 'off' : ''}" ${future ? 'disabled' : ''}
+              data-att="${r.id}" data-day="${day}" data-on="${on ? 1 : 0}" title="${day}${src === 'auto' ? ' · tizimga kirgan' : src === 'manual' ? ' · qo\'lda' : ''}">${on ? '✓' : src === 'absent' ? '✕' : ''}</button></td>`;
+          }).join('')}<td class="right"><b>${r.days_worked}</b></td></tr>`).join('')}
+        </table></div></div>`;
+  },
+  bind(root, d) {
+    const byId = (id) => d.staff.find((r) => r.id === Number(id));
+    root.querySelectorAll('[data-month]').forEach((b) => b.onclick = () => { UI.payMonth = shiftMonth(UI.payMonth, Number(b.dataset.month)); refreshView(); });
+    root.querySelectorAll('[data-att]').forEach((b) => b.onclick = async () => {
+      try {
+        await POST('/api/payroll/attendance', { user_id: Number(b.dataset.att), day: b.dataset.day, present: b.dataset.on !== '1' });
+        refreshView();
+      } catch (e) { toastError(e); }
+    });
+    root.querySelectorAll('[data-pay]').forEach((b) => b.onclick = () => payEntry(byId(b.dataset.pay), 'payment'));
+    root.querySelectorAll('[data-bonus]').forEach((b) => b.onclick = () => payEntry(byId(b.dataset.bonus), 'bonus'));
+    root.querySelectorAll('[data-fine]').forEach((b) => b.onclick = () => payEntry(byId(b.dataset.fine), 'fine'));
+    root.querySelectorAll('[data-rate]').forEach((b) => b.onclick = () => payRate(byId(b.dataset.rate)));
+    root.querySelectorAll('[data-hist]').forEach((b) => b.onclick = () => payHistory(byId(b.dataset.hist)));
+  },
+};
+
+function payEntry(r, type) {
+  const titles = { payment: `💵 ${r.name} — ish haqi berish`, bonus: `🎁 ${r.name} — bonus`, fine: `⚠ ${r.name} — jarima` };
+  const today = localDay();
+  openModal({
+    title: titles[type],
+    body: `${type === 'payment' ? `<p>Hozirgi holat: ${balanceHtml(r.balance)}</p>` : ''}
+      <div class="form-grid">
+        <label class="field">Summa<input type="number" name="amount" min="1" required value="${type === 'payment' && r.balance > 0 ? r.balance : ''}"></label>
+        ${type === 'payment' ? `<label class="field">Qanday berildi<select name="method">${Object.entries(METHOD_NAMES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>` : ''}
+        <label class="field">Sana<input type="date" name="day" value="${today}" max="${today}"></label>
+      </div>
+      <label class="field" style="margin-top:12px">${type === 'fine' ? 'Sababi (majburiy)' : 'Izoh'}<input name="note" ${type === 'fine' ? 'required' : ''}
+        placeholder="${type === 'payment' ? 'Masalan: oktabr oyi uchun / avans' : type === 'bonus' ? "Masalan: bayram, ko'p savdo" : 'Masalan: kechikdi, idish sindirdi'}"></label>
+      ${type === 'payment' ? `<p class="small muted">To'lov kassada "Ish haqi" xarajati sifatida yoziladi va hisobotga tushadi. Qoldiqdan ko'p bersangiz — avans hisoblanadi.</p>` : ''}`,
+    actions: [{ label: 'Bekor', onClick: () => {} }, { label: 'Saqlash', cls: type === 'fine' ? 'danger' : 'primary', onClick: async (f) => {
+      const x = formData(f);
+      if (!x.amount) { toast('Summani kiriting', 'warn'); return false; }
+      await POST('/api/payroll/entries', { ...x, user_id: r.id, type, amount: Number(x.amount) });
+      toast('Saqlandi', 'ok'); refreshView();
+    } }],
+  });
+}
+
+function payRate(r) {
+  const cur = r.rate || { pay_type: r.role === 'waiter' ? 'daily' : 'monthly', amount: '', sales_pct: 0 };
+  const today = localDay();
+  const form = openModal({
+    title: `⚙ ${r.name} — maosh`,
+    body: `<div class="form-grid">
+        <label class="field">Maosh turi<select name="pay_type">${Object.entries(PAY_TYPES).map(([k, v]) => `<option value="${k}" ${cur.pay_type === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+        <label class="field" id="amount-f">Summa<input type="number" name="amount" min="0" value="${cur.amount}"></label>
+        <label class="field">Savdodan foiz, % (ofitsant uchun)<input type="number" name="sales_pct" min="0" max="50" step="0.5" value="${cur.sales_pct || 0}"></label>
+        <label class="field">Qachondan<input type="date" name="from_day" value="${r.rate ? today : ''}"></label>
+      </div>
+      <p class="small muted" style="margin-top:10px"><b>Oylik</b> — har kuni oylikning bir kunlik ulushi hisoblanadi (oy oxirida to'liq oylik bo'ladi).
+        <b>Kunlik</b> — faqat ishga kelgan kunlar uchun. <b>Foiz</b> — ofitsantning yopilgan cheklari summasidan.
+        Maosh o'zgarsa, eski kunlar eski stavkada qoladi.${r.rate ? '' : " Sana bo'sh qolsa — ishga qabul qilingan kundan."}</p>`,
+    actions: [{ label: 'Bekor', onClick: () => {} }, { label: 'Saqlash', cls: 'primary', onClick: async (f) => {
+      const x = formData(f);
+      await PUT(`/api/payroll/rates/${r.id}`, { pay_type: x.pay_type, amount: Number(x.amount) || 0, sales_pct: Number(x.sales_pct) || 0, from_day: x.from_day });
+      toast('Maosh saqlandi', 'ok'); refreshView();
+    } }],
+  });
+  const sync = () => { form.querySelector('#amount-f').style.display = form.pay_type.value === 'none' ? 'none' : ''; };
+  form.pay_type.onchange = sync; sync();
+}
+
+async function payHistory(r) {
+  let h;
+  try { h = await GET(`/api/payroll/users/${r.id}`); } catch (e) { return toastError(e); }
+  openModal({
+    title: `📋 ${r.name} — tarix`, wide: true,
+    body: `<p>${balanceHtml(h.balance)}</p>
+      ${h.entries.length ? `<div class="table-wrap"><table><tr><th>Sana</th><th>Turi</th><th class="right">Summa</th><th>Izoh</th><th>Kim</th><th></th></tr>
+        ${h.entries.map((e) => `<tr><td>${esc(e.day)}</td><td><span class="chip ${ENTRY_TYPES[e.type][1]}" style="text-decoration:none">${ENTRY_TYPES[e.type][0]}</span></td>
+          <td class="right num">${money(e.amount)}${e.type === 'payment' ? `<br><span class="small muted">${METHOD_NAMES[e.method]}</span>` : ''}</td>
+          <td>${esc(e.note)}</td><td class="small">${esc(e.created_by_name || '')}</td>
+          <td class="actions"><button type="button" class="btn ghost sm danger-text" data-del-entry="${e.id}">🗑</button></td></tr>`).join('')}
+      </table></div>` : `<p class="muted">Hali yozuv yo'q</p>`}
+      <h3 style="margin-top:16px">Maosh tarixi</h3>
+      ${h.rates.length ? h.rates.slice().reverse().map((x) => `<div class="small">${esc(x.from_day)} dan: ${rateText(x)}</div>`).join('') : '<p class="muted">Belgilanmagan</p>'}`,
+    actions: [{ label: 'Yopish', onClick: () => {} }],
+    onMount: (f) => f.querySelectorAll('[data-del-entry]').forEach((b) => b.onclick = async () => {
+      if (!(await confirmModal("O'chirish", "Bu yozuv o'chirilsinmi? To'lov bo'lsa, kassadagi xarajati ham o'chadi.", "O'chirish"))) return;
+      try { await DEL(`/api/payroll/entries/${b.dataset.delEntry}`); toast("O'chirildi", 'ok'); refreshView(); } catch (e) { toastError(e); }
+    }),
+  });
+}

@@ -138,6 +138,35 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS pay_rates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  pay_type TEXT NOT NULL CHECK (pay_type IN ('monthly','daily','none')),
+  amount INTEGER NOT NULL DEFAULT 0,
+  sales_pct REAL NOT NULL DEFAULT 0,
+  from_day TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pay_rates_user ON pay_rates(user_id, from_day);
+CREATE TABLE IF NOT EXISTS attendance (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  day TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'auto',
+  PRIMARY KEY (user_id, day)
+);
+CREATE TABLE IF NOT EXISTS payroll (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('payment','bonus','fine')),
+  amount INTEGER NOT NULL,
+  method TEXT NOT NULL DEFAULT 'cash',
+  note TEXT DEFAULT '',
+  day TEXT NOT NULL,
+  transaction_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL,
+  created_by INTEGER REFERENCES users(id),
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_payroll_user ON payroll(user_id, day);
 CREATE TABLE IF NOT EXISTS audit (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER REFERENCES users(id),
@@ -155,6 +184,7 @@ const DEFAULT_SETTINGS = {
   service_pct: '10',
   currency: "so'm",
   receipt_footer: 'Xaridingiz uchun rahmat! Yana kutib qolamiz.',
+  receipt_width: '80',
   expense_categories: JSON.stringify([
     'Mahsulotlar', 'Ish haqi', 'Ijara', 'Kommunal', "Go'sht", 'Sabzavot', 'Ichimliklar',
     'Gaz', 'Transport', "Ta'mirlash", 'Soliq', 'Boshqa',
@@ -239,12 +269,36 @@ function seed(db, opts = {}) {
     addUser(db, 'Kassir Dilnoza', 'kassir', 'kassir123', 'cashier');
     const w1 = addUser(db, 'Ofitsant Jasur', 'jasur', '1234', 'waiter');
     const w2 = addUser(db, 'Ofitsant Bobur', 'bobur', '1234', 'waiter');
-    addUser(db, 'Oshpaz Rustam', 'oshpaz', '1234', 'chef');
+    const chef = addUser(db, 'Oshpaz Rustam', 'oshpaz', '1234', 'chef');
     seedRoomsAndMenu(db, [w1, w2]);
+    // Sample pay: monthly for admin and cashier, daily + % of own sales for waiters, daily for the chef.
+    const d = new Date();
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const rate = db.prepare('INSERT INTO pay_rates (user_id, pay_type, amount, sales_pct, from_day, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+    rate.run(2, 'monthly', 4000000, 0, day, Date.now());
+    rate.run(3, 'monthly', 3000000, 0, day, Date.now());
+    rate.run(w1, 'daily', 120000, 3, day, Date.now());
+    rate.run(w2, 'daily', 120000, 3, day, Date.now());
+    rate.run(chef, 'daily', 200000, 0, day, Date.now());
     return;
   }
   if (opts.owner) addUser(db, opts.owner.name, opts.owner.username, opts.owner.password, 'owner');
   if (opts.sample) seedRoomsAndMenu(db);
+}
+
+// Columns added after the first release; older databases get them here.
+function migrate(db) {
+  const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  if (!cols.includes('left_at')) db.exec('ALTER TABLE users ADD COLUMN left_at INTEGER');
+  // The single "salary" field of the first release becomes a monthly pay rate.
+  const legacy = db.prepare(`SELECT id, salary, created_at FROM users WHERE salary > 0
+    AND id NOT IN (SELECT user_id FROM pay_rates)`).all();
+  for (const u of legacy) {
+    const d = new Date(u.created_at);
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    db.prepare("INSERT INTO pay_rates (user_id, pay_type, amount, from_day, created_at) VALUES (?, 'monthly', ?, ?, ?)")
+      .run(u.id, u.salary, day, Date.now());
+  }
 }
 
 function open(file, opts) {
@@ -252,6 +306,7 @@ function open(file, opts) {
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
   db.exec(SCHEMA);
+  migrate(db);
   seed(db, opts);
   return db;
 }
