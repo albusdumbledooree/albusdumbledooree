@@ -14,16 +14,16 @@ Views.login = {
   public: true,
   render() {
     return `<div class="login-wrap"><form class="card login" id="login-form">
-      <div class="brand"><img src="/icon.svg" alt=""><div><b>${esc(App.settings.name || 'Choyxona Pro')}</b><span>Boshqaruv tizimi</span></div></div>
+      <div class="brand"><img src="/icon.svg" alt=""><div><b>${esc((App.info && App.info.name) || 'Choyxona Pro')}</b><span>Boshqaruv tizimi</span></div></div>
       <div class="stack">
         <label class="field">Login<input name="username" autocomplete="username" autocapitalize="none" required></label>
         <label class="field">Parol<input name="password" type="password" autocomplete="current-password" required></label>
         <button class="btn primary lg block" type="submit">Kirish</button>
       </div>
-      <div class="demo">Sinov uchun hisoblar:<br>
+      ${App.info && App.info.demo ? `<div class="demo">Sinov uchun hisoblar:<br>
         ${[['ega', 'ega123', 'Ega'], ['admin', 'admin123', 'Admin'], ['kassir', 'kassir123', 'Kassir'], ['jasur', '1234', 'Ofitsant'], ['oshpaz', '1234', 'Oshpaz']]
           .map(([u, p, n]) => `<button type="button" class="btn sm" data-u="${u}" data-p="${p}">${n}</button>`).join('')}
-      </div>
+      </div>` : ''}
     </form></div>`;
   },
   bind(root) {

@@ -235,6 +235,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && Ap
 (async function boot() {
   applyTheme();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+  try { App.info = await GET('/api/info'); } catch { App.info = null; }
   App.token = store('cp_token');
   if (App.token) {
     try { await afterLogin(); } catch { App.token = null; store('cp_token', null); }

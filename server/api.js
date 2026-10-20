@@ -37,6 +37,7 @@ function createApi(db) {
     const out = {};
     for (const r of q('SELECT key, value FROM settings').all()) out[r.key] = r.value;
     out.service_pct = Number(out.service_pct) || 0;
+    out.demo = out.demo || '0';
     out.expense_categories = JSON.parse(out.expense_categories || '[]');
     out.income_categories = JSON.parse(out.income_categories || '[]');
     return out;
@@ -53,11 +54,24 @@ function createApi(db) {
     return row || null;
   }
 
-  function login({ body }) {
+  // Brute-force protection: 8 wrong passwords per login+IP lock it for 10 minutes.
+  const failures = new Map();
+  function login({ body, ip }) {
     const username = str(body.username, 'Login', { required: true });
     const password = str(body.password, 'Parol', { required: true });
+    const key = `${username.toLowerCase()}|${ip}`;
+    const f = failures.get(key);
+    if (f && f.count >= 8 && now() - f.first < 10 * MIN) {
+      throw new HttpError(429, "Juda ko'p urinish. 10 daqiqadan keyin qayta urinib ko'ring");
+    }
     const user = q('SELECT * FROM users WHERE username = ? AND active = 1').get(username);
-    if (!user || !verifyPassword(password, user.pass_hash)) throw new HttpError(401, "Login yoki parol noto'g'ri");
+    if (!user || !verifyPassword(password, user.pass_hash)) {
+      const fresh = !f || now() - f.first >= 10 * MIN;
+      failures.set(key, fresh ? { count: 1, first: now() } : { ...f, count: f.count + 1 });
+      if (failures.size > 10000) failures.clear();
+      throw new HttpError(401, "Login yoki parol noto'g'ri");
+    }
+    failures.delete(key);
     const token = newToken();
     q('INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)').run(token, user.id, now());
     audit(user, 'login');
@@ -67,6 +81,12 @@ function createApi(db) {
   function logout({ token }) {
     q('DELETE FROM sessions WHERE token = ?').run(token);
     return { ok: true };
+  }
+
+  // Public info for the login screen. Demo shortcuts are shown only on a demo database.
+  function info() {
+    const s = settings();
+    return { name: s.name, demo: s.demo === '1' };
   }
 
   function me({ user }) {
@@ -905,6 +925,7 @@ function createApi(db) {
   // ---------- Route table ----------
   const ALL = ROLES;
   const routes = [
+    ['GET', '/api/info', null, info],
     ['POST', '/api/login', null, login],
     ['POST', '/api/logout', ALL, logout],
     ['GET', '/api/me', ALL, me],

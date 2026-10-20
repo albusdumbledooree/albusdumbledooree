@@ -175,6 +175,7 @@ function seed(db) {
   );
   addUser.run('Ega', 'ega', hashPassword(process.env.OWNER_PASSWORD || 'ega123'), 'owner', '', now);
   if (process.env.SEED_DEMO === '0') return;
+  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('demo', '1')").run();
 
   addUser.run('Administrator', 'admin', hashPassword('admin123'), 'admin', '', now);
   addUser.run('Kassir Dilnoza', 'kassir', hashPassword('kassir123'), 'cashier', '', now);

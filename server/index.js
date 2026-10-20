@@ -65,7 +65,8 @@ function createServer({ dbFile = process.env.DB_FILE || path.join(__dirname, '..
       }
       const body = req.method === 'GET' ? {} : await readJson(req);
       const query = Object.fromEntries(url.searchParams);
-      const result = route.handler({ user, params, body, query, token });
+      const ip = (process.env.TRUST_PROXY === '1' && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress;
+      const result = route.handler({ user, params, body, query, token, ip });
       send(res, 200, result === undefined ? null : result);
     } catch (err) {
       if (err instanceof HttpError) return send(res, err.status, { error: err.message });

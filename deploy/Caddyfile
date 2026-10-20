@@ -1,0 +1,8 @@
+# Caddy avtomatik ravishda bepul HTTPS sertifikat oladi (Let's Encrypt).
+# choyxona.uz o'rniga o'z domeningizni yozing: /etc/caddy/Caddyfile
+choyxona.uz {
+	encode gzip
+	reverse_proxy 127.0.0.1:3000 {
+		flush_interval -1
+	}
+}

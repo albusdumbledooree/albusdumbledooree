@@ -22,7 +22,8 @@ Ma'lumotlar `data/choyxona.db` faylida saqlanadi (zaxira nusxa uchun shu faylni 
 | `DB_FILE` | Baza fayli yo'li |
 | `TZ` | Vaqt mintaqasi (standart `Asia/Tashkent`) |
 | `OWNER_PASSWORD` | Birinchi ishga tushishda ega paroli (standart `ega123`) |
-| `SEED_DEMO=0` | Sinov xodimlari, xonalar va menyusiz bo'sh baza |
+| `SEED_DEMO=0` | Sinov xodimlari, xonalar va menyusiz bo'sh baza (kirish sahifasida sinov tugmalari ham chiqmaydi) |
+| `TRUST_PROXY=1` | Caddy/Nginx orqasida ishlaganda mijozning haqiqiy IP manzilini olish |
 
 ### Sinov hisoblari
 
@@ -90,6 +91,43 @@ Ofitsant faqat oshpaz hali qabul qilmagan taomni bekor qila oladi. Barcha bekor 
 - 🖨 80 mm termo-printer uchun chek
 - 🕵️ Amallar tarixi: chegirma, bekor qilish, narx o'zgarishi kim tomonidan qachon qilinganini nazorat qilish
 - 🌙 Qorong'i mavzu, telefon uchun moslashgan dizayn, PWA (bosh ekranga o'rnatish)
+
+## Internetga chiqarish (hamma joydan kirish)
+
+Tavsiya: kichik VPS server (1 CPU, 1 GB RAM, Ubuntu 24.04 — oyiga ~5$) + domen (masalan `choyxona.uz`).
+
+1. Domenning **A yozuvini** server IP manziliga yo'naltiring.
+2. Serverda:
+   ```bash
+   # Node.js 22 va Caddy (HTTPS uchun)
+   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash -
+   sudo apt install -y nodejs caddy git
+   # Dastur
+   sudo useradd -r -m -d /opt/choyxona choyxona
+   sudo -u choyxona git clone -b claude/restaurant-management-system-0i70j3 \
+     https://github.com/albusdumbledooree/albusdumbledooree.git /opt/choyxona
+   # Xizmat (avtomatik ishga tushadi, qulasa qayta yonadi)
+   sudo cp /opt/choyxona/deploy/choyxona.service /etc/systemd/system/
+   sudo systemctl enable --now choyxona
+   # HTTPS: deploy/Caddyfile ichida domeningizni yozing
+   sudo cp /opt/choyxona/deploy/Caddyfile /etc/caddy/Caddyfile
+   sudo systemctl reload caddy
+   ```
+3. `https://domeningiz` ni oching, `ega` / `ega123` bilan kiring va **darhol parolni o'zgartiring** (Sozlamalar).
+   Xizmat `SEED_DEMO=0` bilan ishlaydi — baza bo'sh boshlanadi, sinov hisoblari va parollar ko'rinmaydi.
+   Keyin: Sozlamalar → muassasa nomi, Menyu, Xonalar sozlamasi, Xodimlar.
+4. Kunlik zaxira nusxa (har kecha 03:00, oxirgi 30 kun saqlanadi):
+   ```bash
+   echo '0 3 * * * cd /opt/choyxona && node --no-warnings scripts/backup.js' | sudo -u choyxona crontab -
+   ```
+   Nusxalar `/opt/choyxona/data/backups/` da. Vaqti-vaqti bilan boshqa joyga ham ko'chirib qo'ying.
+5. Yangilash: `cd /opt/choyxona && sudo -u choyxona git pull && sudo systemctl restart choyxona`.
+
+**Faqat choyxona ichida ishlatish** (internetsiz): bitta kompyuterda `SEED_DEMO=0 npm start`, xodimlar shu Wi-Fi orqali
+`http://<kompyuter-IP>:3000` ga kiradi. Bu holda ega uydan hisobotni ko'ra olmaydi va bildirishnomalar (HTTPS talab qiladi) ishlamaydi.
+
+Xavfsizlik: login 8 marta xato kiritilsa 10 daqiqaga bloklanadi; parollar scrypt bilan shifrlangan; ishdan ketgan xodimni
+Xodimlar bo'limida "Faol" belgisini olib tashlab o'chiring — u darhol tizimdan chiqariladi.
 
 ## Texnik tuzilma
 

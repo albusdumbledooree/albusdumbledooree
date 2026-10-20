@@ -1,0 +1,19 @@
+# systemd xizmati: /etc/systemd/system/choyxona.service
+[Unit]
+Description=Choyxona Pro
+After=network.target
+
+[Service]
+Type=simple
+User=choyxona
+WorkingDirectory=/opt/choyxona
+Environment=PORT=3000
+Environment=TZ=Asia/Tashkent
+Environment=TRUST_PROXY=1
+Environment=SEED_DEMO=0
+ExecStart=/usr/bin/node --no-warnings server/index.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

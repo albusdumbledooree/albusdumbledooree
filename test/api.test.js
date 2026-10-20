@@ -116,3 +116,10 @@ test('stop-list and roles', async () => {
   const after = (await call('GET', '/api/menu', waiter)).data.dishes.find((d) => d.id === dish.id);
   assert.equal(after.available, 0);
 });
+
+test('login page info and brute-force lock', async () => {
+  const info = (await call('GET', '/api/info')).data;
+  assert.equal(info.demo, true);
+  for (let i = 0; i < 8; i++) assert.equal((await call('POST', '/api/login', null, { username: 'kassir', password: 'xato' })).status, 401);
+  assert.equal((await call('POST', '/api/login', null, { username: 'kassir', password: 'kassir123' })).status, 429);
+});
