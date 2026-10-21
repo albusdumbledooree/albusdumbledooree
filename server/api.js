@@ -12,7 +12,6 @@ const METHODS = ['cash', 'card', 'transfer'];
 const MIN = 60_000;
 // Sections the platform owner can switch off per choyxona (e.g. for cheaper plans).
 const MODULES = {
-  kitchen: 'Oshxona ekrani',
   stoplist: 'Stop-list',
   reports: 'Hisobotlar va boshqaruv paneli',
   finance: 'Kirim-chiqim va kassa smenasi',
@@ -37,6 +36,8 @@ function routeModule(pattern) {
 // opts.tenant(): the choyxona's platform record (code, name, paid_until).
 function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
   const events = hub;
+  // Shared devices (the staff-list screen) get tokens of their own: "d<choyxona>_…".
+  const devicePrefix = tokenPrefix.replace(/^t/, 'd');
   const q = (sql) => db.prepare(sql);
   const now = () => Date.now();
   const payroll = createPayroll(db, { audit, events: hub, now });
@@ -66,14 +67,39 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     out.service_type = out.service_type === 'per_guest' ? 'per_guest' : 'percent';
     out.service_per_guest = Number(out.service_per_guest) || 0;
     out.demo = out.demo || '0';
+    out.waiter_cancel = out.waiter_cancel === '1';
+    out.has_cancel_code = !!out.cancel_code_hash;
+    delete out.cancel_code_hash;
+    out.auto_lock_minutes = Number(out.auto_lock_minutes) || 0;
     out.expense_categories = JSON.parse(out.expense_categories || '[]');
     out.income_categories = JSON.parse(out.income_categories || '[]');
     return out;
   }
 
-  function publicUser(u) {
-    return { id: u.id, name: u.name, username: u.username, role: u.role, phone: u.phone, salary: u.salary, active: u.active };
+  // What a worker may do with checks. Boss and admin always may; others follow the role default
+  // unless the boss set it per person (perm_print / perm_close: NULL = role default).
+  function perms(u) {
+    if (u.role === 'owner' || u.role === 'admin') return { print: true, close: true };
+    const def = { cashier: [1, 1], waiter: [1, 0], chef: [0, 0] }[u.role] || [0, 0];
+    return { print: (u.perm_print ?? def[0]) === 1, close: (u.perm_close ?? def[1]) === 1 };
   }
+
+  function publicUser(u) {
+    return { id: u.id, name: u.name, username: u.username, role: u.role, phone: u.phone, active: u.active,
+      has_pin: !!u.pin_hash, perm_print: u.perm_print, perm_close: u.perm_close, perms: perms(u) };
+  }
+
+  // Staff PIN: 1–4 digits. Boss and admin may use any password-like code of 4–32 characters.
+  function pinHash(role, pin) {
+    const p = String(pin ?? '').trim();
+    if (role === 'owner' || role === 'admin') {
+      if (p.length < 4 || p.length > 32) throw new HttpError(400, "Boshliq paroli 4–32 belgidan iborat bo'lsin");
+    } else if (!/^\d{1,4}$/.test(p)) {
+      throw new HttpError(400, "PIN 1–4 ta raqamdan iborat bo'lsin");
+    }
+    return hashPassword(p);
+  }
+  const permInput = (v) => (v === null || v === undefined || v === '' ? null : v ? 1 : 0);
 
   // ---------- Auth ----------
   function authenticate(token) {
@@ -85,7 +111,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
 
   // Brute-force protection: 8 wrong passwords per login+IP lock it for 10 minutes.
   const failures = new Map();
-  function login({ body, ip }) {
+  function checkCredentials(body, ip) {
     const username = str(body.username, 'Login', { required: true });
     const password = str(body.password, 'Parol', { required: true });
     const key = `${username.toLowerCase()}|${ip}`;
@@ -101,10 +127,79 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
       throw new HttpError(401, "Login yoki parol noto'g'ri");
     }
     failures.delete(key);
+    return user;
+  }
+
+  function startSession(user, how) {
     const token = tokenPrefix + newToken();
     q('INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)').run(token, user.id, now());
-    audit(user, 'login');
+    audit(user, how);
     return { token, user: publicUser(user) };
+  }
+
+  function login({ body, ip }) {
+    return startSession(checkCredentials(body, ip), 'login');
+  }
+
+  // A tablet/PC is connected once with the boss's (or admin's) login; afterwards staff tap their name and type a PIN.
+  function registerDevice({ body, ip }) {
+    const user = checkCredentials(body, ip);
+    if (!MANAGERS.includes(user.role)) throw new HttpError(403, 'Qurilmani faqat boshliq yoki admin ulay oladi');
+    const token = devicePrefix + newToken();
+    const name = str(body.name, 'Qurilma nomi', { max: 40 }) || 'Qurilma';
+    q('INSERT INTO devices (token, name, created_by, created_at, last_seen) VALUES (?, ?, ?, ?, ?)').run(token, name, user.id, now(), now());
+    audit(user, 'device_add', name);
+    return { device_token: token, name };
+  }
+
+  function authenticateDevice(token) {
+    if (!token || !token.startsWith(devicePrefix)) return null;
+    const d = q('SELECT * FROM devices WHERE token = ?').get(token);
+    if (d && (!d.last_seen || now() - d.last_seen > 10 * MIN)) q('UPDATE devices SET last_seen = ? WHERE id = ?').run(now(), d.id);
+    return d || null;
+  }
+
+  function deviceStaff() {
+    const order = { owner: 0, admin: 1, cashier: 2, waiter: 3, chef: 4 };
+    return q('SELECT * FROM users WHERE active = 1').all()
+      .sort((a, b) => order[a.role] - order[b.role] || a.name.localeCompare(b.name))
+      .map((u) => ({ id: u.id, name: u.name, role: u.role, has_pin: !!u.pin_hash }));
+  }
+
+  // 5 wrong PINs for one worker on one device lock that worker there for 5 minutes.
+  const pinFailures = new Map();
+  function pinLogin({ device, body }) {
+    const id = int(body.user_id, 'Xodim', { min: 1, required: true });
+    const key = `${device.id}|${id}`;
+    const f = pinFailures.get(key);
+    if (f && f.count >= 5 && now() - f.first < 5 * MIN) throw new HttpError(429, "Juda ko'p xato. 5 daqiqadan keyin urinib ko'ring");
+    const user = q('SELECT * FROM users WHERE id = ? AND active = 1').get(id);
+    if (!user) throw new HttpError(404, 'Xodim topilmadi');
+    if (!user.pin_hash) throw new HttpError(400, "PIN o'rnatilmagan. Boshliqqa murojaat qiling");
+    if (!verifyPassword(String(body.pin ?? ''), user.pin_hash)) {
+      pinFailures.set(key, !f || now() - f.first >= 5 * MIN ? { count: 1, first: now() } : { ...f, count: f.count + 1 });
+      throw new HttpError(401, "PIN noto'g'ri");
+    }
+    pinFailures.delete(key);
+    return startSession(user, 'pin_login');
+  }
+
+  function listDevices() {
+    return q('SELECT d.id, d.name, d.created_at, d.last_seen, u.name created_by_name FROM devices d LEFT JOIN users u ON u.id = d.created_by ORDER BY d.id DESC').all();
+  }
+
+  function deleteDevice({ user, params }) {
+    const d = q('SELECT * FROM devices WHERE id = ?').get(params.id);
+    if (!d) throw new HttpError(404, 'Qurilma topilmadi');
+    q('DELETE FROM devices WHERE id = ?').run(d.id);
+    audit(user, 'device_remove', d.name);
+    return { ok: true };
+  }
+
+  function setOwnPin({ user, body }) {
+    q('UPDATE users SET pin_hash = ? WHERE id = ?').run(pinHash(user.role, body.pin), user.id);
+    audit(user, 'pin_change');
+    return { ok: true };
   }
 
   function logout({ token }) {
@@ -117,10 +212,16 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     try { return t && t.disabled_modules ? JSON.parse(t.disabled_modules) : []; } catch { return []; }
   }
   const moduleOn = (m) => !disabledModules().includes(m);
+  // off: dishes are served at once; notify: kitchen sees them but needn't accept; full: accept → ready → waiter.
+  function kitchenMode() {
+    const t = tenant();
+    if (t && ['off', 'notify', 'full'].includes(t.kitchen_mode)) return t.kitchen_mode;
+    return disabledModules().includes('kitchen') ? 'off' : 'full';
+  }
 
   function me({ user }) {
     const t = tenant();
-    return { user: publicUser(user), settings: settings(), modules: MODULES, disabled: disabledModules(),
+    return { user: publicUser(user), settings: settings(), modules: MODULES, disabled: disabledModules(), kitchen_mode: kitchenMode(),
       tenant: t && { code: t.code, name: t.name, paid_until: t.paid_until } };
   }
 
@@ -136,7 +237,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
 
   // ---------- Settings ----------
   function updateSettings({ user, body }) {
-    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'expense_categories', 'income_categories'];
+    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width',
+      'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes'];
     const set = q('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     for (const k of allowed) {
       if (body[k] === undefined) continue;
@@ -145,6 +247,13 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
         v = Number(v);
         if (!(v >= 0 && v <= 50)) throw new HttpError(400, "Xizmat haqi 0–50% oralig'ida bo'lsin");
       }
+      if (k === 'cancel_code') {
+        if (!/^\d{4,8}$/.test(String(v))) throw new HttpError(400, "Bekor qilish kodi 4–8 ta raqam bo'lsin");
+        set.run('cancel_code_hash', hashPassword(String(v)));
+        continue;
+      }
+      if (k === 'waiter_cancel') v = v ? '1' : '0';
+      if (k === 'auto_lock_minutes') v = int(v, 'Avtomatik qulf', { max: 240 });
       if (k === 'service_type' && !['percent', 'per_guest'].includes(v)) throw new HttpError(400, "Xizmat haqi turi noto'g'ri");
       if (k === 'service_per_guest') v = int(v, 'Odam boshiga xizmat haqi', { max: 10_000_000 });
       if (k === 'receipt_width' && !['58', '80'].includes(String(v))) throw new HttpError(400, "Chek kengligi 58 yoki 80 mm bo'lsin");
@@ -154,7 +263,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
       }
       set.run(k, String(v));
     }
-    audit(user, 'settings_update', body);
+    audit(user, 'settings_update', { ...body, cancel_code: body.cancel_code ? '***' : undefined });
     events.publish('settings');
     return settings();
   }
@@ -177,12 +286,21 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     if (!ROLES.includes(role)) throw new HttpError(400, "Lavozim noto'g'ri");
     if (!canManageRole(user, role)) throw new HttpError(403, `Sizda ${ROLE_NAMES[role]} tayinlash huquqi yo'q`);
     const name = str(body.name, 'Ism', { required: true, max: 80 });
-    const username = str(body.username, 'Login', { required: true, max: 40 });
-    const password = str(body.password, 'Parol', { required: true });
+    // Login and password are only needed for a worker's own phone; on shared devices the PIN is enough.
+    let username = str(body.username, 'Login', { max: 40 });
+    if (!username) {
+      const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 20) || 'xodim';
+      username = base;
+      for (let n = 2; q('SELECT 1 FROM users WHERE username = ?').get(username); n++) username = `${base}${n}`;
+    }
+    const password = str(body.password, 'Parol') || newToken();
     if (password.length < 4) throw new HttpError(400, "Parol kamida 4 ta belgi bo'lsin");
     if (q('SELECT 1 FROM users WHERE username = ?').get(username)) throw new HttpError(409, 'Bu login band');
-    const id = q('INSERT INTO users (name, username, pass_hash, role, phone, salary, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-      name, username, hashPassword(password), role, str(body.phone, 'Telefon', { max: 30 }), int(body.salary, 'Maosh'), now()
+    const pin = body.pin ? pinHash(role, body.pin) : null;
+    const id = q(`INSERT INTO users (name, username, pass_hash, role, phone, salary, pin_hash, perm_print, perm_close, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      name, username, hashPassword(password), role, str(body.phone, 'Telefon', { max: 30 }), int(body.salary, 'Maosh'), pin,
+      permInput(body.perm_print), permInput(body.perm_close), now()
     ).lastInsertRowid;
     audit(user, 'user_create', `${name} (${ROLE_NAMES[role]})`);
     return publicUser(q('SELECT * FROM users WHERE id = ?').get(id));
@@ -219,11 +337,14 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
       if (pw.length < 4) throw new HttpError(400, "Parol kamida 4 ta belgi bo'lsin");
       q('UPDATE users SET pass_hash = ? WHERE id = ?').run(hashPassword(pw), target.id);
     }
+    if (body.pin) q('UPDATE users SET pin_hash = ? WHERE id = ?').run(pinHash(role, body.pin), target.id);
+    if (body.perm_print !== undefined) q('UPDATE users SET perm_print = ? WHERE id = ?').run(permInput(body.perm_print), target.id);
+    if (body.perm_close !== undefined) q('UPDATE users SET perm_close = ? WHERE id = ?').run(permInput(body.perm_close), target.id);
     if (!active || body.password || role !== target.role) {
       q('DELETE FROM sessions WHERE user_id = ?').run(target.id);
       events.disconnectUser(target.id);
     }
-    audit(user, 'user_update', `${target.name}: ${JSON.stringify({ ...body, password: body.password ? '***' : undefined })}`);
+    audit(user, 'user_update', `${target.name}: ${JSON.stringify({ ...body, password: body.password ? '***' : undefined, pin: body.pin ? '***' : undefined })}`);
     return publicUser(q('SELECT * FROM users WHERE id = ?').get(target.id));
   }
 
@@ -233,7 +354,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
   }
 
   function listRooms({ user, query }) {
-    let rooms = q('SELECT * FROM rooms WHERE active = 1 OR ? = 1 ORDER BY CAST(number AS INTEGER), number').all(query.all ? 1 : 0);
+    let rooms = q("SELECT * FROM rooms WHERE type != 'soboy' AND (active = 1 OR ? = 1) ORDER BY CAST(number AS INTEGER), number").all(query.all ? 1 : 0);
     if (user.role === 'waiter' && !query.all) {
       const mine = new Set(waiterRoomIds(user.id));
       rooms = rooms.filter((r) => mine.has(r.id));
@@ -298,7 +419,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
   }
 
   function updateRoom({ user, params, body }) {
-    const prev = q('SELECT * FROM rooms WHERE id = ?').get(params.id);
+    const prev = q("SELECT * FROM rooms WHERE id = ? AND type != 'soboy'").get(params.id);
     if (!prev) throw new HttpError(404, 'Xona topilmadi');
     const f = roomFields(body, prev);
     const active = body.active === undefined ? prev.active : body.active ? 1 : 0;
@@ -422,6 +543,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
   function assertOrderAccess(user, order) {
     if (user.role !== 'waiter') return;
     if (order.waiter_id === user.id) return;
+    if (order.takeaway) throw new HttpError(403, 'Bu buyurtma sizga tegishli emas');
     if (waiterRoomIds(user.id).includes(order.room_id)) return;
     throw new HttpError(403, 'Bu buyurtma sizga tegishli emas');
   }
@@ -432,9 +554,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     const subtotal = items.filter((i) => i.status !== 'cancelled').reduce((s, i) => s + i.price * i.qty, 0);
     const open = order.status === 'open';
     const st = open ? settings() : null;
-    const service_type = overrides.service_type ?? (open ? st.service_type : order.service_type || 'percent');
-    const service_pct = overrides.service_rate
-      ?? (open ? (service_type === 'per_guest' ? st.service_per_guest : st.service_pct) : order.service_pct);
+    // Takeaway checks carry no service charge.
+    const service_type = order.takeaway ? 'percent' : open ? st.service_type : order.service_type || 'percent';
+    const service_pct = order.takeaway ? 0
+      : open ? (service_type === 'per_guest' ? st.service_per_guest : st.service_pct) : order.service_pct;
     const service_amount = service_type === 'per_guest'
       ? Math.round(service_pct * order.guests)
       : Math.round((subtotal * service_pct) / 100);
@@ -476,6 +599,27 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     });
   }
 
+  // Name shown to the kitchen and on lists: "3 · Banket 3" or "Olib ketish #12 · Aziz".
+  function placeName(o, room) {
+    return o.takeaway ? `Olib ketish #${o.id}${o.label ? ` · ${o.label}` : ''}` : room.name;
+  }
+
+  function listTakeaway({ user }) {
+    const rows = q(`SELECT o.*, w.name waiter_name FROM orders o JOIN users w ON w.id = o.waiter_id
+      WHERE o.status = 'open' AND o.takeaway = 1 ${user.role === 'waiter' ? 'AND o.waiter_id = ?' : ''} ORDER BY o.opened_at`)
+      .all(...(user.role === 'waiter' ? [user.id] : []));
+    const items = q("SELECT i.* FROM order_items i JOIN orders o ON o.id = i.order_id WHERE o.status = 'open' AND o.takeaway = 1").all();
+    return {
+      room_id: q("SELECT id FROM rooms WHERE type = 'soboy'").get().id,
+      orders: rows.map((o) => {
+        const its = items.filter((i) => i.order_id === o.id);
+        const st = { new: 0, cooking: 0, ready: 0 };
+        for (const i of its) if (st[i.status] !== undefined) st[i.status] += 1;
+        return { ...o, ...totals(o, its), items: st };
+      }),
+    };
+  }
+
   function getOrder({ user, params }) {
     const o = orderDetails(params.id);
     assertOrderAccess(user, o);
@@ -486,6 +630,16 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     const roomId = int(body.room_id, 'Xona', { min: 1, required: true });
     const room = q('SELECT * FROM rooms WHERE id = ? AND active = 1').get(roomId);
     if (!room) throw new HttpError(404, 'Xona topilmadi');
+    if (room.type === 'soboy') {
+      // Takeaway: every customer gets a new check, written by any waiter or cashier.
+      const id = q("INSERT INTO orders (room_id, waiter_id, guests, note, opened_at, takeaway, label) VALUES (?, ?, ?, ?, ?, 1, ?)").run(
+        roomId, user.id, int(body.guests, 'Mehmonlar', { min: 1, max: 1000, def: 1 }), str(body.note, 'Izoh', { max: 300 }), now(),
+        str(body.label, 'Mijoz', { max: 60 })
+      ).lastInsertRowid;
+      audit(user, 'order_open', `#${id} Olib ketish`);
+      events.publish('rooms');
+      return orderDetails(id);
+    }
     if (user.role === 'waiter' && !waiterRoomIds(user.id).includes(roomId)) throw new HttpError(403, 'Bu xona sizga biriktirilmagan');
     const existing = q("SELECT id FROM orders WHERE room_id = ? AND status = 'open'").get(roomId);
     if (existing) return orderDetails(existing.id);
@@ -506,9 +660,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     const o = getOrderRow(params.id);
     assertOrderAccess(user, o);
     if (o.status !== 'open') throw new HttpError(400, 'Buyurtma yopilgan');
-    q('UPDATE orders SET guests = ?, note = ? WHERE id = ?').run(
+    q('UPDATE orders SET guests = ?, note = ?, label = ? WHERE id = ?').run(
       body.guests !== undefined ? int(body.guests, 'Mehmonlar', { min: 1, max: 1000 }) : o.guests,
-      body.note !== undefined ? str(body.note, 'Izoh', { max: 300 }) : o.note, o.id
+      body.note !== undefined ? str(body.note, 'Izoh', { max: 300 }) : o.note,
+      body.label !== undefined ? str(body.label, 'Mijoz', { max: 60 }) : o.label, o.id
     );
     events.publish('rooms');
     return orderDetails(o.id);
@@ -520,6 +675,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     if (o.status !== 'open') throw new HttpError(400, 'Buyurtma yopilgan');
     if (!Array.isArray(body.items) || !body.items.length) throw new HttpError(400, "Taom tanlanmagan");
     const load = kitchenLoad();
+    const mode = kitchenMode();
     const t = now();
     const added = tx(() => {
       const out = [];
@@ -534,11 +690,13 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
           q('UPDATE dishes SET stock = ?, available = ? WHERE id = ?').run(left, left > 0 ? 1 : 0, d.id);
           if (left === 0) events.publish('stoplist', { name: d.name, by: 'Tizim' });
         }
-        const kitchen = d.needs_kitchen === 1 && moduleOn('kitchen');
-        const id = q(`INSERT INTO order_items (order_id, dish_id, name, price, cost, qty, note, status, needs_kitchen, prep_minutes, created_at, eta_at, served_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-          o.id, d.id, d.name, d.price, d.cost, qty, str(it.note, 'Izoh', { max: 200 }), kitchen ? 'new' : 'served', kitchen ? 1 : 0,
-          d.prep_minutes, t, kitchen ? t + (d.prep_minutes + load.extra_minutes) * MIN : null, kitchen ? null : t
+        const kitchen = d.needs_kitchen === 1 && mode !== 'off';
+        const status = !kitchen ? 'served' : mode === 'notify' ? 'cooking' : 'new';
+        const id = q(`INSERT INTO order_items (order_id, dish_id, name, price, cost, qty, note, status, needs_kitchen, prep_minutes, created_at, eta_at, served_at, accepted_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+          o.id, d.id, d.name, d.price, d.cost, qty, str(it.note, 'Izoh', { max: 200 }), status, kitchen ? 1 : 0,
+          d.prep_minutes, t, kitchen ? t + (d.prep_minutes + (mode === 'full' ? load.extra_minutes : 0)) * MIN : null,
+          kitchen ? null : t, status === 'cooking' ? t : null
         ).lastInsertRowid;
         out.push({ id, name: d.name, qty, kitchen, note: str(it.note, 'Izoh', { max: 200 }) });
       }
@@ -546,6 +704,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
       return out;
     });
     const room = q('SELECT name FROM rooms WHERE id = ?').get(o.room_id);
+    room.name = placeName(o, room);
     const kitchenItems = added.filter((a) => a.kitchen);
     audit(user, 'items_add', `#${o.id}: ${added.map((a) => `${a.name}×${a.qty}`).join(', ')}`);
     if (kitchenItems.length) {
@@ -558,9 +717,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
   }
 
   function getItem(id) {
-    const it = q(`SELECT i.*, o.room_id, o.waiter_id, o.status order_status, r.name room_name, r.number room_number
+    const it = q(`SELECT i.*, o.room_id, o.waiter_id, o.status order_status, o.takeaway, o.label, r.name room_name, r.number room_number
       FROM order_items i JOIN orders o ON o.id = i.order_id JOIN rooms r ON r.id = o.room_id WHERE i.id = ?`).get(id);
     if (!it) throw new HttpError(404, 'Taom topilmadi');
+    if (it.takeaway) it.room_name = placeName({ id: it.order_id, takeaway: 1, label: it.label }, null);
     return it;
   }
 
@@ -607,9 +767,19 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     if (it.order_status !== 'open') throw new HttpError(400, 'Buyurtma yopilgan');
     if (it.status === 'cancelled') throw new HttpError(409, 'Allaqachon bekor qilingan');
     if (user.role === 'waiter') {
-      assertOrderAccess(user, { waiter_id: it.waiter_id, room_id: it.room_id });
-      if (it.status !== 'new' && it.needs_kitchen) throw new HttpError(403, "Oshpaz qabul qilgan taomni faqat kassir yoki admin bekor qiladi");
-      if (!it.needs_kitchen && now() - it.created_at > 5 * MIN) throw new HttpError(403, "5 daqiqadan keyin faqat kassir yoki admin bekor qiladi");
+      // A sent dish is cancelled only with the boss's permission and cancel code.
+      assertOrderAccess(user, { waiter_id: it.waiter_id, room_id: it.room_id, takeaway: it.takeaway });
+      const codeHash = (q("SELECT value FROM settings WHERE key = 'cancel_code_hash'").get() || {}).value;
+      if (!settings().waiter_cancel || !codeHash) throw new HttpError(403, "Bekor qilish uchun kassir yoki boshliqqa murojaat qiling");
+      const key = `cancel|${user.id}`;
+      const f = pinFailures.get(key);
+      if (f && f.count >= 5 && now() - f.first < 5 * MIN) throw new HttpError(429, "Juda ko'p xato. 5 daqiqadan keyin urinib ko'ring");
+      if (!verifyPassword(String(body.code ?? ''), codeHash)) {
+        pinFailures.set(key, !f || now() - f.first >= 5 * MIN ? { count: 1, first: now() } : { ...f, count: f.count + 1 });
+        throw new HttpError(403, "Bekor qilish kodi noto'g'ri");
+      }
+      pinFailures.delete(key);
+      if (!str(body.reason, 'Sabab', { max: 200 })) throw new HttpError(400, 'Bekor qilish sababini yozing');
     } else if (user.role === 'chef') {
       if (!['new', 'cooking'].includes(it.status)) throw new HttpError(403, "Bu taomni bekor qila olmaysiz");
     }
@@ -634,30 +804,25 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     if (o.status !== 'open') throw new HttpError(400, 'Buyurtma yopilgan');
     q('UPDATE orders SET bill_requested = 1 WHERE id = ?').run(o.id);
     const room = q('SELECT name FROM rooms WHERE id = ?').get(o.room_id);
-    events.publish('bill_requested', { order_id: o.id, room: room.name }, { roles: MONEY });
+    events.publish('bill_requested', { order_id: o.id, room: placeName(o, room) }, { roles: MONEY });
     events.publish('rooms');
     return orderDetails(o.id);
   }
 
   function closeOrder({ user, params, body }) {
     const o = getOrderRow(params.id);
+    if (!perms(user).close) throw new HttpError(403, "Chekni yopish huquqingiz yo'q");
+    assertOrderAccess(user, o);
     if (o.status !== 'open') throw new HttpError(400, 'Buyurtma allaqachon yopilgan');
     const items = q('SELECT * FROM order_items WHERE order_id = ?').all(o.id);
-    const unfinished = items.filter((i) => ['new', 'cooking'].includes(i.status));
+    const unfinished = kitchenMode() === 'full' ? items.filter((i) => ['new', 'cooking'].includes(i.status)) : [];
     if (unfinished.length) throw new HttpError(409, `Hali tayyor bo'lmagan taomlar bor: ${unfinished.map((i) => i.name).join(', ')}`);
     const live = items.filter((i) => i.status !== 'cancelled');
     if (!live.length) throw new HttpError(400, "Chekda taom yo'q. Bo'sh buyurtmani bekor qiling");
-    const st = settings();
-    const service_type = body.service_type !== undefined ? str(body.service_type, 'Xizmat haqi turi') : st.service_type;
-    if (!['percent', 'per_guest'].includes(service_type)) throw new HttpError(400, "Xizmat haqi turi noto'g'ri");
-    let rate = service_type === 'per_guest' ? st.service_per_guest : st.service_pct;
-    if (body.service_rate !== undefined) rate = Number(body.service_rate);
-    else if (body.service_pct !== undefined && service_type === 'percent') rate = Number(body.service_pct);
-    const maxRate = service_type === 'percent' ? 50 : 10_000_000;
-    if (!(rate >= 0 && rate <= maxRate)) throw new HttpError(400, "Xizmat haqi noto'g'ri");
+    // The service charge always comes from the boss's settings; it cannot be changed per check.
     const discount = int(body.discount, 'Chegirma');
     if (discount && !['owner', 'admin', 'cashier'].includes(user.role)) throw new HttpError(403, "Chegirma berish huquqi yo'q");
-    const t = totals(o, items, { service_type, service_rate: rate, discount });
+    const t = totals(o, items, { discount });
     const paid = { cash: int(body.paid_cash, 'Naqd'), card: int(body.paid_card, 'Karta'), transfer: int(body.paid_transfer, "O'tkazma") };
     const sumPaid = paid.cash + paid.card + paid.transfer;
     if (sumPaid < t.total) throw new HttpError(400, `To'lov yetarli emas: ${t.total - sumPaid} kam`);
@@ -667,7 +832,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     paid.cash -= change;
     const ts = now();
     tx(() => {
-      q("UPDATE order_items SET status = 'served', served_at = ? WHERE order_id = ? AND status = 'ready'").run(ts, o.id);
+      q("UPDATE order_items SET status = 'served', served_at = ? WHERE order_id = ? AND status IN ('new', 'cooking', 'ready')").run(ts, o.id);
       q(`UPDATE orders SET status = 'closed', closed_at = ?, cashier_id = ?, subtotal = ?, service_type = ?, service_pct = ?, service_amount = ?,
         discount = ?, total = ?, paid_cash = ?, paid_card = ?, paid_transfer = ?, bill_requested = 0 WHERE id = ?`).run(
         ts, user.id, t.subtotal, t.service_type, t.service_pct, t.service_amount, t.discount, t.total, paid.cash, paid.card, paid.transfer, o.id
@@ -679,6 +844,16 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     events.publish('rooms');
     events.publish('finance');
     return { ...orderDetails(o.id), change };
+  }
+
+  // Printing a bill is recorded, so the boss sees how many times each check was printed.
+  function printOrder({ user, params }) {
+    const o = getOrderRow(params.id);
+    if (!perms(user).print) throw new HttpError(403, "Chek chiqarish huquqingiz yo'q");
+    assertOrderAccess(user, o);
+    q('UPDATE orders SET print_count = print_count + 1 WHERE id = ?').run(o.id);
+    audit(user, 'check_print', `#${o.id} (${o.print_count + 1}-marta)`);
+    return orderDetails(o.id);
   }
 
   function cancelOrder({ user, params, body }) {
@@ -706,10 +881,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     const o = getOrderRow(params.id);
     if (o.status !== 'open') throw new HttpError(400, 'Buyurtma yopilgan');
     const roomId = int(body.room_id, 'Xona', { min: 1, required: true });
-    const room = q('SELECT * FROM rooms WHERE id = ? AND active = 1').get(roomId);
+    const room = q("SELECT * FROM rooms WHERE id = ? AND active = 1 AND type != 'soboy'").get(roomId);
     if (!room) throw new HttpError(404, 'Xona topilmadi');
     if (q("SELECT 1 FROM orders WHERE room_id = ? AND status = 'open'").get(roomId)) throw new HttpError(409, `${room.name} band`);
-    q('UPDATE orders SET room_id = ? WHERE id = ?').run(roomId, o.id);
+    q('UPDATE orders SET room_id = ?, takeaway = 0 WHERE id = ?').run(roomId, o.id);
     audit(user, 'order_transfer', `#${o.id} → ${room.name}`);
     events.publish('rooms');
     events.publish('kitchen');
@@ -725,8 +900,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     if (query.to) { where += ' AND o.closed_at < ?'; params.push(Number(query.to)); }
     const search = str(query.q, 'Qidiruv', { max: 60 });
     if (search) {
-      where += ' AND (CAST(o.id AS TEXT) = ? OR r.name LIKE ? OR r.number = ? OR w.name LIKE ?)';
-      params.push(search.replace(/^#/, ''), `%${search}%`, search, `%${search}%`);
+      where += ' AND (CAST(o.id AS TEXT) = ? OR r.name LIKE ? OR r.number = ? OR w.name LIKE ? OR o.label LIKE ?)';
+      params.push(search.replace(/^#/, ''), `%${search}%`, search, `%${search}%`, `%${search}%`);
     }
     return { where, params };
   }
@@ -1033,6 +1208,14 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
   const ALL = ROLES;
   const routes = [
     ['POST', '/api/login', null, login],
+    ['POST', '/api/device/register', null, registerDevice],
+    ['GET', '/api/device/staff', 'device', deviceStaff],
+    ['POST', '/api/device/pin', 'device', pinLogin],
+    ['GET', '/api/devices', MANAGERS, listDevices],
+    ['DELETE', '/api/devices/:id', MANAGERS, deleteDevice],
+    ['PUT', '/api/me/pin', ALL, setOwnPin],
+    ['GET', '/api/takeaway', ['owner', 'admin', 'cashier', 'waiter'], listTakeaway],
+    ['POST', '/api/orders/:id/print', ['owner', 'admin', 'cashier', 'waiter'], printOrder],
     ['POST', '/api/logout', ALL, logout],
     ['GET', '/api/me', ALL, me],
     ['PUT', '/api/me/password', ALL, changeOwnPassword],
@@ -1057,7 +1240,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     ['PUT', '/api/orders/:id', ['owner', 'admin', 'cashier', 'waiter'], updateOrder],
     ['POST', '/api/orders/:id/items', ['owner', 'admin', 'cashier', 'waiter'], addItems],
     ['POST', '/api/orders/:id/request-bill', ['owner', 'admin', 'waiter'], requestBill],
-    ['POST', '/api/orders/:id/close', MONEY, closeOrder],
+    ['POST', '/api/orders/:id/close', ['owner', 'admin', 'cashier', 'waiter'], closeOrder],
     ['POST', '/api/orders/:id/cancel', ['owner', 'admin', 'waiter'], cancelOrder],
     ['POST', '/api/orders/:id/transfer', MONEY, transferOrder],
     ['POST', '/api/items/:id/accept', KITCHEN, acceptItem],
@@ -1102,7 +1285,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
       if (!m) continue;
       const params = {};
       r.keys.forEach((k, i) => { params[k] = Number(m[i + 1]); });
-      if (r.module && !moduleOn(r.module)) {
+      if (r.module === 'kitchen') {
+        if (kitchenMode() === 'off') throw new HttpError(403, `"Oshxona ekrani" bo'limi sizning paketingizda yoqilmagan`);
+      } else if (r.module && !moduleOn(r.module)) {
         throw new HttpError(403, `"${MODULES[r.module]}" bo'limi sizning paketingizda yoqilmagan`);
       }
       return { route: r, params };
@@ -1110,7 +1295,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     return null;
   }
 
-  return { match, authenticate, settings, ROLES };
+  return { match, authenticate, authenticateDevice, settings, ROLES };
 }
 
 module.exports = { createApi, MODULES };

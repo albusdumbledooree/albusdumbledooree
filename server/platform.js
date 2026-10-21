@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   monthly_fee INTEGER NOT NULL DEFAULT 0,
   notes TEXT DEFAULT '',
   disabled_modules TEXT NOT NULL DEFAULT '[]',
+  kitchen_mode TEXT NOT NULL DEFAULT 'full',
   created_at INTEGER NOT NULL
 );
 `;
@@ -51,8 +52,15 @@ function createPlatform(dataDir) {
   const pdb = new DatabaseSync(path.join(dataDir, 'platform.db'));
   pdb.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
   pdb.exec(SCHEMA);
-  if (!pdb.prepare('PRAGMA table_info(tenants)').all().some((c) => c.name === 'disabled_modules')) {
-    pdb.exec("ALTER TABLE tenants ADD COLUMN disabled_modules TEXT NOT NULL DEFAULT '[]'");
+  const tcols = pdb.prepare('PRAGMA table_info(tenants)').all().map((c) => c.name);
+  if (!tcols.includes('disabled_modules')) pdb.exec("ALTER TABLE tenants ADD COLUMN disabled_modules TEXT NOT NULL DEFAULT '[]'");
+  if (!tcols.includes('kitchen_mode')) {
+    // The old "kitchen screen" on/off switch becomes the kitchen mode.
+    pdb.exec("ALTER TABLE tenants ADD COLUMN kitchen_mode TEXT NOT NULL DEFAULT 'full'");
+    for (const t of pdb.prepare("SELECT id, disabled_modules FROM tenants WHERE disabled_modules LIKE '%kitchen%'").all()) {
+      const rest = JSON.parse(t.disabled_modules).filter((m) => m !== 'kitchen');
+      pdb.prepare("UPDATE tenants SET kitchen_mode = 'off', disabled_modules = ? WHERE id = ?").run(JSON.stringify(rest), t.id);
+    }
   }
   const q = (sql) => pdb.prepare(sql);
   const now = () => Date.now();
@@ -103,7 +111,7 @@ function createPlatform(dataDir) {
   }
 
   function byToken(token) {
-    const m = /^t(\d+)_/.exec(token || '');
+    const m = /^[td](\d+)_/.exec(token || '');
     return m ? context(Number(m[1])) : null;
   }
 
@@ -134,12 +142,6 @@ function createPlatform(dataDir) {
 
   function publicAdmin(a) {
     return { id: a.id, name: a.name, username: a.username, default_password: !!a.default_password };
-  }
-
-  // True when these are the site owner's own credentials (typed into a choyxona login by mistake).
-  function isAdminLogin(username, password) {
-    const a = q('SELECT * FROM admins WHERE username = ?').get(String(username || '').trim());
-    return !!a && verifyPassword(String(password || ''), a.pass_hash);
   }
 
   function authenticate(token) {
@@ -185,6 +187,11 @@ function createPlatform(dataDir) {
     return JSON.stringify([...new Set(v)]);
   }
 
+  function kitchenModeInput(v) {
+    if (!['off', 'notify', 'full'].includes(v)) throw new HttpError(400, "Oshxona rejimi noto'g'ri");
+    return v;
+  }
+
   function listTenants() {
     return q('SELECT * FROM tenants ORDER BY id DESC').all().map((t) => ({ ...t, disabled_modules: parseModules(t), ...stats(t) }));
   }
@@ -204,11 +211,12 @@ function createPlatform(dataDir) {
     if (fs.existsSync(path.join(dataDir, file))) throw new HttpError(409, 'Bu kod uchun fayl allaqachon bor');
     open(path.join(dataDir, file), { name, owner, sample: !!body.sample }).close();
     const disabled = body.disabled_modules !== undefined ? modulesInput(body.disabled_modules) : '[]';
-    const id = q(`INSERT INTO tenants (code, name, contact_name, phone, file, paid_until, monthly_fee, notes, created_at, disabled_modules)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    const kitchenMode = body.kitchen_mode !== undefined ? kitchenModeInput(body.kitchen_mode) : 'full';
+    const id = q(`INSERT INTO tenants (code, name, contact_name, phone, file, paid_until, monthly_fee, notes, created_at, disabled_modules, kitchen_mode)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       code, name, owner.name, str(body.phone, 'Telefon', { max: 30 }), file,
       body.paid_until ? int(body.paid_until, "To'lov muddati", { min: 1, max: 8.64e15 }) : null,
-      int(body.monthly_fee, 'Oylik narx'), str(body.notes, 'Izoh', { max: 500 }), now(), disabled
+      int(body.monthly_fee, 'Oylik narx'), str(body.notes, 'Izoh', { max: 500 }), now(), disabled, kitchenMode
     ).lastInsertRowid;
     return tenantRow(id);
   }
@@ -218,7 +226,7 @@ function createPlatform(dataDir) {
     if (!t) throw new HttpError(404, 'Choyxona topilmadi');
     const status = body.status !== undefined ? str(body.status, 'Holat') : t.status;
     if (!['active', 'blocked'].includes(status)) throw new HttpError(400, "Holat noto'g'ri");
-    q('UPDATE tenants SET name = ?, contact_name = ?, phone = ?, status = ?, paid_until = ?, monthly_fee = ?, notes = ?, disabled_modules = ? WHERE id = ?').run(
+    q('UPDATE tenants SET name = ?, contact_name = ?, phone = ?, status = ?, paid_until = ?, monthly_fee = ?, notes = ?, disabled_modules = ?, kitchen_mode = ? WHERE id = ?').run(
       body.name !== undefined ? str(body.name, 'Nomi', { required: true, max: 80 }) : t.name,
       body.contact_name !== undefined ? str(body.contact_name, 'Boshliq', { max: 80 }) : t.contact_name,
       body.phone !== undefined ? str(body.phone, 'Telefon', { max: 30 }) : t.phone,
@@ -227,6 +235,7 @@ function createPlatform(dataDir) {
       body.monthly_fee !== undefined ? int(body.monthly_fee, 'Oylik narx') : t.monthly_fee,
       body.notes !== undefined ? str(body.notes, 'Izoh', { max: 500 }) : t.notes,
       body.disabled_modules !== undefined ? modulesInput(body.disabled_modules) : t.disabled_modules,
+      body.kitchen_mode !== undefined ? kitchenModeInput(body.kitchen_mode) : t.kitchen_mode,
       t.id
     );
     refresh(t.id);
@@ -292,7 +301,7 @@ function createPlatform(dataDir) {
     pdb.close();
   }
 
-  return { handle, byCode, byToken, assertActive, isAdminLogin, close };
+  return { handle, byCode, byToken, assertActive, close };
 }
 
 module.exports = { createPlatform };

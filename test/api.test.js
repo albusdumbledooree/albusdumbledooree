@@ -183,12 +183,10 @@ test('platform: site owner creates a choyxona, its boss adds staff, data stays s
   await login('akmal', 'yangi2026', 'navruz');
 });
 
-test('site owner credentials on the staff login point to /platform', async () => {
+test('the staff login never reveals the platform', async () => {
   const r = await call('POST', '/api/login', null, { code: 'demo', username: 'superadmin', password: 'super123' });
-  assert.equal(r.status, 409);
-  assert.equal(r.data.redirect, '/platform');
-  const wrong = await call('POST', '/api/login', null, { code: 'demo', username: 'superadmin', password: 'xato' });
-  assert.equal(wrong.status, 401);
+  assert.equal(r.status, 401);
+  assert.equal(r.data.redirect, undefined);
 });
 
 test('payroll: daily pay with attendance, % of sales, bonus, fine, payment', async () => {
@@ -258,10 +256,10 @@ test('service charge per guest, checks history with export', async () => {
   assert.equal(withItems.service_amount, 50000, '10 guests x 5 000');
   assert.equal(withItems.total, 10000 + 50000);
 
-  // The cashier may switch to percent for this one check.
-  const closed = (await call('POST', `/api/orders/${o.id}/close`, boss, { service_type: 'percent', service_rate: 10, paid_cash: 11000 })).data;
-  assert.equal(closed.service_amount, 1000);
-  assert.equal(closed.total, 11000);
+  // The service charge comes only from settings: an attempt to change it on one check is ignored.
+  const closed = (await call('POST', `/api/orders/${o.id}/close`, boss, { service_type: 'percent', service_rate: 10, paid_cash: 60000 })).data;
+  assert.equal(closed.service_amount, 50000);
+  assert.equal(closed.total, 60000);
   await call('PUT', '/api/settings', boss, { service_type: 'percent' });
 
   const s = new Date(); s.setHours(0, 0, 0, 0);
@@ -286,9 +284,12 @@ test('platform owner switches sections off per choyxona', async () => {
   const demo = (await call('GET', '/api/platform/tenants', admin)).data.find((t) => t.code === 'demo');
   const boss = await login('ega', 'ega123');
   assert.equal((await call('PUT', `/api/platform/tenants/${demo.id}`, admin, { disabled_modules: ['nimadir'] })).status, 400);
-  await call('PUT', `/api/platform/tenants/${demo.id}`, admin, { disabled_modules: ['payroll', 'kitchen', 'history'] });
+  await call('PUT', `/api/platform/tenants/${demo.id}`, admin, { disabled_modules: ['payroll', 'history'], kitchen_mode: 'off' });
 
-  assert.deepEqual((await call('GET', '/api/me', boss)).data.disabled.sort(), ['history', 'kitchen', 'payroll']);
+  const me = (await call('GET', '/api/me', boss)).data;
+  assert.deepEqual(me.disabled.sort(), ['history', 'payroll']);
+  assert.equal(me.kitchen_mode, 'off');
+  assert.equal((await call('GET', '/api/kitchen', boss)).status, 403);
   const r = await call('GET', '/api/payroll', boss);
   assert.equal(r.status, 403);
   assert.match(r.data.error, /Ish haqi/);
@@ -302,6 +303,119 @@ test('platform owner switches sections off per choyxona', async () => {
   const after = (await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: shorva.id, qty: 1 }] })).data;
   assert.equal(after.items[0].status, 'served');
 
-  await call('PUT', `/api/platform/tenants/${demo.id}`, admin, { disabled_modules: [] });
+  await call('PUT', `/api/platform/tenants/${demo.id}`, admin, { disabled_modules: [], kitchen_mode: 'full' });
   assert.equal((await call('GET', '/api/payroll', boss)).status, 200);
+});
+
+async function freeRoom(token) {
+  return (await call('GET', '/api/rooms', token)).data.find((r) => !r.order);
+}
+async function dish(token, name) {
+  return (await call('GET', '/api/menu', token)).data.dishes.find((d) => d.name.startsWith(name));
+}
+
+test('shared device: boss connects it once, staff log in with a PIN', async () => {
+  assert.equal((await call('POST', '/api/device/register', null, { code: 'demo', username: 'jasur', password: '1234' })).status, 403, 'waiters cannot connect devices');
+  const reg = await call('POST', '/api/device/register', null, { code: 'demo', username: 'ega', password: 'ega123', name: 'Kassa' });
+  assert.equal(reg.status, 200);
+  const dev = reg.data.device_token;
+  assert.match(dev, /^d\d+_/);
+
+  const staff = (await call('GET', '/api/device/staff', dev)).data;
+  const jasur = staff.find((u) => u.name === 'Ofitsant Jasur');
+  assert.ok(jasur.has_pin);
+  assert.equal(staff[0].role, 'owner', 'boss first');
+  assert.equal((await call('GET', '/api/device/staff', null)).status, 401);
+  assert.equal((await call('GET', '/api/rooms', dev)).status, 401, 'a device token is not a person');
+
+  assert.equal((await call('POST', '/api/device/pin', dev, { user_id: jasur.id, pin: '9999' })).status, 401);
+  const ok = await call('POST', '/api/device/pin', dev, { user_id: jasur.id, pin: '1111' });
+  assert.equal(ok.status, 200);
+  assert.equal((await call('GET', '/api/me', ok.data.token)).data.user.name, 'Ofitsant Jasur');
+
+  // Lock after 5 wrong PINs on this device.
+  const bobur = staff.find((u) => u.name === 'Ofitsant Bobur');
+  for (let i = 0; i < 5; i++) await call('POST', '/api/device/pin', dev, { user_id: bobur.id, pin: '0000' });
+  assert.equal((await call('POST', '/api/device/pin', dev, { user_id: bobur.id, pin: '2222' })).status, 429);
+
+  // Staff PIN: 1–4 digits; the boss may use a longer code.
+  const boss = await login('ega', 'ega123');
+  const w = (await call('POST', '/api/users', boss, { name: 'Yangi Ofitsant', role: 'waiter', pin: '12345' }));
+  assert.equal(w.status, 400);
+  const w2 = (await call('POST', '/api/users', boss, { name: 'Yangi Ofitsant', role: 'waiter', pin: '7' })).data;
+  assert.ok(w2.username, 'login is generated when not given');
+  assert.equal((await call('POST', '/api/device/pin', dev, { user_id: w2.id, pin: '7' })).status, 200);
+  assert.equal((await call('PUT', '/api/me/pin', boss, { pin: 'boshliq-kod-2026' })).status, 200);
+  const owner = staff.find((u) => u.role === 'owner');
+  assert.equal((await call('POST', '/api/device/pin', dev, { user_id: owner.id, pin: 'boshliq-kod-2026' })).status, 200);
+
+  // The boss can disconnect the device.
+  const devices = (await call('GET', '/api/devices', boss)).data;
+  await call('DELETE', `/api/devices/${devices.find((d) => d.name === 'Kassa').id}`, boss);
+  assert.equal((await call('GET', '/api/device/staff', dev)).status, 401);
+});
+
+test('permissions: print and close per worker; waiter cancels only with the boss code', async () => {
+  const boss = await login('ega', 'ega123');
+  const waiter = await login('bobur', '1234');
+  const users = (await call('GET', '/api/users', boss)).data;
+  const bob = users.find((u) => u.username === 'bobur');
+  assert.deepEqual(bob.perms, { print: true, close: false });
+
+  const room = (await call('GET', '/api/rooms', waiter)).data.find((r) => !r.order);
+  const o = (await call('POST', '/api/orders', waiter, { room_id: room.id, guests: 2 })).data;
+  const added = (await call('POST', `/api/orders/${o.id}/items`, waiter, { items: [{ dish_id: (await dish(waiter, "Sho'rva")).id, qty: 1 }] })).data;
+  const item = added.items[0];
+
+  // Cancel: not allowed until the boss switches it on and sets a code.
+  assert.equal((await call('POST', `/api/items/${item.id}/cancel`, waiter, { reason: 'xato' })).status, 403);
+  await call('PUT', '/api/settings', boss, { waiter_cancel: true, cancel_code: '4321' });
+  assert.equal((await call('GET', '/api/me', boss)).data.settings.has_cancel_code, true);
+  assert.equal((await call('POST', `/api/items/${item.id}/cancel`, waiter, { reason: 'xato', code: '0000' })).status, 403);
+  assert.equal((await call('POST', `/api/items/${item.id}/cancel`, waiter, { reason: 'xato', code: '4321' })).status, 200);
+  await call('PUT', '/api/settings', boss, { waiter_cancel: false });
+
+  // Print is recorded; close needs the permission.
+  await call('POST', `/api/orders/${o.id}/items`, waiter, { items: [{ dish_id: (await dish(waiter, 'Tandir non')).id, qty: 1 }] });
+  assert.equal((await call('POST', `/api/orders/${o.id}/print`, waiter)).data.print_count, 1);
+  assert.equal((await call('POST', `/api/orders/${o.id}/close`, waiter, { paid_cash: 1e6 })).status, 403);
+  await call('PUT', `/api/users/${bob.id}`, boss, { perm_close: true, perm_print: false });
+  assert.equal((await call('POST', `/api/orders/${o.id}/print`, waiter)).status, 403);
+  assert.equal((await call('POST', `/api/orders/${o.id}/close`, waiter, { paid_cash: 1e6 })).status, 200);
+  await call('PUT', `/api/users/${bob.id}`, boss, { perm_close: null, perm_print: null });
+});
+
+test('takeaway: many open checks, no service charge, kept off the room list', async () => {
+  const cashier = await login('admin', 'admin123');
+  const waiter = await login('jasur', '1234');
+  const tw = (await call('GET', '/api/takeaway', cashier)).data;
+  assert.ok(tw.room_id);
+  assert.ok(!(await call('GET', '/api/rooms?all=1', cashier)).data.some((r) => r.id === tw.room_id));
+
+  const a = (await call('POST', '/api/orders', waiter, { room_id: tw.room_id, label: 'Aziz' })).data;
+  const b = (await call('POST', '/api/orders', cashier, { room_id: tw.room_id })).data;
+  assert.notEqual(a.id, b.id);
+  const withItems = (await call('POST', `/api/orders/${a.id}/items`, waiter, { items: [{ dish_id: (await dish(waiter, 'Patir')).id, qty: 2 }] })).data;
+  assert.equal(withItems.service_amount, 0);
+  assert.equal(withItems.total, 16000);
+  const mine = (await call('GET', '/api/takeaway', waiter)).data.orders;
+  assert.deepEqual(mine.map((x) => x.id), [a.id], 'a waiter sees only own takeaway checks');
+  assert.equal((await call('GET', '/api/takeaway', cashier)).data.orders.length, 2);
+  const closed = (await call('POST', `/api/orders/${a.id}/close`, cashier, { paid_cash: 16000 })).data;
+  assert.equal(closed.total, 16000);
+  await call('POST', `/api/orders/${b.id}/cancel`, cashier, {});
+});
+
+test('kitchen modes: notify skips accepting and does not block closing', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  const demo = (await call('GET', '/api/platform/tenants', admin)).data.find((t) => t.code === 'demo');
+  await call('PUT', `/api/platform/tenants/${demo.id}`, admin, { kitchen_mode: 'notify' });
+  const boss = await login('ega', 'ega123');
+  const o = (await call('POST', '/api/orders', boss, { room_id: (await freeRoom(boss)).id })).data;
+  const after = (await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: (await dish(boss, 'Dimlama')).id, qty: 1 }] })).data;
+  assert.equal(after.items[0].status, 'cooking');
+  assert.ok((await call('GET', '/api/kitchen', boss)).data.items.some((i) => i.order_id === o.id));
+  assert.equal((await call('POST', `/api/orders/${o.id}/close`, boss, { paid_cash: 1e6 })).status, 200);
+  assert.equal((await call('PUT', `/api/platform/tenants/${demo.id}`, admin, { kitchen_mode: 'xyz' })).status, 400);
+  await call('PUT', `/api/platform/tenants/${demo.id}`, admin, { kitchen_mode: 'full' });
 });

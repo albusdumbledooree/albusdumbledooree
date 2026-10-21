@@ -9,6 +9,8 @@ const { createPlatform } = require('./platform');
 const { HttpError, readJson } = require('./util');
 
 const PUBLIC = path.join(__dirname, '..', 'public');
+// The platform panel lives at an address only the site owner knows (set PLATFORM_PATH, e.g. /x7k-boshqaruv).
+const PLATFORM_PATH = '/' + String(process.env.PLATFORM_PATH || 'platform').replace(/^\/+|\/+$/g, '');
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
@@ -24,7 +26,8 @@ function send(res, status, data) {
 function serveStatic(req, res, pathname) {
   let file = path.normalize(path.join(PUBLIC, decodeURIComponent(pathname)));
   if (!file.startsWith(PUBLIC)) return send(res, 403, { error: 'Taqiqlangan' });
-  if (pathname === '/platform' || pathname.startsWith('/platform/')) file = path.join(PUBLIC, 'platform.html');
+  if (pathname === PLATFORM_PATH || pathname.startsWith(PLATFORM_PATH + '/')) file = path.join(PUBLIC, 'platform.html');
+  else if (pathname === '/platform.html') file = path.join(PUBLIC, 'index.html');
   else if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(PUBLIC, 'index.html');
   res.writeHead(200, {
     'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream',
@@ -71,9 +74,10 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       }
 
       // Every other request belongs to one choyxona: found by the code at login, by the token afterwards.
-      const ctx = pathname === '/api/login' ? platform.byCode(body.code) : platform.byToken(token);
-      if (!ctx) throw new HttpError(pathname === '/api/login' ? 404 : 401, pathname === '/api/login' ? 'Bunday kodli choyxona topilmadi' : 'Tizimga kiring');
-      if (pathname === '/api/login') platform.assertActive(ctx);
+      const byCode = pathname === '/api/login' || pathname === '/api/device/register';
+      const ctx = byCode ? platform.byCode(body.code) : platform.byToken(token);
+      if (!ctx) throw new HttpError(byCode ? 404 : 401, byCode ? 'Bunday kodli choyxona topilmadi' : 'Tizimga kiring');
+      if (byCode) platform.assertActive(ctx);
       else if (ctx.row.status !== 'active') throw new HttpError(401, 'Choyxona bloklangan');
       const { api } = ctx;
 
@@ -87,21 +91,17 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       if (!found) throw new HttpError(404, 'Topilmadi');
       const { route, params } = found;
       let user = null;
-      if (route.roles) {
+      let device = null;
+      if (route.roles === 'device') {
+        // The shared staff-list screen authenticates as a device, not as a person.
+        device = api.authenticateDevice(token);
+        if (!device) throw new HttpError(401, 'Qurilma ulanmagan');
+      } else if (route.roles) {
         user = api.authenticate(token);
         if (!user) throw new HttpError(401, 'Tizimga kiring');
         if (!route.roles.includes(user.role)) throw new HttpError(403, "Sizda bu amal uchun huquq yo'q");
       }
-      try {
-        reply(route.handler({ user, params, body, query, token, ip }));
-      } catch (err) {
-        // The site owner typed the platform login on the staff page: point them to /platform.
-        // Checked only after a counted failed login, so the staff lockout still limits guessing.
-        if (pathname === '/api/login' && err.status === 401 && platform.isAdminLogin(body.username, body.password)) {
-          return send(res, 409, { error: "Bu sayt egasining logini. Platforma sahifasiga o'tkazilmoqda…", redirect: '/platform' });
-        }
-        throw err;
-      }
+      reply(route.handler({ user, device, params, body, query, token, ip }));
     } catch (err) {
       if (err instanceof HttpError) return send(res, err.status, { error: err.message });
       console.error(err);
@@ -126,7 +126,7 @@ if (require.main === module) {
       .filter((a) => a && a.family === 'IPv4' && !a.internal).map((a) => `http://${a.address}:${port}`);
     console.log(`\n  Choyxona Pro ishga tushdi!\n\n  Shu kompyuterda:   http://localhost:${port}`);
     if (lan.length) console.log(`  Telefonlardan (shu Wi-Fi):  ${lan.join('   ')}`);
-    console.log(`  Platforma (siz uchun): http://localhost:${port}/platform`);
+    console.log(`  Platforma (siz uchun): http://localhost:${port}${PLATFORM_PATH}`);
     console.log(`\n  To'xtatish uchun shu oynani yoping yoki Ctrl+C bosing.\n`);
   });
 }

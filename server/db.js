@@ -167,6 +167,14 @@ CREATE TABLE IF NOT EXISTS payroll (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_payroll_user ON payroll(user_id, day);
+CREATE TABLE IF NOT EXISTS devices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  token TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL DEFAULT '',
+  created_by INTEGER REFERENCES users(id),
+  created_at INTEGER NOT NULL,
+  last_seen INTEGER
+);
 CREATE TABLE IF NOT EXISTS audit (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER REFERENCES users(id),
@@ -192,6 +200,11 @@ const DEFAULT_SETTINGS = {
     'Gaz', 'Transport', "Ta'mirlash", 'Soliq', 'Boshqa',
   ]),
   income_categories: JSON.stringify(['Banket avansi', 'Boshqa kirim']),
+  // Waiters may cancel a sent dish only if the boss allows it, and only with the boss's cancel code.
+  waiter_cancel: '0',
+  cancel_code_hash: '',
+  // Lock the screen back to the staff list after this many idle minutes (0 = never).
+  auto_lock_minutes: '0',
 };
 
 function seedSettings(db, name) {
@@ -201,9 +214,9 @@ function seedSettings(db, name) {
   if (name) db.prepare("UPDATE settings SET value = ? WHERE key = 'name'").run(name);
 }
 
-function addUser(db, name, username, password, role) {
-  return db.prepare('INSERT INTO users (name, username, pass_hash, role, phone, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(name, username, hashPassword(password), role, '', Date.now()).lastInsertRowid;
+function addUser(db, name, username, password, role, pin = null) {
+  return db.prepare('INSERT INTO users (name, username, pass_hash, role, phone, pin_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(name, username, hashPassword(password), role, '', pin ? hashPassword(pin) : null, Date.now()).lastInsertRowid;
 }
 
 // Sample rooms and menu; waiters (if given) are spread over the rooms.
@@ -266,12 +279,12 @@ function seed(db, opts = {}) {
   if (db.prepare('SELECT COUNT(*) c FROM users').get().c > 0) return;
   if (opts.demo) {
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('demo', '1')").run();
-    addUser(db, 'Boshliq', 'ega', 'ega123', 'owner');
-    addUser(db, 'Administrator', 'admin', 'admin123', 'admin');
-    addUser(db, 'Kassir Dilnoza', 'kassir', 'kassir123', 'cashier');
-    const w1 = addUser(db, 'Ofitsant Jasur', 'jasur', '1234', 'waiter');
-    const w2 = addUser(db, 'Ofitsant Bobur', 'bobur', '1234', 'waiter');
-    const chef = addUser(db, 'Oshpaz Rustam', 'oshpaz', '1234', 'chef');
+    addUser(db, 'Boshliq', 'ega', 'ega123', 'owner', '1234');
+    addUser(db, 'Administrator', 'admin', 'admin123', 'admin', '5555');
+    addUser(db, 'Kassir Dilnoza', 'kassir', 'kassir123', 'cashier', '4444');
+    const w1 = addUser(db, 'Ofitsant Jasur', 'jasur', '1234', 'waiter', '1111');
+    const w2 = addUser(db, 'Ofitsant Bobur', 'bobur', '1234', 'waiter', '2222');
+    const chef = addUser(db, 'Oshpaz Rustam', 'oshpaz', '1234', 'chef', '3333');
     seedRoomsAndMenu(db, [w1, w2]);
     // Sample pay: monthly for admin and cashier, daily + % of own sales for waiters, daily for the chef.
     const d = new Date();
@@ -292,8 +305,16 @@ function seed(db, opts = {}) {
 function migrate(db) {
   const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   if (!cols.includes('left_at')) db.exec('ALTER TABLE users ADD COLUMN left_at INTEGER');
+  // Quick login on a shared device: 1–4 digit PIN for staff, any length for the boss.
+  if (!cols.includes('pin_hash')) db.exec('ALTER TABLE users ADD COLUMN pin_hash TEXT');
+  // NULL = the default for the role; 1/0 = set by the boss per person.
+  if (!cols.includes('perm_print')) db.exec('ALTER TABLE users ADD COLUMN perm_print INTEGER');
+  if (!cols.includes('perm_close')) db.exec('ALTER TABLE users ADD COLUMN perm_close INTEGER');
   const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
   if (!orderCols.includes('service_type')) db.exec("ALTER TABLE orders ADD COLUMN service_type TEXT NOT NULL DEFAULT 'percent'");
+  if (!orderCols.includes('takeaway')) db.exec('ALTER TABLE orders ADD COLUMN takeaway INTEGER NOT NULL DEFAULT 0');
+  if (!orderCols.includes('label')) db.exec("ALTER TABLE orders ADD COLUMN label TEXT NOT NULL DEFAULT ''");
+  if (!orderCols.includes('print_count')) db.exec('ALTER TABLE orders ADD COLUMN print_count INTEGER NOT NULL DEFAULT 0');
   // The single "salary" field of the first release becomes a monthly pay rate.
   const legacy = db.prepare(`SELECT id, salary, created_at FROM users WHERE salary > 0
     AND id NOT IN (SELECT user_id FROM pay_rates)`).all();
@@ -305,6 +326,13 @@ function migrate(db) {
   }
 }
 
+// Takeaway ("Olib ketish / soboy") lives in one hidden system room that may hold many open checks.
+function ensureTakeawayRoom(db) {
+  if (!db.prepare("SELECT 1 FROM rooms WHERE type = 'soboy'").get()) {
+    db.prepare("INSERT INTO rooms (number, name, type, capacity) VALUES ('S', 'Olib ketish', 'soboy', 1)").run();
+  }
+}
+
 function open(file, opts) {
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
@@ -312,6 +340,7 @@ function open(file, opts) {
   db.exec(SCHEMA);
   migrate(db);
   seed(db, opts);
+  ensureTakeawayRoom(db);
   return db;
 }
 
