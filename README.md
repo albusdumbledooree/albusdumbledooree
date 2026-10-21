@@ -1,12 +1,16 @@
 # Choyxona Pro — restoran va choyxonalar uchun boshqaruv tizimi
 
 Buyurtma qabul qilish, oshxona ekrani, kassa, kirim-chiqim va kunlik / haftalik / oylik hisobotlar — bitta tizimda.
-Telefon, planshet va kompyuterda brauzer orqali ishlaydi (telefonga ilova sifatida o'rnatish mumkin — PWA).
+Telefon, planshet va kompyuterda brauzer orqali ishlaydi (ish stoli va telefonga ilova sifatida o'rnatiladi — PWA).
+Tillar: **o'zbekcha** (asosiy), **русский**, **English**.
 
 **Bitta sayt — ko'p choyxona.** Sayt egasi `/platform` sahifasida choyxonalarni qo'shadi va har biriga boshliq login-parolini beradi.
 Boshliq o'z choyxonasiga xodimlarni o'zi qo'shadi. Har bir choyxonaning ma'lumotlari alohida faylda saqlanadi va boshqalariga ko'rinmaydi.
 
 ## Platforma (sayt egasi uchun)
+
+Platforma manzili faqat sizga ma'lum bo'lsin: serverda `PLATFORM_PATH=/maxfiy-manzil` deb o'rnating
+(standart `/platform`). Choyxona sahifalarida platformaga hech qanday havola yo'q.
 
 1. `https://sayt/platform` ni oching. Birinchi kirish: `superadmin` / `super123` → **darhol parolni o'zgartiring** (🔒 Parol).
 2. **➕ Yangi choyxona**: nomi, kodi (masalan `navruz`), boshliq ismi, login va parol, to'langan muddat, oylik narx.
@@ -25,9 +29,16 @@ Platformadagi boshqa amallar:
 | 🔗 | Choyxona kirish havolasini nusxalash |
 
 **Bo'limlarni yoqish/o'chirish (paketlar).** ✏️ oynasida har bir choyxona uchun bo'limlarni belgilaysiz:
-Oshxona ekrani, Stop-list, Hisobotlar, Kirim-chiqim, Ish haqi, Bronlar, Cheklar tarixi, Amallar tarixi.
+Stop-list, Hisobotlar, Kirim-chiqim, Ish haqi, Bronlar, Cheklar tarixi, Amallar tarixi.
 O'chirilgan bo'lim choyxonaning menyusidan darhol yo'qoladi va server ham uni yopadi. Xonalar, buyurtma, menyu, kassa va xodimlar doim ishlaydi.
-Oshxona ekrani o'chirilsa, taomlar oshxonaga bormasdan darhol "berildi" bo'ladi. Shu bilan arzon va qimmat paketlar qilish mumkin.
+
+**Oshxona rejimi** (har choyxona uchun):
+
+| Rejim | Nima bo'ladi |
+|---|---|
+| To'liq | Oshpaz "Qabul qilish" → "Tayyor" bosadi, ofitsantga ovozli xabar boradi. Tayyor bo'lmaguncha chek yopilmaydi |
+| Faqat xabar | Buyurtma oshxona ekranida ko'rinadi / chop etiladi, qabul qilish shart emas, chek istalgan vaqtda yopiladi |
+| O'chiq | Oshxonaga hech narsa bormaydi, taom darhol "berildi" bo'ladi, oshxona bo'limi yo'qoladi |
 
 Har bir choyxona bo'yicha xodimlar, xonalar, oxirgi 30 kundagi cheklar va savdo, oxirgi faollik ko'rinadi.
 Muddat 5 kundan kam qolganda boshliqning ekranida eslatma chiqadi.
@@ -68,6 +79,7 @@ Ma'lumotlar `data/` papkasida saqlanadi (zaxira: `npm run backup`). Eski versiya
 | `PORT` | Port (standart 3000) |
 | `DATA_DIR` | Bazalar papkasi (standart `data/`: `platform.db` va `tenants/<kod>.db`) |
 | `TZ` | Vaqt mintaqasi (standart `Asia/Tashkent`) |
+| `PLATFORM_PATH` | Platforma panelining maxfiy manzili (standart `/platform`) |
 | `PLATFORM_USER`, `PLATFORM_PASSWORD` | Birinchi ishga tushishda platforma administratori (standart `superadmin` / `super123`) |
 | `SEED_DEMO=0` | `demo` kodli sinov choyxonasi yaratilmasin |
 | `TRUST_PROXY=1` | Caddy/Nginx orqasida ishlaganda mijozning haqiqiy IP manzilini olish |
@@ -76,23 +88,41 @@ Ma'lumotlar `data/` papkasida saqlanadi (zaxira: `npm run backup`). Eski versiya
 
 Choyxona kodi: **`demo`** (havola: `http://localhost:3000/c/demo`).
 
-| Lavozim | Login | Parol |
+**Umumiy qurilma** (kassa kompyuteri, planshet): kirish sahifasida "Umumiy qurilma" → kod `demo`, boshliq `ega` / `ega123`.
+Shundan keyin ekranda soat va xodimlar ro'yxati turadi, xodim ismini bosib PIN kiritadi:
+
+| Xodim | PIN (umumiy qurilma) | Login / parol (shaxsiy telefon) |
 |---|---|---|
-| Boshliq | `ega` | `ega123` |
-| Admin | `admin` | `admin123` |
-| Kassir | `kassir` | `kassir123` |
-| Ofitsant | `jasur`, `bobur` | `1234` |
-| Oshpaz | `oshpaz` | `1234` |
+| Boshliq | `1234` | `ega` / `ega123` |
+| Administrator | `5555` | `admin` / `admin123` |
+| Kassir Dilnoza | `4444` | `kassir` / `kassir123` |
+| Ofitsant Jasur | `1111` | `jasur` / `1234` |
+| Ofitsant Bobur | `2222` | `bobur` / `1234` |
+| Oshpaz Rustam | `3333` | `oshpaz` / `1234` |
 
 Platforma: `http://localhost:3000/platform` — `superadmin` / `super123`.
 
 > ⚠️ Haqiqiy ishga tushirishda `SEED_DEMO=0` ishlating va platforma parolini o'zgartiring.
 
+## Kirish: ish stoli va PIN
+
+- Kassa kompyuteri yoki planshetni **boshliq bir marta ulaydi** (o'z logini bilan). Keyin u qurilmada doim
+  **soat, sana va xodimlar ro'yxati** turadi. Xodim ismini bosadi → **PIN** (1–4 raqam) kiritadi → ishlaydi.
+- **"Chiqish"** (qulf belgisi) bosilsa — yana xodimlar ro'yxatiga qaytadi.
+- Boshliq va admin PIN o'rniga xohlagan uzunlikdagi parol qo'ya oladi.
+- **To'liq ekran** tugmasi bor; ekran o'z-o'zidan o'chib qolmaydi (Android/kompyuter; iPhone — ilova o'rnatilganda).
+- **Avtomatik qulf**: Sozlamalar → Ruxsatlar, N daqiqa hech narsa bosilmasa xodimlar ro'yxatiga qaytadi.
+- PIN 5 marta xato kiritilsa, o'sha xodim shu qurilmada 5 daqiqaga bloklanadi. Ulangan qurilmalar ro'yxati: Sozlamalar → Qurilmalar.
+- Xodim o'z telefonidan "Shaxsiy kirish" bilan login va parol orqali ham kira oladi.
+
 ## Buyurtma jarayoni
 
-1. **Ofitsant** tizimga kiradi — o'ziga biriktirilgan banket xonalari raqamlari rangli kartalar ko'rinishida chiqadi
+1. **Ofitsant** kiradi — o'ziga biriktirilgan banket xonalari rangli kartalar ko'rinishida chiqadi
    (yashil — bo'sh, sariq — band, miltillovchi — taom tayyor, binafsha — hisob so'ralgan, ko'k — bron).
-2. Xonani bosadi → menyudan taom tanlaydi (har bir taomda **taxminiy tayyor bo'lish vaqti** — oshxona navbatini hisobga olgan holda) → izoh yozishi mumkin → **"Oshxonaga yuborish"**.
+   Pastda **"Olib ketish"** bo'limi: soboy uchun istalgancha alohida chek ochiladi (xizmat haqisiz, mijoz ismi bilan).
+2. Bo'sh xonani bosganda **"Necha kishi?"** so'raladi. Chap tomonda **chek** turadi: taomlar yozilgan tartibda
+   ("1-yuborish 21:45", "2-yuborish 22:10"), o'ngda menyu. Telefonda chek pastdagi tugma bilan chapdan ochiladi.
+   Taom tanlanadi → **"Yuborish"** → **tasdiqlash oynasi** → oshxonaga ketadi.
 3. **Oshxona ekranida** buyurtma "Yangi" ustunida ovozli signal bilan paydo bo'ladi. Oshpaz **"Qabul qilish"** ni bosadi —
    taom "Tayyorlanmoqda" holatiga o'tadi, ortga sanovchi taymer ishlaydi, kechiksa qizil bo'ladi. Ofitsantga "qabul qilindi, ~soat 14:35 da tayyor" xabari boradi.
 4. Taom tayyor bo'lgach oshpaz **"Tayyor"** ni bosadi → ofitsant telefonida **ayol ovozida** "Diqqat! Uchinchi xona. Sho'rva, ikki porsiya tayyor. Olib keting." degan xabar o'qiladi, tebranish va yashil banner chiqadi.
@@ -123,21 +153,31 @@ Non, choy, ichimliklar kabi oshxonada tayyorlanmaydigan mahsulotlar darhol "beri
 | Ish haqi, bonus, jarima, davomat | ✅ | | | | |
 | O'z ish haqini ko'rish | | ✅ | ✅ | ✅ | ✅ |
 
-Ofitsant faqat oshpaz hali qabul qilmagan taomni bekor qila oladi. Barcha bekor qilishlar sababi bilan yoziladi.
+**Bekor qilish:** yuborilgan taomni ofitsant faqat boshliq ruxsat bergan bo'lsa (Sozlamalar → Ruxsatlar) va boshliq bergan
+**maxsus kod** bilan bekor qila oladi. Aks holda — faqat kassir yoki boshliq. Barcha bekor qilishlar sababi bilan yoziladi.
+
+**Chek huquqlari:** Xodimlar bo'limida har bir xodim uchun alohida: *printerdan chek chiqarish* va *chekni yopish (to'lov qabul qilish)*.
+Standart: kassir — ikkalasi bor; ofitsant — chek chiqaradi, yopmaydi. Har bir chek necha marta chop etilgani yoziladi.
 
 ## Moliya va hisobotlar
 
-- **Hisobot**: bugun, kecha, shu hafta, oxirgi 7 kun, shu oy, o'tgan oy yoki ixtiyoriy davr.
-  Savdo, cheklar soni, o'rtacha chek, mehmonlar, xizmat haqi, chegirmalar, to'lov turlari, boshqa kirim, xarajatlar kategoriyalar bo'yicha,
-  **sof foyda**, taomlar tannarxi va marja, eng ko'p sotilgan taomlar, ofitsantlar va xonalar bo'yicha savdo, oshxona tezligi,
-  bekor qilingan taomlar, kunlik/soatlik grafik. **Excel (CSV)** ga yuklab olish va chop etish.
+- **Hisobot** (soddalashtirilgan): bugun, kecha, hafta, oy, o'tgan oy yoki sana tanlash. Kirim, chiqim, foyda, mehmonlar,
+  kunlik/soatlik grafik, to'lov turlari, xarajatlar kategoriyalar bo'yicha, eng ko'p sotilgan taomlar, ofitsantlar. Excel'ga yuklash.
 - **Kirim-chiqim**: xarajatlar (mahsulot, go'sht, ish haqi, ijara, kommunal, gaz...) va qo'shimcha kirimlar; kategoriyalar sozlamalarda o'zgartiriladi.
+- **Kassa**: kassirning asosiy ekrani — xonalar va olib ketish cheklari (hisob so'ralganlari binafsha rangda).
 - **Kassa smenasi (Z-hisobot)**: smena ochishda kassadagi naqd, yopishda sanalgan naqd kiritiladi — tizim kutilgan summa bilan farqni ko'rsatadi.
 
 ## Xizmat haqi
 
 Sozlamalar → Muassasa: **foizda** (masalan 10% taomlar summasidan) yoki **odam boshiga** (masalan 5 000 so'm × 10 kishi = 50 000).
-Kassir to'lov oynasida aynan shu chek uchun turini va miqdorini o'zgartirishi mumkin. Chekda "Xizmat haqi (10 kishi × 5 000)" deb yoziladi.
+Faqat shu yerda o'zgaradi — to'lov oynasida o'zgartirib bo'lmaydi. Chekda "Xizmat haqi (10 kishi × 5 000)" va
+**"10 kishi — har biriga: 25 000"** qatori chiqadi. Olib ketishda xizmat haqi olinmaydi.
+
+## Zaxira nusxa (kompyuterda)
+
+Yopilgan har bir chek kassa kompyuterining xotirasiga (brauzer IndexedDB) ham avtomatik saqlanadi — server yoki internet
+ishlamay qolsa ham Sozlamalar → Zaxira'dan ko'rib, Excel'ga yuklab olish mumkin. Kassa smenasi yopilganda kunlik cheklar
+Excel fayl bo'lib kompyuterga avtomatik tushadi.
 
 ## Cheklar tarixi
 
@@ -181,7 +221,9 @@ Bekor qilingan cheklar alohida, chek raqami / xona / ofitsant bo'yicha qidiruv, 
 - ↔ Chekni boshqa xonaga ko'chirish
 - 🖨 58/80 mm termo-printer uchun mijoz va oshxona cheklari
 - 🕵️ Amallar tarixi: chegirma, bekor qilish, narx o'zgarishi kim tomonidan qachon qilinganini nazorat qilish
-- 🌙 Qorong'i mavzu, telefon uchun moslashgan dizayn, PWA (bosh ekranga o'rnatish)
+- 🌐 Uch til: o'zbekcha, ruscha, inglizcha (ovozli xabarlar ham tanlangan tilda)
+- 📲 Ish stoli / telefonga ilova sifatida o'rnatish: Sozlamalar → Mening sozlamalarim → "Ilovani o'rnatish"
+- ☀️ Yorug' mavzu asosiy, qorong'i — sozlamalarda
 
 ## Internetga chiqarish (hamma joydan kirish)
 
@@ -230,6 +272,14 @@ server/
   db.js        Choyxona bazasi sxemasi va boshlang'ich ma'lumotlar
   events.js    Server-Sent Events (jonli yangilanishlar, har choyxona alohida)
   util.js      Parol xeshlash (scrypt), kiritishni tekshirish
-public/      Brauzer ilovasi (HTML/CSS/JS, kutubxonasiz)
+public/
+  js/i18n.js, i18n-dict.js   Tarjima (o'zbek manba, rus/ingliz lug'at)
+  js/icons.js                Lucide ikonkalari (ISC litsenziya), internetsiz ishlashi uchun ichiga joylangan
+  js/core.js                 API, jonli xabarlar, ovoz, chop etish, zaxira nusxa
+  js/lock.js                 Qurilmani ulash, xodimlar ro'yxati va PIN
+  js/order.js                Xonalar/Kassa, olib ketish, buyurtma va chek oynasi, to'lov
+  js/kitchen.js              Oshxona ekrani, stop-list
+  js/manage.js               Cheklar tarixi, hisobot, kirim-chiqim, ish haqi, bronlar, menyu, xodimlar, sozlamalar
+  js/app.js                  Menyu, yo'naltirish, avtomatik qulf
 test/        API integratsion testlari (node:test)
 ```

@@ -6,7 +6,7 @@ const DAY_MS = 24 * 60 * MIN;
 const TOKEN_KEY = 'cp_ptoken';
 
 // Overrides core.js: the platform session is stored separately from choyxona logins.
-function logoutLocal() {
+function endSession() {
   App.token = null;
   P.admin = null;
   store(TOKEN_KEY, null);
@@ -88,7 +88,7 @@ function tenantRow(t) {
       <button class="btn sm" data-extend="${t.id}" title="To'lov muddatini 1 oyga uzaytirish">+1 oy</button>
       <button class="btn sm" data-edit="${t.id}" title="Tahrirlash">✏️</button>
       <button class="btn sm" data-reset="${t.id}" title="Boshliq parolini tiklash">🔑</button>
-      ${t.status === 'active' ? `<button class="btn sm danger-text" data-block="${t.id}">⛔ Bloklash</button>` : `<button class="btn sm ok" data-unblock="${t.id}">✅ Faollashtirish</button>`}
+      ${t.status === 'active' ? `<button class="btn sm red-text" data-block="${t.id}">⛔ Bloklash</button>` : `<button class="btn sm ok" data-unblock="${t.id}">✅ Faollashtirish</button>`}
     </td></tr>`;
 }
 
@@ -96,7 +96,7 @@ function mainHtml() {
   const list = P.tenants.filter((t) => !P.search || `${t.name} ${t.code} ${t.contact_name} ${t.phone}`.toLowerCase().includes(P.search.toLowerCase()));
   const active = P.tenants.filter((t) => t.status === 'active');
   const due = active.filter((t) => { const d = daysLeft(t); return d !== null && d <= 5; });
-  return `<div class="main" style="max-width:1400px;margin:0 auto">
+  return `<div class="main" style="max-width:1400px;margin:0 auto;padding:20px">
     <div class="page-head"><img src="/icon.svg" alt="" style="width:36px"><h1>Choyxona Pro · Platforma</h1><span class="spacer"></span>
       <span class="muted small">${esc(P.admin.name)}</span>
       <button class="btn sm" id="pw">🔒 Parol</button><button class="btn sm" id="logout">Chiqish</button></div>
@@ -128,6 +128,12 @@ async function load() {
 }
 
 // Checkboxes: ticked = the section is on for this choyxona.
+const KITCHEN_MODES = { full: "To'liq: oshpaz qabul qiladi → tayyor → ofitsantga xabar", notify: "Faqat xabar: oshxona ko'radi/chop etadi, qabul qilish shart emas", off: "O'chiq: oshxonaga hech narsa bormaydi" };
+function kitchenModeHtml(mode = 'full') {
+  return `<label class="field" style="margin-top:14px">Oshxona rejimi<select name="kitchen_mode">${Object.entries(KITCHEN_MODES)
+    .map(([k, v]) => `<option value="${k}" ${mode === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>`;
+}
+
 function modulesHtml(disabled = []) {
   return `<h3 style="margin-top:14px">Bo'limlar (paket)</h3>
     <p class="small muted" style="margin:0 0 8px">Belgini olib tashlasangiz, bu choyxonada o'sha bo'lim yopiladi. Xonalar, buyurtma, menyu, kassa va xodimlar doim ishlaydi.</p>
@@ -179,7 +185,7 @@ async function reload() {
 
 function bind(root) {
   const byId = (id) => P.tenants.find((t) => t.id === Number(id));
-  root.querySelector('#logout').onclick = async () => { try { await POST('/api/platform/logout'); } catch { /* ignore */ } logoutLocal(); };
+  root.querySelector('#logout').onclick = async () => { try { await POST('/api/platform/logout'); } catch { /* ignore */ } endSession(); };
   const pw = () => openModal({
     title: "Parolni o'zgartirish",
     body: `<div class="stack"><label class="field">Eski parol<input type="password" name="old_password" required></label>
@@ -220,7 +226,7 @@ function bind(root) {
 
 function addTenant() {
   const form = openModal({
-    title: 'Yangi choyxona', wide: true,
+    title: 'Yangi choyxona', size: 'wide',
     body: `<div class="form-grid">
       <label class="field">Choyxona nomi<input name="name" required placeholder="Navro'z choyxonasi"></label>
       <label class="field">Kod (kirish havolasi uchun)<input name="code" required placeholder="navruz" autocapitalize="none"></label>
@@ -233,6 +239,7 @@ function addTenant() {
     </div>
     <p class="small muted" id="code-url" style="margin:8px 0 0"></p>
     <label class="check" style="margin-top:12px"><input type="checkbox" name="sample" checked> Namuna menyu va xonalar qo'shilsin (boshliq keyin o'zgartiradi)</label>
+    ${kitchenModeHtml()}
     ${modulesHtml()}
     <label class="field" style="margin-top:12px">Izoh (faqat sizga ko'rinadi)<textarea name="notes" rows="2"></textarea></label>`,
     actions: [{ label: 'Bekor', onClick: () => {} }, { label: 'Yaratish', cls: 'primary', onClick: async (f) => {
@@ -265,9 +272,10 @@ function editTenant(t) {
       <label class="field">To'langan muddat (gacha)<input type="date" name="paid_until" value="${t.paid_until ? isoDate(t.paid_until) : ''}"></label>
       <label class="field">Oylik narx<input type="number" name="monthly_fee" min="0" value="${t.monthly_fee || 0}"></label>
     </div><label class="field" style="margin-top:12px">Izoh<textarea name="notes" rows="3">${esc(t.notes || '')}</textarea></label>
+    ${kitchenModeHtml(t.kitchen_mode)}
     ${modulesHtml(t.disabled_modules)}
     <p class="small muted">Kod: <b>${esc(t.code)}</b> (o'zgartirilmaydi) · Yaratilgan: ${fmtDate(t.created_at)}</p>`,
-    wide: true,
+    size: 'wide',
     onMount: bindModules,
     actions: [{ label: 'Bekor', onClick: () => {} }, { label: 'Saqlash', cls: 'primary', onClick: async (f) => {
       const d = formData(f);

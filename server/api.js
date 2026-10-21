@@ -948,20 +948,23 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
   }
 
   // ---------- Kitchen ----------
+  // Kitchen and waiter lists show takeaway checks as "Olib ketish #12 · Aziz".
+  const withPlace = (i) => (i.takeaway ? { ...i, room_name: placeName({ id: i.order_id, takeaway: 1, label: i.label }, null) } : i);
+
   function kitchen() {
     const since = now() - 30 * MIN;
-    const items = q(`SELECT i.*, o.guests, r.name room_name, r.number room_number, w.name waiter_name, c.name chef_name
+    const items = q(`SELECT i.*, o.guests, o.takeaway, o.label, r.name room_name, r.number room_number, w.name waiter_name, c.name chef_name
       FROM order_items i JOIN orders o ON o.id = i.order_id JOIN rooms r ON r.id = o.room_id
       JOIN users w ON w.id = o.waiter_id LEFT JOIN users c ON c.id = i.chef_id
       WHERE i.needs_kitchen = 1 AND (i.status IN ('new','cooking') OR (i.status = 'ready') OR (i.status = 'served' AND i.served_at > ?))
-      ORDER BY i.created_at, i.id`).all(since);
+      ORDER BY i.created_at, i.id`).all(since).map(withPlace);
     return { items, load: kitchenLoad(), server_time: now() };
   }
 
   function myReady({ user }) {
-    return q(`SELECT i.*, r.name room_name, r.number room_number FROM order_items i JOIN orders o ON o.id = i.order_id
+    return q(`SELECT i.*, o.takeaway, o.label, r.name room_name, r.number room_number FROM order_items i JOIN orders o ON o.id = i.order_id
       JOIN rooms r ON r.id = o.room_id WHERE i.status = 'ready' AND o.status = 'open' AND (o.waiter_id = ? OR ? IN ('owner','admin'))
-      ORDER BY i.ready_at`).all(user.id, user.role);
+      ORDER BY i.ready_at`).all(user.id, user.role).map(withPlace);
   }
 
   // ---------- Finance ----------
