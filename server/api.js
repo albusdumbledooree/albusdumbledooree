@@ -177,7 +177,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
     const order = { owner: 0, admin: 1, cashier: 2, waiter: 3, chef: 4 };
     return q('SELECT * FROM users WHERE active = 1').all()
       .sort((a, b) => order[a.role] - order[b.role] || a.name.localeCompare(b.name))
-      .map((u) => ({ id: u.id, name: u.name, role: u.role, has_pin: !!u.pin_hash }));
+      .map((u) => ({ id: u.id, name: u.name, role: u.role, has_pin: !!u.pin_hash || MANAGERS.includes(u.role) }));
   }
 
   // 5 wrong PINs for one worker on one device lock that worker there for 5 minutes.
@@ -189,8 +189,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
     if (f && f.count >= 5 && now() - f.first < 5 * MIN) throw new HttpError(429, "Juda ko'p xato. 5 daqiqadan keyin urinib ko'ring");
     const user = q('SELECT * FROM users WHERE id = ? AND active = 1').get(id);
     if (!user) throw new HttpError(404, 'Xodim topilmadi');
-    if (!user.pin_hash) throw new HttpError(400, "PIN o'rnatilmagan. Boshliqqa murojaat qiling");
-    if (!verifyPassword(String(body.pin ?? ''), user.pin_hash)) {
+    // Boss and admin without a separate desktop password use their login password.
+    const hash = user.pin_hash || (MANAGERS.includes(user.role) ? user.pass_hash : null);
+    if (!hash) throw new HttpError(400, "PIN o'rnatilmagan. Boshliqqa murojaat qiling");
+    if (!verifyPassword(String(body.pin ?? ''), hash)) {
       pinFailures.set(key, !f || now() - f.first >= 5 * MIN ? { count: 1, first: now() } : { ...f, count: f.count + 1 });
       throw new HttpError(401, "PIN noto'g'ri");
     }
@@ -835,10 +837,12 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
     room.name = placeName(o, room);
     const kitchenItems = added.filter((a) => a.kitchen);
     audit(user, 'items_add', `#${o.id}: ${added.map((a) => `${a.name}×${a.qty}`).join(', ')}`);
+    const waiter = q('SELECT name FROM users WHERE id = ?').get(o.waiter_id);
     if (kitchenItems.length) {
-      const waiter = q('SELECT name FROM users WHERE id = ?').get(o.waiter_id);
       events.publish('kitchen_new', { order_id: o.id, room: room.name, waiter: waiter && waiter.name, at: t, items: kitchenItems }, { roles: KITCHEN });
     }
+    // Every order (waiter's or cashier's) goes to the computers chosen as order printers.
+    events.publish('order_print', { order_id: o.id, room: room.name, waiter: waiter && waiter.name, by: user.name, at: t, items: added }, { roles: ['device'] });
     events.publish('rooms');
     if (added.some((a) => !a.kitchen)) events.publish('menu');
   }

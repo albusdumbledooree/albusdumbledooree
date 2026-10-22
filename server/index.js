@@ -130,8 +130,11 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
 
       if (pathname === '/api/events' && req.method === 'GET') {
         const user = api.authenticate(token);
-        if (!user) throw new HttpError(401, 'Tizimga kiring');
-        return ctx.hub.subscribe(req, res, user);
+        if (user) return ctx.hub.subscribe(req, res, user);
+        // A shared device listens too (even on the staff list): it prints new orders when chosen as a printer.
+        const device = api.authenticateDevice(token);
+        if (!device) throw new HttpError(401, 'Tizimga kiring');
+        return ctx.hub.subscribe(req, res, { id: 0, role: 'device', device_id: device.id });
       }
 
       const found = api.match(req.method, pathname);

@@ -428,8 +428,8 @@ function printReceipt(o) {
 
 // Kitchen ticket: big place name, dishes and notes — no prices.
 function printKitchenTicket(tk) {
-  printDoc(`${t('Oshxona')} #${tk.order_id}`, `<div class="c huge">${esc(tk.room)}</div>
-    <div class="c">${t('Chek')} #${tk.order_id} · ${esc(tk.waiter || '')} · ${fmtTime(tk.at || Date.now())}</div><hr>
+  printDoc(`${t('Buyurtma')} #${tk.order_id}`, `<div class="c huge">${esc(tk.room)}</div>
+    <div class="c">${t('Chek')} #${tk.order_id} · ${esc(tk.waiter || '')}${tk.by && tk.by !== tk.waiter ? ` (${esc(tk.by)})` : ''} · ${fmtTime(tk.at || Date.now())}</div><hr>
     <table>${tk.items.map((i) => `<tr class="big"><td>${i.qty} ×</td><td>${esc(i.name)}${i.note ? `<br><small>* ${esc(i.note)}</small>` : ''}</td></tr>`).join('')}</table><hr>`);
 }
 
@@ -451,6 +451,25 @@ function imageToDataUrl(file, max, type = 'image/jpeg') {
     img.src = URL.createObjectURL(file);
   });
 }
+
+// A computer with a printer can be chosen to print every new order (waiter's or cashier's).
+// It listens with its own device key, so printing goes on even while the staff list is shown.
+const OrderPrinter = {
+  es: null,
+  on() { return !!(App.device && store('cp_kprint')); },
+  set(v) { store('cp_kprint', v ? true : null); this.sync(); },
+  sync() {
+    if (!this.on()) { if (this.es) this.es.close(); this.es = null; return; }
+    if (this.es) return;
+    this.es = new EventSource(`/api/events?token=${encodeURIComponent(App.device.token)}`);
+    this.es.addEventListener('order_print', (e) => {
+      try { printKitchenTicket(JSON.parse(e.data)); } catch { /* ignore */ }
+    });
+    this.es.onerror = () => {
+      if (this.es && this.es.readyState === EventSource.CLOSED) { this.es = null; setTimeout(() => this.sync(), 5000); }
+    };
+  },
+};
 
 function downloadCsv(filename, rows) {
   const csv = '﻿' + rows.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');

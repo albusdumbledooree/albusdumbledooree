@@ -442,6 +442,14 @@
     "Biznes turi noto'g'ri": ['Неверный тип бизнеса', 'Invalid business type'],
     "Faol boshliq yo'q. Avval boshliq parolini tiklang": ['Нет активного руководителя. Сначала восстановите его пароль', 'No active manager. Reset the manager password first'],
     'Choyxona topilmadi': ['Заведение не найдено', 'Business not found'],
+    // ---------- Order printer, reservations ----------
+    'Band (bron)': ['Занято (бронь)', 'Reserved'],
+    'Buyurtma': ['Заказ', 'Order'],
+    'Buyurtma printeri': ['Принтер заказов', 'Order printer'],
+    'Shu qurilmadan har bir yangi buyurtmani chop etish': ['Печатать каждый новый заказ на этом устройстве', 'Print every new order on this device'],
+    "Ofitsant yoki kassir yozgan har bir buyurtma (taomlar, soni, izoh) shu kompyuterga ulangan printerdan chiqadi. Xodimlar ro'yxati ochiq turganda ham ishlaydi.": ['Каждый заказ официанта или кассира (блюда, количество, комментарий) печатается на принтере этого компьютера. Работает и когда открыт список сотрудников.', "Every order a waiter or cashier sends (dishes, quantity, notes) prints on this computer's printer. Works even while the staff list is shown."],
+    "Chop etish oynasi chiqmasligi uchun Chrome'ni --kiosk-printing bilan oching.": ['Чтобы окно печати не появлялось, запускайте Chrome с --kiosk-printing.', 'To skip the print dialog, start Chrome with --kiosk-printing.'],
+    "Login paroli yoki Sozlamalarda qo'yilgan kirish paroli": ['Пароль от логина или пароль входа из настроек', 'Your login password, or the desktop password set in Settings'],
   };
   for (const [uz, [ru, en]] of Object.entries(T)) {
     I18N.ru[uz] = ru;

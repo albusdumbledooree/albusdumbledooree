@@ -28,9 +28,9 @@ function roomTile(r) {
       ${o && o.items.ready ? `<span class="chip ready">${icon('bell', 14)} ${o.items.ready}</span>` : ''}
       ${o && (o.items.new + o.items.cooking) ? `<span class="chip cooking">${icon('flame', 14)} ${o.items.new + o.items.cooking}</span>` : ''}
       ${o && o.bill_requested ? `<span class="chip violet">${icon('receipt', 14)} ${t('Hisob')}</span>` : ''}
-      ${r.reservations.map((x) => `<span class="chip new">${icon('calendar', 14)} ${fmtTime(x.starts_at)}</span>`).join('')}
+      ${(o ? r.reservations : r.reservations.slice(1)).map((x) => `<span class="chip new">${icon('calendar', 14)} ${fmtTime(x.starts_at)}</span>`).join('')}
     </span>
-    <span class="sum">${o ? money(o.subtotal) : t("Bo'sh")}</span>
+    <span class="sum">${o ? money(o.subtotal) : r.reservations.length ? `${icon('calendar', 15)} ${t('Band (bron)')} · ${fmtTime(r.reservations[0].starts_at)}` : t("Bo'sh")}</span>
   </button>`;
 }
 

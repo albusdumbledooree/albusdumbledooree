@@ -128,11 +128,15 @@ Views.lock = {
       try { if (await FolderBackup.allow()) { toast(t('Zaxira saqlandi'), 'ok'); render(); } } catch (e) { toastError(e); }
     };
     FolderBackup.run();
+    OrderPrinter.sync();
     root.querySelector('#lock-menu').onclick = () => openModal({
       title: `${icon('monitor-smartphone')} ${esc(App.device.name || t('Qurilma'))}`,
-      body: `<p>${t('Kod')}: <b>${esc(App.device.code)}</b></p><p class="small muted">${t("Qurilmani uzsangiz, uni qayta ulash uchun boshliq logini kerak bo'ladi.")}</p>`,
+      body: `<p>${t('Kod')}: <b>${esc(App.device.code)}</b></p>
+        <label class="check" style="margin:12px 0"><input type="checkbox" id="order-print" ${OrderPrinter.on() ? 'checked' : ''}> ${icon('printer', 18)} ${t('Shu qurilmadan har bir yangi buyurtmani chop etish')}</label>
+        <p class="small muted">${t("Qurilmani uzsangiz, uni qayta ulash uchun boshliq logini kerak bo'ladi.")}</p>`,
+      onMount: (f) => { f.querySelector('#order-print').onchange = (e) => OrderPrinter.set(e.target.checked); },
       actions: [{ label: t('Yopish') }, { label: t('Qurilmani uzish'), cls: 'danger', icon: 'log-out', onClick: () => {
-        App.device = null; store('cp_device', null); location.hash = '#/setup';
+        OrderPrinter.set(false); App.device = null; store('cp_device', null); location.hash = '#/setup';
       } }],
     });
     root.querySelectorAll('[data-staff]').forEach((b) => b.onclick = () => pinDialog(staff.find((u) => u.id === Number(b.dataset.staff))));
@@ -167,7 +171,8 @@ function pinDialog(u) {
     title: '',
     body: `<div class="pin-box"><div class="pin-who"><span class="avatar ${u.role}">${esc(initials(u.name))}</span><b>${esc(u.name)}</b>
       <span class="muted small">${roleName(u.role)}</span></div>
-      ${boss ? `<label class="field" style="width:100%">${t('Parol')}<input type="password" name="pin" autocomplete="off" required></label>`
+      ${boss ? `<label class="field" style="width:100%">${t('Parol')}<input type="password" name="pin" autocomplete="off" required>
+        <span class="small muted" style="font-weight:500">${t('Login paroli yoki Sozlamalarda qo\'yilgan kirish paroli')}</span></label>`
         : keypadHtml(4)}</div>`,
     actions: [{ label: t('Bekor') }, { label: t('Kirish'), cls: 'primary', icon: 'lock-open', onClick: (f) => { submit(boss ? f.pin.value : pad.get()); return false; } }],
   });

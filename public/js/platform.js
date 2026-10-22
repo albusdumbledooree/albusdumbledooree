@@ -34,7 +34,7 @@ function isoDate(ts) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 function dateEndTs(v) { return v ? new Date(`${v}T23:59`).getTime() : null; }
-function daysLeft(t) { return t.paid_until ? Math.ceil((t.paid_until - Date.now()) / DAY_MS) : null; }
+function daysLeft(t) { return t.paid_until ? Math.floor((t.paid_until - Date.now()) / DAY_MS) : null; }
 function typeName(k) { return P.types[k] || k; }
 
 function credentialsText(t, username, password) {
@@ -92,7 +92,7 @@ function tenantCard(t) {
     <footer>
       <button class="btn sm primary" data-imp="${t.id}" title="Boshliq sifatida kirish">${icon('log-in', 16)} Kirish</button>
       <button class="btn sm" data-edit="${t.id}">${icon('pencil', 16)} Tahrirlash</button>
-      <button class="btn sm" data-extend="${t.id}" title="To'lov muddatini 1 oyga uzaytirish">${icon('plus', 16)} 1 oy</button>
+      <button class="btn sm" data-term="${t.id}" title="To'lov muddatini o'zgartirish">${icon('calendar', 16)} Muddat</button>
       <button class="icon-btn" data-more="${t.id}" title="Boshqa">${icon('ellipsis-vertical', 18)}</button>
     </footer></article>`;
 }
@@ -237,13 +237,46 @@ function bind(root) {
   root.querySelector('#add').onclick = () => addTenant();
   root.querySelectorAll('[data-imp]').forEach((b) => b.onclick = () => impersonate(byId(b.dataset.imp)));
   root.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => editTenant(byId(b.dataset.edit)));
-  root.querySelectorAll('[data-extend]').forEach((b) => b.onclick = async () => {
-    const t = byId(b.dataset.extend);
-    const base = new Date(Math.max(Date.now(), t.paid_until || 0));
-    base.setMonth(base.getMonth() + 1);
-    try { await PUT(`/api/platform/tenants/${t.id}`, { paid_until: base.getTime() }); toast(`${t.name}: ${fmtDate(base)} gacha uzaytirildi`, 'ok'); reload(); } catch (e) { toastError(e); }
-  });
+  root.querySelectorAll('[data-term]').forEach((b) => b.onclick = () => termDialog(byId(b.dataset.term)));
   root.querySelectorAll('[data-more]').forEach((b) => b.onclick = () => moreMenu(byId(b.dataset.more)));
+}
+
+// Subscription term: add or take away days, a week (e.g. a bonus), months or a year, or pick the date.
+const TERM_STEPS = [['-m1', '−1 oy'], ['-d7', '−1 hafta'], ['-d1', '−1 kun'], ['+d1', '+1 kun'], ['+d7', '+1 hafta'], ['+m1', '+1 oy'], ['+m3', '+3 oy'], ['+m6', '+6 oy'], ['+m12', '+1 yil']];
+function termDialog(t) {
+  let until = t.paid_until || null;
+  const form = openModal({
+    title: `${icon('calendar')} ${esc(t.name)} — to'lov muddati`,
+    body: `<p class="lead" id="term-now"></p>
+      <div class="term-steps">${TERM_STEPS.map(([k, n]) => `<button type="button" class="btn ${k[0] === '-' ? 'red-text' : ''}" data-step="${k}">${n}</button>`).join('')}</div>
+      <label class="field" style="margin-top:12px">Yoki sanani tanlang<input type="date" name="date"></label>
+      <label class="field" style="margin-top:12px">Oylik narx (so'm)<input type="number" name="monthly_fee" min="0" value="${t.monthly_fee || 0}"></label>
+      <p class="small muted" style="margin-top:8px">Qo'shish bugundan yoki joriy muddatdan (qaysi biri keyin bo'lsa) hisoblanadi. Masalan, bonus uchun "+1 hafta".</p>`,
+    actions: [{ label: 'Bekor', onClick: () => {} }, { label: 'Saqlash', cls: 'primary', onClick: async (f) => {
+      await PUT(`/api/platform/tenants/${t.id}`, { paid_until: until, monthly_fee: Number(f.monthly_fee.value) || 0 });
+      toast(until ? `${t.name}: ${fmtDate(until)} gacha` : `${t.name}: muddatsiz`, 'ok'); reload();
+    } }],
+  });
+  const show = () => {
+    const d = until ? Math.floor((until - Date.now()) / DAY_MS) : null;
+    form.querySelector('#term-now').innerHTML = until
+      ? `Muddat: <b>${fmtDate(until)}</b> gacha <span class="${d < 0 ? 'red' : 'muted'}">(${d < 0 ? `${-d} kun o'tgan` : `${d} kun qoldi`})</span>`
+      : 'Muddat belgilanmagan';
+    form.date.value = until ? isoDate(until) : '';
+  };
+  form.querySelectorAll('[data-step]').forEach((b) => b.onclick = () => {
+    const k = b.dataset.step;
+    const sign = k[0] === '-' ? -1 : 1;
+    const n = Number(k.slice(2)) * sign;
+    // Adding counts from today if the term already ran out; taking away counts from the current end.
+    const base = new Date(sign > 0 ? Math.max(Date.now(), until || 0) : (until || Date.now()));
+    if (k[1] === 'm') base.setMonth(base.getMonth() + n); else base.setDate(base.getDate() + n);
+    base.setHours(23, 59, 0, 0);
+    until = base.getTime();
+    show();
+  });
+  form.date.onchange = () => { until = dateEndTs(form.date.value); show(); };
+  show();
 }
 
 function moreMenu(t) {

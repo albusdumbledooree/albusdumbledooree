@@ -987,6 +987,10 @@ Views.settings = {
           <div class="seg">${[['light', 'sun', t("Yorug'")], ['dark', 'moon', t("Qorong'i")]].map(([k, ic, n]) => `<button class="${(store('cp_theme') || 'light') === k ? 'active' : ''}" data-theme="${k}">${icon(ic, 16)} ${n}</button>`).join('')}</div>
           <button class="btn" id="install">${icon('download', 18)} ${t("Ilovani o'rnatish (ish stoli / telefon)")}</button>
           <button class="btn" id="full">${icon('maximize', 18)} ${t("To'liq ekran")}</button></div></div>
+      ${App.device ? `<div class="card"><div class="card-head"><h2>${icon('printer')} ${t('Buyurtma printeri')}</h2></div>
+        <label class="check"><input type="checkbox" id="order-print" ${OrderPrinter.on() ? 'checked' : ''}> ${t('Shu qurilmadan har bir yangi buyurtmani chop etish')}</label>
+        <p class="small muted" style="margin-top:8px">${t("Ofitsant yoki kassir yozgan har bir buyurtma (taomlar, soni, izoh) shu kompyuterga ulangan printerdan chiqadi. Xodimlar ro'yxati ochiq turganda ham ishlaydi.")}</p>
+        <p class="small muted">${icon('info', 14)} ${t("Chop etish oynasi chiqmasligi uchun Chrome'ni --kiosk-printing bilan oching.")}</p></div>` : ''}
       <div class="card"><div class="card-head"><h2>${icon('volume-2')} ${t('Ovozli xabar')}</h2></div>
         <form id="voice-form" class="stack">
           <label class="check"><input type="checkbox" name="enabled" ${v.enabled ? 'checked' : ''}> ${t('Ovozli xabarlar yoqilgan')}</label>
@@ -1013,6 +1017,8 @@ Views.settings = {
     bindLang(root, 'me-lang');
     root.querySelectorAll('[data-theme]').forEach((b) => b.onclick = () => { store('cp_theme', b.dataset.theme); applyTheme(); refreshView(); });
     root.querySelector('#install').onclick = installApp;
+    const op = root.querySelector('#order-print');
+    if (op) op.onchange = () => { OrderPrinter.set(op.checked); toast(op.checked ? t('Yangi buyurtmalar shu qurilmada avtomatik chop etiladi') : t("Avtomatik chop etish o'chirildi"), 'ok'); };
     const full = root.querySelector('#full');
     if (full) full.onclick = () => Screen.toggleFull();
     const vf = root.querySelector('#voice-form');

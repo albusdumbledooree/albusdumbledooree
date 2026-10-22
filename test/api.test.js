@@ -604,3 +604,29 @@ test('backups: download, restore keeps devices, platform copies, enter as boss, 
   assert.equal(back.status, 200, JSON.stringify(back.data));
   assert.equal((await call('GET', '/api/rooms', boss)).data.length, 1);
 });
+
+test('a new business boss logs in on the desktop with the login password; orders reach printer devices', async () => {
+  const admin = await platformAdmin();
+  await newBusiness(admin, 'yangi', 'choyxona');
+  const dev = (await call('POST', '/api/device/register', null, { code: 'yangi', username: 'boss', password: 'boss1234' })).data.device_token;
+  const staff = (await call('GET', '/api/device/staff', dev)).data;
+  assert.equal(staff[0].has_pin, true, 'the boss tile is usable at once');
+  assert.equal((await call('POST', '/api/device/pin', dev, { user_id: staff[0].id, pin: 'xato' })).status, 401);
+  const r = await call('POST', '/api/device/pin', dev, { user_id: staff[0].id, pin: 'boss1234' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const boss = r.data.token;
+
+  // The device's own event stream receives every new order.
+  const ctrl = new AbortController();
+  const stream = await fetch(`${base}/api/events?token=${dev}`, { signal: ctrl.signal });
+  assert.equal(stream.status, 200);
+  const reader = stream.body.getReader();
+  const room = (await call('GET', '/api/rooms', boss)).data[0];
+  const dish = (await call('GET', '/api/menu', boss)).data.dishes[0];
+  const o = (await call('POST', '/api/orders', boss, { room_id: room.id })).data;
+  await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: dish.id, qty: 2, note: 'achchiq' }] });
+  let text = '';
+  while (!text.includes('order_print')) text += new TextDecoder().decode((await reader.read()).value);
+  ctrl.abort();
+  assert.match(text, /achchiq/);
+});

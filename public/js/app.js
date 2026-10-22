@@ -253,7 +253,6 @@ Live.on('item_ready', (d) => {
 });
 Live.on('item_accepted', (d) => toast(t('{0} qabul qildi: {1} — taxminan {2} da tayyor', d.chef, d.name, fmtTime(d.eta_at)), 'info', 6000));
 Live.on('kitchen_new', (d) => {
-  if (store('cp_kprint')) printKitchenTicket(d);
   if (App.user.role !== 'chef') return;
   Voice.say(t('Yangi buyurtma. {0}. {1}.', d.room, d.items.map((i) => `${i.name}, ${spokenQty(i.qty)}`).join('; ')), 'new');
   notifySystem(t('Yangi buyurtma'), `${d.room}: ${d.items.map((i) => `${i.name} × ${i.qty}`).join(', ')}`);
@@ -326,6 +325,6 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && Ap
     if (code) await loadInfo(code);
   }
   if (App.user && (!location.hash || ['#/login', '#/setup', '#/lock'].includes(location.hash))) location.hash = homeRoute();
-  if (App.device) FolderBackup.run();
+  if (App.device) { FolderBackup.run(); OrderPrinter.sync(); }
   render();
 })();
