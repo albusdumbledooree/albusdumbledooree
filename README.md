@@ -1,4 +1,4 @@
-# Choyxona Pro — restoran va choyxonalar uchun boshqaruv tizimi
+# FLOWI — restoran va choyxonalar uchun boshqaruv tizimi
 
 Buyurtma qabul qilish, oshxona ekrani, kassa, kirim-chiqim va kunlik / haftalik / oylik hisobotlar — bitta tizimda.
 Telefon, planshet va kompyuterda brauzer orqali ishlaydi (ish stoli va telefonga ilova sifatida o'rnatiladi — PWA).

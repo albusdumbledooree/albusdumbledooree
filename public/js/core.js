@@ -48,6 +48,11 @@ function toLocalInput(ts) { const d = new Date(ts); return `${localDay(ts)}T${pa
 function moduleOn(m) { return !m || !(App.disabled || []).includes(m); }
 function can(...roles) { return !!App.user && roles.includes(App.user.role); }
 function initials(name) { return String(name).split(/\s+/).filter(Boolean).slice(-2).map((w) => w[0]).join('').toUpperCase(); }
+// FLOWI wordmark, inline so it takes the text colour (white on the lock screen, navy on cards).
+const FLOWI_PATH = 'M0 4 199 4 199 54 62 54 62 120 183 120 183 169 62 169 62 262 0 262ZM241 4 303 4 303 212 436 212 436 262 241 262ZM452.5 133.5a143 133.5 0 1 1 286 0a143 133.5 0 1 1 -286 0ZM515.5 132.5a80.5 81 0 1 0 161 0a80.5 81 0 1 0 -161 0ZM755 4 820 4 879.5 182.5 939 4 997 4 911 262 841 262ZM1008.5 35.5 1059.5 188.5 1121 4 1182 4 1096 262 1028 262 980.5 119.5ZM1218 4 1279 4 1279 262 1218 262Z';
+function flowiLogo(height = 22) {
+  return `<svg class="flowi" viewBox="0 0 1280 267" height="${height}" role="img" aria-label="FLOWI"><path fill="currentColor" fill-rule="evenodd" d="${FLOWI_PATH}"/></svg>`;
+}
 function placeName(o) {
   if (o.takeaway) return `${t('Olib ketish')} #${o.id}${o.label ? ` · ${o.label}` : ''}`;
   return o.room ? o.room.name : o.room_name || '';

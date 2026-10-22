@@ -36,7 +36,7 @@ function dateEndTs(v) { return v ? new Date(`${v}T23:59`).getTime() : null; }
 function daysLeft(t) { return t.paid_until ? Math.ceil((t.paid_until - Date.now()) / DAY_MS) : null; }
 
 function credentialsText(t, username, password) {
-  return `Choyxona Pro — ${t.name}\n\nKirish manzili: ${siteUrl(t.code)}\nChoyxona kodi: ${t.code}\nLogin: ${username}\nParol: ${password}\n\nBirinchi kirgandan keyin Sozlamalar bo'limida parolni o'zgartiring. Xodimlarni "Xodimlar" bo'limida o'zingiz qo'shasiz.`;
+  return `FLOWI — ${t.name}\n\nKirish manzili: ${siteUrl(t.code)}\nChoyxona kodi: ${t.code}\nLogin: ${username}\nParol: ${password}\n\nBirinchi kirgandan keyin Sozlamalar bo'limida parolni o'zgartiring. Xodimlarni "Xodimlar" bo'limida o'zingiz qo'shasiz.`;
 }
 
 function showCredentials(t, username, password) {
@@ -57,7 +57,7 @@ function showCredentials(t, username, password) {
 // ---------- Screens ----------
 function loginHtml() {
   return `<div class="login-wrap"><form class="card login" id="plogin">
-    <div class="brand"><img src="/icon.svg" alt=""><div><b>Choyxona Pro</b><span>Platforma boshqaruvi</span></div></div>
+    <div class="brand">${flowiLogo(30)}<span class="muted">Platforma boshqaruvi</span></div>
     <div class="stack">
       <label class="field">Login<input name="username" autocomplete="username" autocapitalize="none" required></label>
       <label class="field">Parol<input name="password" type="password" autocomplete="current-password" required></label>
@@ -97,7 +97,7 @@ function mainHtml() {
   const active = P.tenants.filter((t) => t.status === 'active');
   const due = active.filter((t) => { const d = daysLeft(t); return d !== null && d <= 5; });
   return `<div class="main" style="max-width:1400px;margin:0 auto;padding:20px">
-    <div class="page-head"><img src="/icon.svg" alt="" style="width:36px"><h1>Choyxona Pro · Platforma</h1><span class="spacer"></span>
+    <div class="page-head"><span class="brand-mark">${flowiLogo(22)}</span><h1>Platforma</h1><span class="spacer"></span>
       <span class="muted small">${esc(P.admin.name)}</span>
       <button class="btn sm" id="pw">🔒 Parol</button><button class="btn sm" id="logout">Chiqish</button></div>
     ${P.admin.default_password ? `<div class="toast error" style="margin-bottom:14px">⚠ Siz standart parol bilan kirdingiz. Xavfsizlik uchun <a href="#" id="pw2">hoziroq parolni o'zgartiring</a>.</div>` : ''}

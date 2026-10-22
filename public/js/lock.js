@@ -34,8 +34,8 @@ Views.setup = {
     const code = store('cp_code') || '';
     const dev = this.tab === 'device';
     return `<div class="setup-wrap"><form class="card setup" id="setup-form" autocomplete="on">
-      <div class="brand"><img src="/icon.svg" alt=""><div class="grow"><b>${esc((App.info && App.info.name) || 'Choyxona Pro')}</b>
-        <span class="muted small">${t('Boshqaruv tizimi')}</span></div>${langSelect()}</div>
+      <div class="brand"><div class="grow">${flowiLogo(26)}
+        <span class="muted small">${App.info && App.info.name ? esc(App.info.name) : t('Boshqaruv tizimi')}</span></div>${langSelect()}</div>
       <div class="seg" style="width:100%;margin-bottom:16px">
         <button type="button" class="${dev ? 'active' : ''}" data-tab="device" style="flex:1">${icon('monitor-smartphone', 18)} ${t('Umumiy qurilma')}</button>
         <button type="button" class="${dev ? '' : 'active'}" data-tab="personal" style="flex:1">${icon('user', 18)} ${t('Shaxsiy kirish')}</button></div>
@@ -104,7 +104,7 @@ Views.lock = {
   },
   render({ staff }) {
     return `<div class="lock">
-      <div class="lock-top"><div class="name"><img src="/icon.svg" alt="" width="34" height="34">${esc((App.info && App.info.name) || '')}</div>
+      <div class="lock-top"><div class="name">${flowiLogo(22)}${App.info && App.info.name ? `<span class="venue">${esc(App.info.name)}</span>` : ''}</div>
         ${langSelect()}
         ${Screen.canFullscreen() ? `<button class="icon-btn" id="lock-full" title="${esc(t("To'liq ekran"))}">${icon(Screen.isFull() ? 'minimize' : 'maximize')}</button>` : ''}
         <button class="icon-btn" id="lock-menu" title="${esc(t('Qurilma'))}">${icon('settings')}</button></div>

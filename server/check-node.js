@@ -17,7 +17,7 @@ module.exports = function checkNode() {
   }
   console.error(`
   XATO: Node.js versiyasi eski (sizda ${process.version}).
-  Choyxona Pro uchun Node.js 22.13 yoki undan yangisi kerak.
+  FLOWI uchun Node.js 22.13 yoki undan yangisi kerak.
 
   1) https://nodejs.org saytiga kiring va "LTS" tugmasini bosib yangi versiyani yuklab o'rnating.
   2) Kompyuterni qayta yoqing (yoki barcha terminal oynalarini yoping).

@@ -112,7 +112,7 @@ async function render() {
   const title = view.title() || (Views[navName] ? Views[navName].title() : '');
   // The page has its own heading; the top bar shows which choyxona this is.
   document.getElementById('top-title').textContent = App.settings.name || '';
-  document.title = `${title} · ${App.settings.name || 'Choyxona Pro'}`;
+  document.title = `${title} · ${App.settings.name || 'FLOWI'}`;
   await refreshView(true);
   renderReadyBanner();
 }

@@ -124,7 +124,7 @@ if (require.main === module) {
   server.listen(port, () => {
     const lan = Object.values(require('node:os').networkInterfaces()).flat()
       .filter((a) => a && a.family === 'IPv4' && !a.internal).map((a) => `http://${a.address}:${port}`);
-    console.log(`\n  Choyxona Pro ishga tushdi!\n\n  Shu kompyuterda:   http://localhost:${port}`);
+    console.log(`\n  FLOWI ishga tushdi!\n\n  Shu kompyuterda:   http://localhost:${port}`);
     if (lan.length) console.log(`  Telefonlardan (shu Wi-Fi):  ${lan.join('   ')}`);
     console.log(`  Platforma (siz uchun): http://localhost:${port}${PLATFORM_PATH}`);
     console.log(`\n  To'xtatish uchun shu oynani yoping yoki Ctrl+C bosing.\n`);

@@ -1,6 +1,6 @@
 # systemd xizmati: /etc/systemd/system/choyxona.service
 [Unit]
-Description=Choyxona Pro
+Description=FLOWI
 After=network.target
 
 [Service]
