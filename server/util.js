@@ -51,6 +51,20 @@ function readJson(req, limit = 1_000_000) {
   });
 }
 
+function readRaw(req, limit) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > limit) { reject(new HttpError(413, 'Fayl juda katta')); req.destroy(); return; }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
 // Input helpers: throw 400 with an Uzbek message on bad input.
 function str(v, field, { required = false, max = 200 } = {}) {
   const s = v == null ? '' : String(v).trim();
@@ -71,4 +85,4 @@ function int(v, field, { min = 0, max = 1e12, required = false, def = 0 } = {}) 
   return n;
 }
 
-module.exports = { hashPassword, verifyPassword, newToken, HttpError, readJson, str, int };
+module.exports = { hashPassword, verifyPassword, newToken, HttpError, readJson, readRaw, str, int };

@@ -183,6 +183,13 @@ CREATE TABLE IF NOT EXISTS audit (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit(created_at);
+CREATE TABLE IF NOT EXISTS assets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  data BLOB NOT NULL,
+  created_at INTEGER NOT NULL
+);
 `;
 
 const DEFAULT_SETTINGS = {
@@ -205,6 +212,16 @@ const DEFAULT_SETTINGS = {
   cancel_code_hash: '',
   // Lock the screen back to the staff list after this many idle minutes (0 = never).
   auto_lock_minutes: '0',
+  // Desktop (staff list) background: {"mode":"default"|"auto"|"color"|"image", "color", "image": asset id}.
+  lock_bg: '{"mode":"default"}',
+  logo: '',
+  // Who besides the boss sees the money pages; an optional extra password for them.
+  perm_admin_reports: '1',
+  perm_admin_finance: '1',
+  perm_cashier_reports: '0',
+  perm_cashier_finance: '1',
+  finance_lock: '0',
+  finance_code_hash: '',
 };
 
 function seedSettings(db, name) {
@@ -219,24 +236,62 @@ function addUser(db, name, username, password, role, pin = null) {
     .run(name, username, hashPassword(password), role, '', pin ? hashPassword(pin) : null, Date.now()).lastInsertRowid;
 }
 
+function addMenu(db, menu) {
+  const addCat = db.prepare('INSERT INTO categories (name, icon, sort) VALUES (?, ?, ?)');
+  const addDish = db.prepare(`INSERT INTO dishes (category_id, name, price, cost, prep_minutes, unit, needs_kitchen, icon, stock, barcode, size, color)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  menu.forEach(([cat, icon, dishes], i) => {
+    const cid = addCat.run(cat, icon, i).lastInsertRowid;
+    for (const d of dishes) {
+      addDish.run(cid, d.name, d.price, d.cost || 0, d.prep ?? 10, d.unit || 'porsiya', d.kitchen ?? 1, d.icon || '', d.stock ?? null,
+        d.barcode || '', d.size || '', d.color || '');
+    }
+  });
+}
+
+// Sample goods for fast food and shops (no rooms there: sales go straight to the counter).
+const SAMPLES = {
+  fastfood: [
+    ['Burgerlar', '🍔', [{ name: 'Gamburger', price: 28000, cost: 12000, prep: 6, icon: '🍔' }, { name: 'Chizburger', price: 32000, cost: 14000, prep: 6, icon: '🍔' },
+      { name: 'Dabl burger', price: 45000, cost: 21000, prep: 8, icon: '🍔' }]],
+    ['Lavash va hot-dog', '🌯', [{ name: 'Lavash', price: 30000, cost: 13000, prep: 5, icon: '🌯' }, { name: 'Pishloqli lavash', price: 34000, cost: 15000, prep: 5, icon: '🌯' },
+      { name: 'Hot-dog', price: 18000, cost: 7000, prep: 4, icon: '🌭' }]],
+    ['Garnir', '🍟', [{ name: 'Kartoshka fri', price: 15000, cost: 5000, prep: 4, icon: '🍟' }, { name: 'Naggets (6 ta)', price: 22000, cost: 9000, prep: 5, icon: '🍗' }]],
+    ['Ichimliklar', '🥤', [{ name: 'Coca-Cola 0.5L', price: 9000, cost: 6000, prep: 0, kitchen: 0, icon: '🥤', unit: 'dona' },
+      { name: 'Choy', price: 4000, cost: 500, prep: 0, kitchen: 0, icon: '🫖' }]],
+  ],
+  market: [
+    ['Non va un', '🍞', [{ name: 'Non', price: 4000, cost: 3000, icon: '🫓', stock: 50, barcode: '4780000000011' }, { name: 'Un 1 kg', price: 9000, cost: 7500, icon: '🌾', stock: 40, barcode: '4780000000028' }]],
+    ['Sut mahsulotlari', '🥛', [{ name: 'Sut 1 L', price: 12000, cost: 9500, icon: '🥛', stock: 30, barcode: '4780000000035' },
+      { name: 'Qatiq 0.5 L', price: 8000, cost: 6000, icon: '🥛', stock: 20, barcode: '4780000000042' }, { name: 'Tuxum (10 ta)', price: 16000, cost: 13000, icon: '🥚', stock: 25, barcode: '4780000000059' }]],
+    ['Bakaleya', '🛒', [{ name: 'Guruch 1 kg', price: 18000, cost: 15000, icon: '🍚', stock: 60, barcode: '4780000000066', unit: 'kg' },
+      { name: 'Shakar 1 kg', price: 14000, cost: 12000, icon: '🧂', stock: 40, barcode: '4780000000073', unit: 'kg' }, { name: "Yog' 1 L", price: 22000, cost: 18500, icon: '🫒', stock: 30, barcode: '4780000000080' }]],
+    ['Ichimliklar', '🥤', [{ name: 'Suv 1.5 L', price: 5000, cost: 3500, icon: '💧', stock: 48, barcode: '4780000000097' }, { name: 'Coca-Cola 1 L', price: 12000, cost: 9000, icon: '🥤', stock: 24, barcode: '4780000000103' }]],
+  ].map(([c, i, ds]) => [c, i, ds.map((d) => ({ prep: 0, kitchen: 0, unit: 'dona', ...d }))]),
+  clothing: [
+    ["Ko'ylaklar", '👔', [{ name: "Ko'ylak klassik", size: 'M', color: 'Oq', price: 180000, cost: 110000, stock: 6, barcode: '4781000000017' },
+      { name: "Ko'ylak klassik", size: 'L', color: 'Oq', price: 180000, cost: 110000, stock: 4, barcode: '4781000000024' }, { name: "Ko'ylak klassik", size: 'L', color: "Ko'k", price: 185000, cost: 112000, stock: 3, barcode: '4781000000031' }]],
+    ['Futbolkalar', '👕', [{ name: 'Futbolka', size: 'S', color: 'Qora', price: 90000, cost: 50000, stock: 10, barcode: '4781000000048' },
+      { name: 'Futbolka', size: 'M', color: 'Qora', price: 90000, cost: 50000, stock: 12, barcode: '4781000000055' }, { name: 'Futbolka', size: 'XL', color: 'Oq', price: 95000, cost: 52000, stock: 5, barcode: '4781000000062' }]],
+    ['Shimlar', '👖', [{ name: 'Jinsi shim', size: '32', color: "Ko'k", price: 260000, cost: 160000, stock: 7, barcode: '4781000000079' },
+      { name: 'Jinsi shim', size: '34', color: "Ko'k", price: 260000, cost: 160000, stock: 5, barcode: '4781000000086' }]],
+  ].map(([c, i, ds]) => [c, i, ds.map((d) => ({ prep: 0, kitchen: 0, unit: 'dona', icon: i, ...d }))]),
+};
+
 // Sample rooms and menu; waiters (if given) are spread over the rooms.
 function seedRoomsAndMenu(db, waiterIds = []) {
-  const addRoom = db.prepare('INSERT INTO rooms (number, name, type, capacity) VALUES (?, ?, ?, ?)');
+  const addRoom = db.prepare('INSERT INTO rooms (number, name, type, capacity, section) VALUES (?, ?, ?, ?, ?)');
   const assign = db.prepare('INSERT INTO room_waiters (room_id, user_id) VALUES (?, ?)');
   const rooms = [
-    ['1', 'Banket 1', 'banket', 20], ['2', 'Banket 2', 'banket', 20], ['3', 'Banket 3', 'banket', 30],
-    ['4', 'VIP xona', 'vip', 12], ['5', 'Supa 1', 'supa', 8], ['6', 'Supa 2', 'supa', 8],
-    ['7', 'Stol 7', 'stol', 4], ['8', 'Stol 8', 'stol', 4],
+    ['1', 'Banket 1', 'banket', 20, '1-qavat'], ['2', 'Banket 2', 'banket', 20, '1-qavat'], ['3', 'Banket 3', 'banket', 30, '2-qavat'],
+    ['4', 'VIP xona', 'vip', 12, '2-qavat'], ['5', 'Supa 1', 'supa', 8, 'Hovli'], ['6', 'Supa 2', 'supa', 8, 'Hovli'],
+    ['7', 'Stol 7', 'stol', 4, '1-qavat'], ['8', 'Stol 8', 'stol', 4, '1-qavat'],
   ];
   rooms.forEach((r, i) => {
     const id = addRoom.run(...r).lastInsertRowid;
     if (waiterIds.length) assign.run(id, waiterIds[Math.floor((i * waiterIds.length) / rooms.length)]);
   });
 
-  const addCat = db.prepare('INSERT INTO categories (name, icon, sort) VALUES (?, ?, ?)');
-  const addDish = db.prepare(
-    'INSERT INTO dishes (category_id, name, price, cost, prep_minutes, unit, needs_kitchen, icon) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  );
   const menu = [
     ['Suyuq taomlar', '🍲', [
       ["Sho'rva", 35000, 14000, 15, '🍲'], ["Mastava", 30000, 11000, 15, '🍲'],
@@ -261,12 +316,7 @@ function seedRoomsAndMenu(db, waiterIds = []) {
       ['Tandir non', 5000, 2500, 0, '🫓', 0], ['Patir non', 8000, 4000, 0, '🫓', 0],
     ]],
   ];
-  menu.forEach(([cat, icon, dishes], i) => {
-    const cid = addCat.run(cat, icon, i).lastInsertRowid;
-    for (const [name, price, cost, prep, dicon, kitchen = 1] of dishes) {
-      addDish.run(cid, name, price, cost, prep, 'porsiya', kitchen, dicon);
-    }
-  });
+  addMenu(db, menu.map(([cat, icon, dishes]) => [cat, icon, dishes.map(([name, price, cost, prep, dicon, kitchen = 1]) => ({ name, price, cost, prep, icon: dicon, kitchen }))]));
 }
 
 /*
@@ -298,7 +348,13 @@ function seed(db, opts = {}) {
     return;
   }
   if (opts.owner) addUser(db, opts.owner.name, opts.owner.username, opts.owner.password, 'owner');
-  if (opts.sample) seedRoomsAndMenu(db);
+  const type = opts.type || 'choyxona';
+  // Fast food and shops take no service charge by default.
+  if (!['choyxona', 'restoran'].includes(type)) db.prepare("UPDATE settings SET value = '0' WHERE key = 'service_pct'").run();
+  if (opts.sample) {
+    if (SAMPLES[type]) addMenu(db, SAMPLES[type]);
+    else seedRoomsAndMenu(db);
+  }
 }
 
 // Columns added after the first release; older databases get them here.
@@ -310,6 +366,19 @@ function migrate(db) {
   // NULL = the default for the role; 1/0 = set by the boss per person.
   if (!cols.includes('perm_print')) db.exec('ALTER TABLE users ADD COLUMN perm_print INTEGER');
   if (!cols.includes('perm_close')) db.exec('ALTER TABLE users ADD COLUMN perm_close INTEGER');
+  const colsOf = (t) => db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name);
+  const addCol = (t, c, def) => { if (!colsOf(t).includes(c)) db.exec(`ALTER TABLE ${t} ADD COLUMN ${c} ${def}`); };
+  // Rooms grouped into sections named by the boss ("1-qavat", "Hovli").
+  addCol('rooms', 'section', "TEXT NOT NULL DEFAULT ''");
+  // Shops: barcode, size and colour of a product.
+  addCol('dishes', 'barcode', "TEXT NOT NULL DEFAULT ''");
+  addCol('dishes', 'size', "TEXT NOT NULL DEFAULT ''");
+  addCol('dishes', 'color', "TEXT NOT NULL DEFAULT ''");
+  addCol('order_items', 'refunded_qty', 'INTEGER NOT NULL DEFAULT 0');
+  // A device the boss chose to keep automatic backups on.
+  addCol('devices', 'backup', 'INTEGER NOT NULL DEFAULT 0');
+  // 'platform' marks a session opened by the site owner from the platform panel.
+  addCol('sessions', 'via', "TEXT NOT NULL DEFAULT ''");
   const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
   if (!orderCols.includes('service_type')) db.exec("ALTER TABLE orders ADD COLUMN service_type TEXT NOT NULL DEFAULT 'percent'");
   if (!orderCols.includes('takeaway')) db.exec('ALTER TABLE orders ADD COLUMN takeaway INTEGER NOT NULL DEFAULT 0');
@@ -344,4 +413,4 @@ function open(file, opts) {
   return db;
 }
 
-module.exports = { open };
+module.exports = { open, SAMPLES };

@@ -2,7 +2,7 @@
 /* Rooms (the cashier's "Kassa" too), takeaway, the order screen with the check on the left, payment, ready dishes. */
 
 const Carts = {}; // context key -> { lines: [{dish_id, name, price, qty, note}], guests, label }
-const UI = { category: 'all', search: '', drawer: false };
+const UI = { category: 'all', search: '', drawer: false, section: store('cp_section') || '' };
 
 function emptyState(ic, text) { return `<div class="empty">${icon(ic, 56)}<div>${text}</div></div>`; }
 
@@ -45,10 +45,17 @@ function takeawayTile(o) {
     <span class="sum">${money(o.total)}</span></button>`;
 }
 
+// Sections ("1-qavat", "Hovli") in the order the boss numbered their rooms.
+function roomSections(rooms) {
+  const out = [];
+  for (const r of rooms) if (r.section && !out.includes(r.section)) out.push(r.section);
+  return out;
+}
+
 Views.rooms = {
-  title: () => (App.user.role === 'cashier' ? t('Kassa') : t('Xonalar')),
-  icon: () => (App.user.role === 'cashier' ? 'wallet' : 'house'),
-  roles: ['owner', 'admin', 'cashier', 'waiter'], refreshOn: ['rooms', 'finance'], badge: 'bills',
+  title: () => (App.biz === 'fastfood' ? t('Buyurtmalar') : App.user.role === 'cashier' ? t('Kassa') : t('Xonalar')),
+  icon: () => (App.biz === 'fastfood' ? 'receipt' : App.user.role === 'cashier' ? 'wallet' : 'house'),
+  roles: ['owner', 'admin', 'cashier', 'waiter'], refreshOn: ['rooms', 'finance'], badge: 'bills', on: () => !isShop(),
   async load() {
     const money = can('owner', 'admin', 'cashier') && moduleOn('finance');
     const [rooms, takeaway, shift] = await Promise.all([GET('/api/rooms'), GET('/api/takeaway'), money ? GET('/api/shifts/current') : null]);
@@ -56,20 +63,29 @@ Views.rooms = {
   },
   render({ rooms, takeaway, shift, money: showShift }) {
     const busy = rooms.filter((r) => r.order).length;
-    return `<div class="page-head"><h1>${esc(this.title())}</h1>
-      <span class="chip">${icon('door-open', 14)} ${busy} / ${rooms.length}</span>
-      ${showShift ? `<button class="btn sm ${shift ? '' : 'primary'}" id="shift">${icon(shift ? 'lock' : 'circle-plus', 16)} ${shift ? t('Smenani yopish') : t('Smenani ochish')}</button>` : ''}</div>
-      <div class="legend"><span><i style="background:var(--green)"></i>${t("Bo'sh")}</span><span><i style="background:var(--orange)"></i>${t('Band')}</span>
-        <span><i style="background:var(--green);box-shadow:0 0 0 3px var(--green-soft)"></i>${t('Taom tayyor')}</span>
-        <span><i style="background:var(--violet)"></i>${t("Hisob so'raldi")}</span><span><i style="background:var(--blue)"></i>${t('Bron')}</span></div>
-      ${rooms.length ? `<div class="floor">${rooms.map(roomTile).join('')}</div>`
-        : emptyState('door-open', App.user.role === 'waiter' ? t('Sizga hali xona biriktirilmagan') : t("Xonalar yo'q. Sozlamalar → Xonalar bo'limida qo'shing"))}
-      <div class="section-title">${icon('shopping-bag', 20)} ${t('Olib ketish')}</div>
+    const sections = roomSections(rooms);
+    const sec = sections.includes(UI.section) ? UI.section : '';
+    const shown = sec ? rooms.filter((r) => r.section === sec) : rooms;
+    const fast = App.biz === 'fastfood';
+    const takeawayHtml = `<div class="section-title">${icon('shopping-bag', 20)} ${fast ? t('Ochiq buyurtmalar') : t('Olib ketish')}</div>
       <div class="floor">${takeaway.orders.map(takeawayTile).join('')}
         <button class="tile add" data-new-takeaway>${icon('circle-plus', 36)}<span>${t('Yangi chek')}</span></button></div>`;
+    const roomsHtml = `${sections.length ? `<div class="sections">
+        <button class="section-chip ${sec ? '' : 'active'}" data-section="">${icon('grid-2x2', 18)} ${t('Hammasi')} <span>${busy}/${rooms.length}</span></button>
+        ${sections.map((x) => { const rs = rooms.filter((r) => r.section === x); return `<button class="section-chip ${sec === x ? 'active' : ''}" data-section="${esc(x)}">${icon('layers', 18)} ${esc(x)} <span>${rs.filter((r) => r.order).length}/${rs.length}</span></button>`; }).join('')}</div>` : ''}
+      ${shown.length ? `<div class="floor">${shown.map(roomTile).join('')}</div>`
+        : fast ? '' : emptyState('door-open', App.user.role === 'waiter' ? t('Sizga hali xona biriktirilmagan') : t("Xonalar yo'q. Sozlamalar → Xonalar bo'limida qo'shing"))}`;
+    return `<div class="page-head"><h1>${esc(this.title())}</h1>
+      ${rooms.length ? `<span class="chip">${icon('door-open', 14)} ${busy} / ${rooms.length}</span>` : ''}
+      ${showShift ? `<button class="btn sm ${shift ? '' : 'primary'}" id="shift">${icon(shift ? 'lock' : 'circle-plus', 16)} ${shift ? t('Smenani yopish') : t('Smenani ochish')}</button>` : ''}</div>
+      ${rooms.length ? `<div class="legend"><span><i class="lg-free"></i>${t("Bo'sh")}</span><span><i class="lg-busy"></i>${t('Band')}</span>
+        <span><i class="lg-ready"></i>${t('Taom tayyor')}</span>
+        <span><i class="lg-bill"></i>${t("Hisob so'raldi")}</span><span><i class="lg-resv"></i>${t('Bron')}</span></div>` : ''}
+      ${fast ? takeawayHtml + (rooms.length ? `<div class="section-title">${icon('utensils', 20)} ${t('Stollar')}</div>${roomsHtml}` : '') : roomsHtml + takeawayHtml}`;
   },
   bind(root, data) {
     root.querySelectorAll('[data-room]').forEach((b) => b.onclick = () => { location.hash = `#/room/${b.dataset.room}`; });
+    root.querySelectorAll('[data-section]').forEach((b) => b.onclick = () => { UI.section = b.dataset.section; store('cp_section', UI.section || null); renderView(data); });
     root.querySelectorAll('[data-order]').forEach((b) => b.onclick = () => { location.hash = `#/order/${b.dataset.order}`; });
     root.querySelector('[data-new-takeaway]').onclick = () => { delete Carts.soboy; location.hash = '#/soboy'; };
     const sh = root.querySelector('#shift');
@@ -167,7 +183,7 @@ function checkPane({ order, room, cart, takeaway }) {
           <span class="sub">${c.note ? `<span>${icon('sticky-note', 13)} ${esc(c.note)}</span>` : ''}<span class="grow"></span>
             <button class="icon-btn ghost" data-note="${idx}" title="${esc(t('Izoh'))}">${icon('sticky-note', 18)}</button>
             <span class="stepper"><button data-dec="${idx}">${icon('minus', 16)}</button><span>${c.qty}</span><button data-inc="${idx}">${icon('plus', 16)}</button></span></span></div>`).join('')}` : ''}
-      ${!items.length && !cart.lines.length ? emptyState('utensils', t("Menyudan taom tanlang")) : ''}
+      ${!items.length && !cart.lines.length ? emptyState('utensils', W("Menyudan taom tanlang")) : ''}
     </div>
     <div class="cp-foot">
       ${order ? `<div class="sum-rows num">
@@ -217,7 +233,7 @@ const OrderView = {
       ${UI.drawer ? '<div class="drawer-back" id="drawer-back"></div>' : ''}
       <section>
         <div class="menu-bar"><button class="btn sm" id="back">${icon('arrow-left', 18)} ${t('Orqaga')}</button>
-          <input type="search" id="dish-search" placeholder="${esc(t('Taom qidirish'))}" value="${esc(UI.search)}">
+          <input type="search" id="dish-search" placeholder="${esc(W('Taom qidirish'))}" value="${esc(UI.search)}">
           ${kitchenOn && menu.load.extra_minutes ? `<span class="chip cooking">${icon('flame', 14)} +${menu.load.extra_minutes} ${t('daq')}</span>` : ''}</div>
         <div class="cats"><button class="cat ${UI.category === 'all' ? 'active' : ''}" data-cat="all">${t('Hammasi')}</button>
           ${cats.map((c) => `<button class="cat ${String(UI.category) === String(c.id) ? 'active' : ''}" data-cat="${c.id}">${esc(c.icon)} ${esc(c.name)}</button>`).join('')}</div>
@@ -378,7 +394,7 @@ function moreActions(d) {
       const all = rooms || await GET('/api/rooms?all=1');
       const free = all.filter((r) => !r.order && r.active);
       openModal({ title: `${icon('arrow-right-left')} ${t("Boshqa xonaga ko'chirish")}`,
-        body: free.length ? `<div class="floor">${free.map((r) => `<button type="button" class="tile free" data-to="${r.id}" style="min-height:100px"><span class="no">${esc(r.number)}</span><span class="nm">${esc(r.name)}</span></button>`).join('')}</div>`
+        body: free.length ? `<div class="floor">${free.map((r) => `<button type="button" class="tile free" data-to="${r.id}" style="min-height:100px"><span class="no">${esc(r.number)}</span><span class="nm">${esc(r.name)}</span>${r.section ? `<span class="small muted">${esc(r.section)}</span>` : ''}</button>`).join('')}</div>`
           : `<p>${t("Bo'sh xona yo'q")}</p>`,
         onMount: (f) => f.querySelectorAll('[data-to]').forEach((x) => x.onclick = async () => {
           try {

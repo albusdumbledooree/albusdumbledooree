@@ -1,6 +1,7 @@
-# FLOWI — restoran va choyxonalar uchun boshqaruv tizimi
+# FLOWI — choyxona, restoran, fast food va do'konlar uchun boshqaruv tizimi
 
 Buyurtma qabul qilish, oshxona ekrani, kassa, kirim-chiqim va kunlik / haftalik / oylik hisobotlar — bitta tizimda.
+Biznes turlari: **choyxona, restoran/kafe, fast food, do'kon (oziq-ovqat), kiyim-kechak** — har biriga ekranlar o'zi moslashadi.
 Telefon, planshet va kompyuterda brauzer orqali ishlaydi (ish stoli va telefonga ilova sifatida o'rnatiladi — PWA).
 Tillar: **o'zbekcha** (asosiy), **русский**, **English**.
 
@@ -12,9 +13,9 @@ Boshliq o'z choyxonasiga xodimlarni o'zi qo'shadi. Har bir choyxonaning ma'lumot
 Platforma manzili faqat sizga ma'lum bo'lsin: serverda `PLATFORM_PATH=/maxfiy-manzil` deb o'rnating
 (standart `/platform`). Choyxona sahifalarida platformaga hech qanday havola yo'q.
 
-1. `https://sayt/platform` ni oching. Birinchi kirish: `superadmin` / `super123` → **darhol parolni o'zgartiring** (🔒 Parol).
-2. **➕ Yangi choyxona**: nomi, kodi (masalan `navruz`), boshliq ismi, login va parol, to'langan muddat, oylik narx.
-   "Namuna menyu va xonalar" belgilansa, choyxona tayyor menyu bilan ochiladi.
+1. `https://sayt/platform` ni oching. Birinchi kirish: `superadmin` / `super123` → **darhol parolni o'zgartiring** (kalit tugmasi).
+2. **Yangi biznes**: biznes turi, nomi, kodi (masalan `navruz`), boshliq ismi, login va parol, to'langan muddat, oylik narx.
+   "Namuna ma'lumotlar" belgilansa, tayyor menyu (yoki do'kon uchun mahsulotlar) bilan ochiladi.
 3. Chiqqan matnni (havola + kod + login + parol) **Nusxa olish** bilan Telegram orqali boshliqqa yuboring.
 4. Boshliq `https://sayt/c/navruz` havolasini ochadi (kod avtomatik to'ladi), kiradi va **Xodimlar** bo'limida
    admin, kassir, ofitsant va oshpazlarni qo'shadi. Xodimlar ham shu havola orqali kiradi.
@@ -23,10 +24,22 @@ Platformadagi boshqa amallar:
 
 | Tugma | Vazifasi |
 |---|---|
+| **Kirish** | Biznesni uning boshlig'i ko'radigan ekran bilan yangi oynada ochish: menyu, xodimlar, xonalar, sozlamalar — hammasini tahrirlash mumkin. Kirish biznesning amallar tarixiga yoziladi |
+| **Tahrirlash** | Nomi, biznes turi, boshliq, telefon, muddat, narx, bo'limlar (paket), oshxona rejimi, yordam kontakti, izoh |
 | **+1 oy** | To'langan muddatni bir oyga uzaytirish (to'lov qabul qilinganda) |
-| 🔑 | Boshliq parolini unutsa — yangi parol berish |
-| ⛔ **Bloklash** | To'lov qilinmasa: barcha xodimlar darhol chiqariladi, kirish yopiladi. Ma'lumotlar o'chmaydi, ✅ bilan qayta ochiladi |
-| 🔗 | Choyxona kirish havolasini nusxalash |
+| ⋮ → Parol | Boshliq parolini unutsa — yangi parol berish |
+| ⋮ → Zaxiradan tiklash | Serverdagi kunlik nusxalardan birini tanlab, biznesni o'sha holatga qaytarish |
+| ⋮ → Bloklash | To'lov qilinmasa: barcha xodimlar darhol chiqariladi, kirish yopiladi. Ma'lumotlar o'chmaydi, qayta faollashtiriladi |
+| ⋮ → Havola | Kirish havolasini nusxalash |
+| Yuqoridagi yordam tugmasi | Hamma bizneslarning ish stolida chiqadigan "To'lov va yordam: @username" qatori. Har biznes uchun alohida ham yozish mumkin |
+
+**Biznes turlari:**
+
+| Turi | Asosiy ekran | Nima o'zgaradi |
+|---|---|---|
+| Choyxona, restoran | Xonalar (bo'limlar/qavatlar bo'yicha) | Ofitsant, oshxona, xizmat haqi, bronlar |
+| Fast food | **Sotuv** + ochiq buyurtmalar | Pul oldindan olinadi, buyurtma raqami chekda katta chiqadi, taom oshxonaga boradi |
+| Do'kon, kiyim-kechak | **Sotuv** (shtrix-kod skaneri) | Oshxona va xonalar yo'q; mahsulot: shtrix-kod, qoldiq, o'lcham/rang (kiyim), "Kirim" (tovar keldi), qaytarish |
 
 **Bo'limlarni yoqish/o'chirish (paketlar).** ✏️ oynasida har bir choyxona uchun bo'limlarni belgilaysiz:
 Stop-list, Hisobotlar, Kirim-chiqim, Ish haqi, Bronlar, Cheklar tarixi, Amallar tarixi.
@@ -88,10 +101,10 @@ Ma'lumotlar `data/` papkasida saqlanadi (zaxira: `npm run backup`). Eski versiya
 
 Choyxona kodi: **`demo`** (havola: `http://localhost:3000/c/demo`).
 
-**Umumiy qurilma** (kassa kompyuteri, planshet): kirish sahifasida "Umumiy qurilma" → kod `demo`, boshliq `ega` / `ega123`.
+**Qurilmani ulash** (kassa kompyuteri, planshet, telefon): kod `demo`, boshliq `ega` / `ega123`.
 Shundan keyin ekranda soat va xodimlar ro'yxati turadi, xodim ismini bosib PIN kiritadi:
 
-| Xodim | PIN (umumiy qurilma) | Login / parol (shaxsiy telefon) |
+| Xodim | PIN | Login / parol (faqat boshliq va admin — qurilma ulash uchun) |
 |---|---|---|
 | Boshliq | `1234` | `ega` / `ega123` |
 | Administrator | `5555` | `admin` / `admin123` |
@@ -113,7 +126,12 @@ Platforma: `http://localhost:3000/platform` — `superadmin` / `super123`.
 - **To'liq ekran** tugmasi bor; ekran o'z-o'zidan o'chib qolmaydi (Android/kompyuter; iPhone — ilova o'rnatilganda).
 - **Avtomatik qulf**: Sozlamalar → Ruxsatlar, N daqiqa hech narsa bosilmasa xodimlar ro'yxatiga qaytadi.
 - PIN 5 marta xato kiritilsa, o'sha xodim shu qurilmada 5 daqiqaga bloklanadi. Ulangan qurilmalar ro'yxati: Sozlamalar → Qurilmalar.
-- Xodim o'z telefonidan "Shaxsiy kirish" bilan login va parol orqali ham kira oladi.
+- Har bir qurilma (kompyuter, planshet, telefon) "Umumiy qurilma" sifatida bir marta ulanadi — alohida shaxsiy kirish yo'q.
+- **Ish stoli foni**: Sozlamalar → Ko'rinish. Standart, **avtomatik rasm** (16 ta ichki rasm, har kuni almashadi, internet shart emas),
+  istalgan **rang** yoki **o'z rasmingiz**. Fon och bo'lsa yozuvlar to'q, to'q bo'lsa oq bo'ladi — doim o'qiladi.
+- **Logotip**: Sozlamalar → Ko'rinish. Ish stoli, chap menyu va chekda chiqadi.
+- Ish stoli pastida platforma egasi yozgan **yordam kontakti** (Telegram username yoki telefon) chiqadi.
+- iPhone'da brauzer to'liq ekranni qo'llamaydi — to'liq ekran tugmasi ilovani bosh ekranga qo'shishni ko'rsatadi.
 
 ## Buyurtma jarayoni
 
@@ -161,6 +179,13 @@ Standart: kassir — ikkalasi bor; ofitsant — chek chiqaradi, yopmaydi. Har bi
 
 ## Moliya va hisobotlar
 
+Hisobot, Kirim-chiqim va Ish haqi asosiy menyuda ko'rinmaydi — ular chap menyuning eng pastidagi xira **"Moliya"** tugmasi ichida
+(telefonda: Sozlamalar → Moliya). Sozlamalar → Ruxsatlar'da boshliq belgilaydi:
+
+- admin va kassir **hisobotni** ko'ra oladimi, **kirim-chiqimni** ko'ra oladimi (standart: admin — ikkalasi, kassir — faqat kirim-chiqim);
+- **moliya paroli**: yoqilsa, Moliya bo'limini ochish uchun parol so'raladi (boshliqdan ham). 15 daqiqa ishlatilmasa yana yopiladi.
+  Kassa (smena ochish/yopish, to'lov) parolsiz ishlayveradi.
+
 - **Hisobot** (soddalashtirilgan): bugun, kecha, hafta, oy, o'tgan oy yoki sana tanlash. Kirim, chiqim, foyda, mehmonlar,
   kunlik/soatlik grafik, to'lov turlari, xarajatlar kategoriyalar bo'yicha, eng ko'p sotilgan taomlar, ofitsantlar. Excel'ga yuklash.
 - **Kirim-chiqim**: xarajatlar (mahsulot, go'sht, ish haqi, ijara, kommunal, gaz...) va qo'shimcha kirimlar; kategoriyalar sozlamalarda o'zgartiriladi.
@@ -173,11 +198,22 @@ Sozlamalar → Muassasa: **foizda** (masalan 10% taomlar summasidan) yoki **odam
 Faqat shu yerda o'zgaradi — to'lov oynasida o'zgartirib bo'lmaydi. Chekda "Xizmat haqi (10 kishi × 5 000)" va
 **"10 kishi — har biriga: 25 000"** qatori chiqadi. Olib ketishda xizmat haqi olinmaydi.
 
-## Zaxira nusxa (kompyuterda)
+## Zaxira nusxa — ma'lumot yo'qolmasligi uchun
 
-Yopilgan har bir chek kassa kompyuterining xotirasiga (brauzer IndexedDB) ham avtomatik saqlanadi — server yoki internet
-ishlamay qolsa ham Sozlamalar → Zaxira'dan ko'rib, Excel'ga yuklab olish mumkin. Kassa smenasi yopilganda kunlik cheklar
-Excel fayl bo'lib kompyuterga avtomatik tushadi.
+Ma'lumotlar to'rt joyda saqlanadi:
+
+1. **Serverda har kuni** avtomatik (server o'zi qiladi, oxirgi 30 kun): `data/backups/<sana>/`.
+   `BACKUP_COPY_DIR=/mnt/ikkinchi-disk` — har nusxa shu papkaga ham ko'chiriladi; `BACKUP_HOOK="rclone copy data/backups remote:flowi"` —
+   har nusxadan keyin shu buyruq bajariladi (bulutga yoki boshqa serverga yuborish uchun).
+2. **Kassa kompyuteridagi papkada** (Sozlamalar → Zaxira → Papkani tanlash; Chrome yoki Edge): "FLOWI zaxira" papkasi o'zi ochiladi
+   va har 3 soatda butun baza bitta `.db` fayl bo'lib yoziladi (oxirgi 60 ta saqlanadi). Brauzer qayta ochilganda ish stolida
+   "Zaxira papkasiga ruxsat bering" tugmasi chiqishi mumkin — bir bosish kifoya.
+3. **Kassa brauzerida** har bir yopilgan chek (internet uzilsa ham ko'rish va Excel'ga yuklash mumkin). Smena yopilganda kunlik cheklar Excel bo'lib tushadi.
+4. **Qo'lda**: Sozlamalar → Zaxira → "Zaxirani yuklab olish".
+
+**Tiklash**: boshliq Sozlamalar → Zaxira → "Zaxiradan tiklash" da `.db` faylni tanlaydi (yoki papkadagi nusxalardan biri) —
+hamma narsa (menyu, xonalar, xodimlar, cheklar, kirim-chiqim) o'sha holatga qaytadi. Sayt egasi buni platformadan ham qila oladi.
+Tiklashdan oldin hozirgi holat har doim `data/backups/pre-restore/` ga saqlanadi, shuning uchun tiklashni ham orqaga qaytarish mumkin.
 
 ## Cheklar tarixi
 
@@ -248,12 +284,12 @@ Tavsiya: kichik VPS server (1 CPU, 1 GB RAM, Ubuntu 24.04 — oyiga ~5$) + domen
    ```
 3. `https://domeningiz/platform` ni oching, `superadmin` / `super123` bilan kiring va **darhol parolni o'zgartiring**.
    Xizmat `SEED_DEMO=0` bilan ishlaydi — sinov choyxonasi yaratilmaydi. Keyin "Yangi choyxona" bilan mijozlarni qo'shing.
-4. Kunlik zaxira nusxa — platforma va barcha choyxonalar bazasi (har kecha 03:00, oxirgi 30 kun saqlanadi):
-   ```bash
-   echo '0 3 * * * cd /opt/choyxona && node --no-warnings scripts/backup.js' | sudo -u choyxona crontab -
-   ```
-   Nusxalar `/opt/choyxona/data/backups/` da. Vaqti-vaqti bilan boshqa joyga ham ko'chirib qo'ying.
-5. Yangilash: `cd /opt/choyxona && sudo -u choyxona git pull && sudo systemctl restart choyxona`.
+4. Kunlik zaxira nusxani server o'zi oladi (`data/backups/`, oxirgi 30 kun). Boshqa joyga ham nusxa uchun
+   xizmat faylida `BACKUP_COPY_DIR` yoki `BACKUP_HOOK` ni yozing (yuqoridagi "Zaxira nusxa" bo'limi).
+5. **Yangilash — bitta buyruq**: `sudo /opt/choyxona/deploy/update.sh`.
+   U zaxira oladi → yangi versiyani yuklaydi → testlarni o'tkazadi → xizmatni qayta yoqadi → sayt javob berayotganini tekshiradi.
+   Biror qadam xato bo'lsa, o'zi eski versiyaga qaytadi. Ochiq kompyuter va telefonlar yangi versiyani o'zi yuklaydi
+   (yuborilmagan buyurtma yoki ochiq oyna bo'lsa — kutib turadi, hech narsa yo'qolmaydi).
 
 **Faqat choyxona ichida ishlatish** (internetsiz): bitta kompyuterda `npm start` (yoki `start.bat`), so'ng `/platform` da choyxona yarating, xodimlar shu Wi-Fi orqali
 `http://<kompyuter-IP>:3000` ga kiradi. Bu holda ega uydan hisobotni ko'ra olmaydi va bildirishnomalar (HTTPS talab qiladi) ishlamaydi.
@@ -272,12 +308,18 @@ server/
   db.js        Choyxona bazasi sxemasi va boshlang'ich ma'lumotlar
   events.js    Server-Sent Events (jonli yangilanishlar, har choyxona alohida)
   util.js      Parol xeshlash (scrypt), kiritishni tekshirish
+  backup.js    Zaxira: kunlik nusxa, bitta biznes nusxasi, tiklash uchun ro'yxat
+deploy/update.sh  Bitta buyruq bilan yangilash (zaxira, test, avtomatik orqaga qaytish)
 public/
   js/i18n.js, i18n-dict.js   Tarjima (o'zbek manba, rus/ingliz lug'at)
   js/icons.js                Lucide ikonkalari (ISC litsenziya), internetsiz ishlashi uchun ichiga joylangan
-  js/core.js                 API, jonli xabarlar, ovoz, chop etish, zaxira nusxa
-  js/lock.js                 Qurilmani ulash, xodimlar ro'yxati va PIN
-  js/order.js                Xonalar/Kassa, olib ketish, buyurtma va chek oynasi, to'lov
+  js/core.js                 API, jonli xabarlar, ovoz, chop etish, ish stoli foni, yangi versiya
+  js/folder.js               Kompyuterdagi papkaga avtomatik zaxira, zaxiradan tiklash
+  js/lock.js                 Qurilmani ulash, ish stoli (xodimlar ro'yxati, PIN)
+  js/order.js                Xonalar (bo'limlar), olib ketish, buyurtma va chek oynasi, to'lov
+  js/pos.js                  Sotuv: do'kon va fast food kassasi, shtrix-kod
+  bg/                        Ish stoli uchun 16 ta ichki rasm (SVG)
+  brand/                     FLOWI logotipi (SVG va PNG)
   js/kitchen.js              Oshxona ekrani, stop-list
   js/manage.js               Cheklar tarixi, hisobot, kirim-chiqim, ish haqi, bronlar, menyu, xodimlar, sozlamalar
   js/app.js                  Menyu, yo'naltirish, avtomatik qulf

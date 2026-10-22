@@ -10,8 +10,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 const { open } = require('./db');
-const { createApi, MODULES } = require('./api');
+const { createApi, MODULES, BUSINESS_TYPES, SHOP_TYPES } = require('./api');
 const { createHub } = require('./events');
+const { snapshot, listTenantBackups, stampNow } = require('./backup');
 const { hashPassword, verifyPassword, newToken, HttpError, str, int } = require('./util');
 
 const SCHEMA = `
@@ -43,6 +44,10 @@ CREATE TABLE IF NOT EXISTS tenants (
   kitchen_mode TEXT NOT NULL DEFAULT 'full',
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS platform_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 `;
 const DAY = 24 * 3600 * 1000;
 const CODE_RE = /^[a-z0-9][a-z0-9-]{1,30}$/;
@@ -62,6 +67,9 @@ function createPlatform(dataDir) {
       pdb.prepare("UPDATE tenants SET kitchen_mode = 'off', disabled_modules = ? WHERE id = ?").run(JSON.stringify(rest), t.id);
     }
   }
+  // Business type picked at creation; support contact shown on that business's desktop (empty = the platform default).
+  if (!tcols.includes('business_type')) pdb.exec("ALTER TABLE tenants ADD COLUMN business_type TEXT NOT NULL DEFAULT 'choyxona'");
+  if (!tcols.includes('support')) pdb.exec("ALTER TABLE tenants ADD COLUMN support TEXT NOT NULL DEFAULT ''");
   const q = (sql) => pdb.prepare(sql);
   const now = () => Date.now();
 
@@ -92,10 +100,11 @@ function createPlatform(dataDir) {
     if (ctx) return ctx;
     const row = tenantRow(id);
     if (!row) return null;
-    const db = open(path.join(dataDir, row.file));
+    const file = path.join(dataDir, row.file);
+    const db = open(file);
     const hub = createHub();
-    ctx = { id, db, hub, row };
-    ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row });
+    ctx = { id, db, hub, row, file };
+    ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row, file });
     contexts.set(id, ctx);
     return ctx;
   }
@@ -119,6 +128,41 @@ function createPlatform(dataDir) {
     if (ctx.row.status !== 'active') {
       throw new HttpError(403, "Bu choyxona vaqtincha bloklangan. Platforma administratoriga murojaat qiling");
     }
+  }
+
+  // ---------- Platform settings: the support contact every desktop shows ----------
+  function pget(key, def = '') { const r = q('SELECT value FROM platform_settings WHERE key = ?').get(key); return r ? r.value : def; }
+  function pset(key, value) { q('INSERT INTO platform_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value); }
+
+  function supportInput(v) {
+    const o = v && typeof v === 'object' ? v : {};
+    return { text: str(o.text, 'Yordam matni', { max: 120 }), link: str(o.link, 'Yordam havolasi', { max: 200 }) };
+  }
+  // "@flowi_support" → https://t.me/flowi_support; a phone number → tel:.
+  function supportLink(text, link) {
+    if (link) return /^(https?:|tel:|mailto:)/i.test(link) ? link : null;
+    const m = /@([A-Za-z0-9_]{4,40})/.exec(text || '');
+    if (m) return `https://t.me/${m[1]}`;
+    const ph = /\+?\d[\d\s-]{7,}\d/.exec(text || '');
+    return ph ? `tel:${ph[0].replace(/[\s-]/g, '')}` : null;
+  }
+  function supportFor(row) {
+    let own = {};
+    try { own = row && row.support ? JSON.parse(row.support) : {}; } catch { own = {}; }
+    const text = own.text || pget('support_text');
+    const link = own.text ? own.link : pget('support_link');
+    return text ? { text, link: supportLink(text, link) } : null;
+  }
+
+  function getPlatformSettings() {
+    return { support_text: pget('support_text'), support_link: pget('support_link') };
+  }
+  function savePlatformSettings({ body }) {
+    const s = supportInput({ text: body.support_text, link: body.support_link });
+    pset('support_text', s.text);
+    pset('support_link', s.link);
+    for (const c of contexts.values()) c.hub.publish('settings');
+    return getPlatformSettings();
   }
 
   // ---------- Platform admin API ----------
@@ -176,6 +220,21 @@ function createPlatform(dataDir) {
     }
   }
 
+  function parseSupport(t) {
+    try { return t.support ? JSON.parse(t.support) : { text: '', link: '' }; } catch { return { text: '', link: '' }; }
+  }
+
+  function typeInput(v) {
+    if (!BUSINESS_TYPES[v]) throw new HttpError(400, "Biznes turi noto'g'ri");
+    return v;
+  }
+  // Sensible defaults per business type: shops have no kitchen and no reservations.
+  function typeDefaults(type) {
+    if (SHOP_TYPES.includes(type)) return { kitchen_mode: 'off', disabled: ['reservations'] };
+    if (type === 'fastfood') return { kitchen_mode: 'notify', disabled: ['reservations'] };
+    return { kitchen_mode: 'full', disabled: [] };
+  }
+
   function parseModules(t) {
     try { return JSON.parse(t.disabled_modules || '[]'); } catch { return []; }
   }
@@ -193,7 +252,7 @@ function createPlatform(dataDir) {
   }
 
   function listTenants() {
-    return q('SELECT * FROM tenants ORDER BY id DESC').all().map((t) => ({ ...t, disabled_modules: parseModules(t), ...stats(t) }));
+    return q('SELECT * FROM tenants ORDER BY id DESC').all().map((t) => ({ ...t, disabled_modules: parseModules(t), support: parseSupport(t), ...stats(t) }));
   }
 
   function createTenant({ body }) {
@@ -207,16 +266,19 @@ function createPlatform(dataDir) {
       password: str(body.owner_password, 'Boshliq paroli', { required: true }),
     };
     if (owner.password.length < 6) throw new HttpError(400, "Parol kamida 6 ta belgi bo'lsin");
+    const type = body.business_type !== undefined ? typeInput(body.business_type) : 'choyxona';
+    const defs = typeDefaults(type);
     const file = `tenants/${code}.db`;
     if (fs.existsSync(path.join(dataDir, file))) throw new HttpError(409, 'Bu kod uchun fayl allaqachon bor');
-    open(path.join(dataDir, file), { name, owner, sample: !!body.sample }).close();
-    const disabled = body.disabled_modules !== undefined ? modulesInput(body.disabled_modules) : '[]';
-    const kitchenMode = body.kitchen_mode !== undefined ? kitchenModeInput(body.kitchen_mode) : 'full';
-    const id = q(`INSERT INTO tenants (code, name, contact_name, phone, file, paid_until, monthly_fee, notes, created_at, disabled_modules, kitchen_mode)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    const disabled = body.disabled_modules !== undefined ? modulesInput(body.disabled_modules) : JSON.stringify(defs.disabled);
+    const kitchenMode = body.kitchen_mode !== undefined ? kitchenModeInput(body.kitchen_mode) : defs.kitchen_mode;
+    const support = JSON.stringify(supportInput(body.support));
+    open(path.join(dataDir, file), { name, owner, sample: !!body.sample, type }).close();
+    const id = q(`INSERT INTO tenants (code, name, contact_name, phone, file, paid_until, monthly_fee, notes, created_at, disabled_modules, kitchen_mode, business_type, support)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       code, name, owner.name, str(body.phone, 'Telefon', { max: 30 }), file,
       body.paid_until ? int(body.paid_until, "To'lov muddati", { min: 1, max: 8.64e15 }) : null,
-      int(body.monthly_fee, 'Oylik narx'), str(body.notes, 'Izoh', { max: 500 }), now(), disabled, kitchenMode
+      int(body.monthly_fee, 'Oylik narx'), str(body.notes, 'Izoh', { max: 500 }), now(), disabled, kitchenMode, type, support
     ).lastInsertRowid;
     return tenantRow(id);
   }
@@ -226,7 +288,8 @@ function createPlatform(dataDir) {
     if (!t) throw new HttpError(404, 'Choyxona topilmadi');
     const status = body.status !== undefined ? str(body.status, 'Holat') : t.status;
     if (!['active', 'blocked'].includes(status)) throw new HttpError(400, "Holat noto'g'ri");
-    q('UPDATE tenants SET name = ?, contact_name = ?, phone = ?, status = ?, paid_until = ?, monthly_fee = ?, notes = ?, disabled_modules = ?, kitchen_mode = ? WHERE id = ?').run(
+    q(`UPDATE tenants SET name = ?, contact_name = ?, phone = ?, status = ?, paid_until = ?, monthly_fee = ?, notes = ?, disabled_modules = ?, kitchen_mode = ?,
+      business_type = ?, support = ? WHERE id = ?`).run(
       body.name !== undefined ? str(body.name, 'Nomi', { required: true, max: 80 }) : t.name,
       body.contact_name !== undefined ? str(body.contact_name, 'Boshliq', { max: 80 }) : t.contact_name,
       body.phone !== undefined ? str(body.phone, 'Telefon', { max: 30 }) : t.phone,
@@ -236,6 +299,8 @@ function createPlatform(dataDir) {
       body.notes !== undefined ? str(body.notes, 'Izoh', { max: 500 }) : t.notes,
       body.disabled_modules !== undefined ? modulesInput(body.disabled_modules) : t.disabled_modules,
       body.kitchen_mode !== undefined ? kitchenModeInput(body.kitchen_mode) : t.kitchen_mode,
+      body.business_type !== undefined ? typeInput(body.business_type) : t.business_type,
+      body.support !== undefined ? JSON.stringify(supportInput(body.support)) : t.support,
       t.id
     );
     refresh(t.id);
@@ -269,6 +334,74 @@ function createPlatform(dataDir) {
     return { username: owner.username };
   }
 
+  // The site owner opens a business exactly as its boss sees it (written to that business's history).
+  function impersonate({ params, admin }) {
+    const ctx = context(params.id);
+    if (!ctx) throw new HttpError(404, 'Choyxona topilmadi');
+    const owner = ctx.db.prepare("SELECT * FROM users WHERE role = 'owner' AND active = 1 ORDER BY id LIMIT 1").get();
+    if (!owner) throw new HttpError(404, "Faol boshliq yo'q. Avval boshliq parolini tiklang");
+    const r = ctx.api.startSession(owner, 'platform_login');
+    ctx.api.audit(owner, 'platform_note', `Platforma: ${admin.name}`);
+    return { token: r.token, code: ctx.row.code };
+  }
+
+  function backupsOf({ params }) {
+    const t = tenantRow(params.id);
+    if (!t) throw new HttpError(404, 'Choyxona topilmadi');
+    return listTenantBackups(dataDir, t.file).map(({ stamp, kind, size }) => ({ stamp, kind, size }));
+  }
+
+  /*
+   * Replaces a business's database with a backup (a file uploaded by its boss, or a dated server copy).
+   * The current file is saved first under backups/pre-restore, so a restore can itself be undone.
+   * Devices and sessions of today stay connected.
+   */
+  function restoreTenant(id, srcFile) {
+    const ctx = context(id);
+    if (!ctx) throw new HttpError(404, 'Choyxona topilmadi');
+    let check;
+    try {
+      check = new DatabaseSync(srcFile, { readOnly: true });
+      const tables = check.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name);
+      for (const tbl of ['users', 'orders', 'order_items', 'settings', 'dishes']) {
+        if (!tables.includes(tbl)) throw new HttpError(400, "Bu fayl FLOWI zaxirasi emas");
+      }
+      if (!check.prepare("SELECT 1 FROM users WHERE role = 'owner' AND active = 1").get()) throw new HttpError(400, 'Zaxirada faol boshliq yo\'q');
+    } catch (e) {
+      if (e instanceof HttpError) throw e;
+      throw new HttpError(400, "Fayl o'qilmadi. Bu FLOWI zaxira fayli (.db) emas");
+    } finally {
+      if (check) check.close();
+    }
+    const keep = path.join(dataDir, 'backups', 'pre-restore', stampNow(), ctx.row.file);
+    snapshot(ctx.file, keep);
+    const devices = ctx.db.prepare('SELECT * FROM devices').all();
+    const sessions = ctx.db.prepare('SELECT * FROM sessions').all();
+    ctx.hub.disconnectUser();
+    ctx.db.close();
+    contexts.delete(id);
+    for (const ext of ['', '-wal', '-shm']) fs.rmSync(ctx.file + ext, { force: true });
+    fs.copyFileSync(srcFile, ctx.file);
+    const fresh = context(id);
+    const insDev = fresh.db.prepare('INSERT OR IGNORE INTO devices (token, name, created_by, created_at, last_seen, backup) VALUES (?, ?, NULL, ?, ?, ?)');
+    for (const d of devices) insDev.run(d.token, d.name, d.created_at, d.last_seen, d.backup || 0);
+    const insSes = fresh.db.prepare('INSERT OR IGNORE INTO sessions (token, user_id, created_at, via) SELECT ?, id, ?, ? FROM users WHERE id = ? AND active = 1');
+    for (const x of sessions) insSes.run(x.token, x.created_at, x.via || '', x.user_id);
+    fresh.api.audit(null, 'backup_restore', path.basename(keep));
+    return { ok: true, saved_as: path.relative(dataDir, keep) };
+  }
+
+  function restoreFromServer({ params, body }) {
+    const t = tenantRow(params.id);
+    if (!t) throw new HttpError(404, 'Choyxona topilmadi');
+    const b = listTenantBackups(dataDir, t.file).find((x) => x.stamp === body.stamp && x.kind === (body.kind || 'daily'));
+    if (!b) throw new HttpError(404, 'Zaxira topilmadi');
+    // Copy first: the pre-restore snapshot of this very restore must not overwrite the source.
+    const tmp = path.join(dataDir, `restore-${now()}.db`);
+    fs.copyFileSync(b.file, tmp);
+    try { return restoreTenant(t.id, tmp); } finally { fs.rmSync(tmp, { force: true }); }
+  }
+
   const routes = [
     ['POST', '/api/platform/login', false, login],
     ['POST', '/api/platform/logout', true, ({ token }) => { q('DELETE FROM admin_sessions WHERE token = ?').run(token); return { ok: true }; }],
@@ -279,6 +412,12 @@ function createPlatform(dataDir) {
     ['POST', '/api/platform/tenants', true, createTenant],
     ['PUT', '/api/platform/tenants/:id', true, updateTenant],
     ['POST', '/api/platform/tenants/:id/reset-owner', true, resetOwner],
+    ['POST', '/api/platform/tenants/:id/impersonate', true, impersonate],
+    ['GET', '/api/platform/tenants/:id/backups', true, backupsOf],
+    ['POST', '/api/platform/tenants/:id/restore', true, restoreFromServer],
+    ['GET', '/api/platform/settings', true, getPlatformSettings],
+    ['PUT', '/api/platform/settings', true, savePlatformSettings],
+    ['GET', '/api/platform/types', true, () => BUSINESS_TYPES],
   ].map(([method, pattern, auth, handler]) => ({
     method, auth, handler, re: new RegExp('^' + pattern.replace(':id', '(\\d+)') + '$'),
   }));
@@ -301,7 +440,7 @@ function createPlatform(dataDir) {
     pdb.close();
   }
 
-  return { handle, byCode, byToken, assertActive, close };
+  return { handle, byCode, byToken, assertActive, close, supportFor, restoreTenant };
 }
 
 module.exports = { createPlatform };

@@ -1,14 +1,18 @@
 'use strict';
 /* App shell: navigation, routing, live reactions (voice, banners, badges), auto-lock, boot. */
 
-const NAV_ORDER = {
-  owner: ['rooms', 'kitchen', 'history', 'reports', 'finance', 'payroll', 'reservations', 'menuadmin', 'staff', 'settings'],
-  admin: ['rooms', 'kitchen', 'history', 'reports', 'finance', 'reservations', 'menuadmin', 'staff', 'settings'],
-  cashier: ['rooms', 'history', 'reports', 'finance', 'reservations', 'stoplist', 'settings'],
-  waiter: ['rooms', 'ready', 'settings'],
-  chef: ['kitchen', 'stoplist', 'settings'],
-};
-const CHILD_OF = { room: 'rooms', order: 'rooms', soboy: 'rooms' };
+// Money pages (reports, cash book, payroll) are not in the main list: they sit behind one quiet "Moliya" entry.
+function navOrder(role) {
+  const home = isShop() ? ['pos'] : App.biz === 'fastfood' ? ['pos', 'rooms'] : ['rooms'];
+  return {
+    owner: [...home, 'kitchen', 'history', 'reservations', 'menuadmin', 'staff', 'settings', 'money'],
+    admin: [...home, 'kitchen', 'history', 'reservations', 'menuadmin', 'staff', 'settings', 'money'],
+    cashier: [...home, 'history', 'reservations', 'stoplist', 'settings', 'money'],
+    waiter: [...home, 'ready', 'settings'],
+    chef: ['kitchen', 'stoplist', 'settings'],
+  }[role];
+}
+const CHILD_OF = { room: 'rooms', order: 'rooms', soboy: 'rooms', reports: 'money', finance: 'money', payroll: 'money' };
 let currentView = null;
 let currentParams = [];
 let currentData = null;
@@ -17,10 +21,11 @@ let loadSeq = 0;
 function viewOn(name) {
   const v = Views[name];
   if (!v || v.public || !v.roles.includes(App.user.role)) return false;
+  if (v.on && !v.on()) return false;
   if (v.module === 'kitchen') return App.kitchenMode !== 'off';
   return moduleOn(v.module);
 }
-function navKeys() { return NAV_ORDER[App.user.role].filter(viewOn); }
+function navKeys() { return navOrder(App.user.role).filter(viewOn); }
 function homeRoute() { return `#/${navKeys()[0]}`; }
 
 function applyTheme() {
@@ -39,22 +44,26 @@ function navHtml() {
   return navKeys().map((k) => {
     const v = Views[k];
     const b = v.badge && App.badges[v.badge] ? `<span class="badge">${App.badges[v.badge]}</span>` : '';
-    return `<a href="#/${k}" class="nav-item ${active === k ? 'active' : ''}">${icon(v.icon(), 24)}<span>${esc(v.title())}</span>${b}</a>`;
+    return `<a href="#/${k}" class="nav-item ${k === 'money' ? 'nav-quiet' : ''} ${active === k ? 'active' : ''}">${icon(v.icon(), 24)}<span>${esc(v.title())}</span>${b}</a>`;
   }).join('');
+}
+function railLogo() {
+  return `<div class="logo">${App.info && App.info.logo ? `<img src="${esc(App.info.logo)}" alt="">` : '<img src="/icon.svg" alt="">'}</div>`;
 }
 
 function shellHtml() {
   return `<div class="shell">
-    <aside class="rail"><div class="logo"><img src="/icon.svg" alt=""></div>${navHtml()}</aside>
+    <aside class="rail">${railLogo()}${navHtml()}</aside>
     <div class="main">
       <header class="topbar">
         <div class="title grow" id="top-title"></div>
         <span class="conn" title=""></span>
         <span class="clock hide-sm" data-clock>${fmtTime(Date.now())}</span>
         <span class="me-chip hide-sm"><span class="avatar ${App.user.role}">${esc(initials(App.user.name))}</span>${esc(App.user.name)}</span>
-        ${Screen.canFullscreen() ? `<button class="icon-btn" id="top-full" title="${esc(t("To'liq ekran"))}">${icon('maximize')}</button>` : ''}
+        ${Screen.standalone() && !Screen.canFullscreen() ? '' : Screen.button('top-full')}
         <button class="icon-btn" id="top-exit" title="${esc(t('Chiqish'))}">${icon(App.device ? 'lock' : 'log-out')}</button>
       </header>
+      ${App.platformSession ? `<div class="notice blue" style="margin:12px 20px 0">${icon('shield-check', 18)} ${t('Platforma orqali boshliq sifatida kirdingiz. Amallar tarixga yoziladi.')}</div>` : ''}
       ${subscriptionBanner()}
       <div class="content" id="view"></div>
     </div>
@@ -73,7 +82,7 @@ function subscriptionBanner() {
     : t('Obuna muddati {0} kundan keyin ({1}) tugaydi.', days, fmtDate(until))}</div>`;
 }
 
-function updateNav() { document.querySelectorAll('.rail, .tabbar').forEach((n) => { n.innerHTML = (n.classList.contains('rail') ? '<div class="logo"><img src="/icon.svg" alt=""></div>' : '') + navHtml(); }); }
+function updateNav() { document.querySelectorAll('.rail, .tabbar').forEach((n) => { n.innerHTML = (n.classList.contains('rail') ? railLogo() : '') + navHtml(); }); }
 
 async function render() {
   applyTheme();
@@ -96,7 +105,7 @@ async function render() {
     return;
   }
   const navName = CHILD_OF[name] || name;
-  if (!Views[name] || !viewOn(navName)) { location.hash = homeRoute(); return; }
+  if (!Views[name] || !viewOn(navName) || !viewOn(name)) { location.hash = homeRoute(); return; }
   const view = Views[name];
   if (!document.getElementById('view')) {
     app.innerHTML = shellHtml();
@@ -135,8 +144,27 @@ async function refreshView(showLoading = false) {
     renderView(data);
   } catch (e) {
     if (seq !== loadSeq) return;
+    if (e.status === 423) return financeLockScreen(el);
     el.innerHTML = emptyState('triangle-alert', esc(e.message));
   }
+}
+
+// The boss chose to protect money pages with a password: ask for it inside the page.
+function financeLockScreen(el) {
+  el.innerHTML = `<form class="card finance-lock" id="fin-unlock">${icon('lock', 40)}<h2>${t("Moliya bo'limi")}</h2>
+    <p class="muted">${t('Davom etish uchun moliya parolini kiriting')}</p>
+    <input type="password" name="code" autocomplete="off" required>
+    <button class="btn primary lg block">${icon('lock-open', 20)} ${t('Ochish')}</button></form>`;
+  const f = el.querySelector('#fin-unlock');
+  if (!('ontouchstart' in window)) f.code.focus();
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const r = await POST('/api/finance/unlock', { code: f.code.value });
+      App.financeKey = r.finance_key;
+      refreshView(true);
+    } catch (err) { f.code.value = ''; toastError(err); }
+  };
 }
 
 // Re-render the current view, keeping focus and caret in the input being typed in.
@@ -177,6 +205,10 @@ async function afterLogin() {
   App.tenant = me.tenant;
   App.disabled = me.disabled || [];
   App.kitchenMode = me.kitchen_mode || 'full';
+  App.biz = me.business_type || 'choyxona';
+  App.money = me.money || {};
+  App.platformSession = !!me.platform_session;
+  if (!App.info || App.info.code !== me.tenant.code) await loadInfo(me.tenant.code);
   document.getElementById('app').innerHTML = '';
   Live.start();
   refreshBadges();
@@ -206,9 +238,11 @@ Live.on('*', (type) => {
 Live.on('settings', async () => {
   try {
     const me = await GET('/api/me');
-    const changed = JSON.stringify(me.disabled) !== JSON.stringify(App.disabled) || me.kitchen_mode !== App.kitchenMode;
+    const changed = JSON.stringify([me.disabled, me.kitchen_mode, me.business_type, me.money]) !== JSON.stringify([App.disabled, App.kitchenMode, App.biz, App.money]);
     App.settings = me.settings; App.disabled = me.disabled || []; App.kitchenMode = me.kitchen_mode; App.user = me.user;
-    if (changed) { updateNav(); render(); }
+    App.biz = me.business_type || 'choyxona'; App.money = me.money || {};
+    await loadInfo(me.tenant.code);
+    if (changed) { document.getElementById('app').innerHTML = ''; render(); } else updateNav();
   } catch { /* ignore */ }
 });
 Live.on('item_ready', (d) => {
@@ -269,7 +303,7 @@ function renderReadyBanner() {
 }
 
 // ---------- Boot ----------
-window.addEventListener('hashchange', render);
+window.addEventListener('hashchange', () => { if (App.user) closeModal(); render(); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && App.user) { refreshView(); refreshBadges(); } });
 
 (async function boot() {
@@ -281,6 +315,9 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && Ap
   App.device = store('cp_device');
   if (App.device && m && App.device.code !== m[1].toLowerCase()) { App.device = null; store('cp_device', null); }
   App.token = store('cp_token');
+  // Opened from the platform panel ("Boshliq sifatida kirish"): the session key comes in the link.
+  const imp = /^#\/imp\/([A-Za-z0-9_]+)$/.exec(location.hash);
+  if (imp) { App.token = imp[1]; store('cp_token', App.token); history.replaceState(null, '', location.pathname); }
   if (App.token) {
     try { await afterLogin(); } catch { App.token = null; store('cp_token', null); }
   }
@@ -289,5 +326,6 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && Ap
     if (code) await loadInfo(code);
   }
   if (App.user && (!location.hash || ['#/login', '#/setup', '#/lock'].includes(location.hash))) location.hash = homeRoute();
+  if (App.device) FolderBackup.run();
   render();
 })();

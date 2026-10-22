@@ -1,6 +1,10 @@
 'use strict';
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { hashPassword, verifyPassword, newToken, HttpError, str, int } = require('./util');
 const { createPayroll } = require('./payroll');
+const { snapshot } = require('./backup');
 
 const ROLES = ['owner', 'admin', 'cashier', 'waiter', 'chef'];
 const MANAGERS = ['owner', 'admin'];
@@ -9,6 +13,10 @@ const STOPLIST = ['owner', 'admin', 'cashier', 'chef'];
 const KITCHEN = ['owner', 'admin', 'chef'];
 const ROLE_NAMES = { owner: 'Boshliq', admin: 'Admin', cashier: 'Kassir', waiter: 'Ofitsant', chef: 'Oshpaz' };
 const METHODS = ['cash', 'card', 'transfer'];
+// What the platform owner picks when creating a business; the screens adapt to it.
+const BUSINESS_TYPES = { choyxona: 'Choyxona', restoran: 'Restoran / kafe', fastfood: 'Fast food', market: "Do'kon (oziq-ovqat)", clothing: 'Kiyim-kechak' };
+const SHOP_TYPES = ['market', 'clothing'];
+const IMAGE_TYPES = { 'image/jpeg': 1, 'image/png': 1, 'image/webp': 1 };
 const MIN = 60_000;
 // Sections the platform owner can switch off per choyxona (e.g. for cheaper plans).
 const MODULES = {
@@ -33,8 +41,8 @@ function routeModule(pattern) {
 }
 
 // opts.hub: live-event hub of this choyxona; opts.tokenPrefix marks which choyxona a session token belongs to;
-// opts.tenant(): the choyxona's platform record (code, name, paid_until).
-function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
+// opts.tenant(): the choyxona's platform record (code, name, paid_until); opts.file: its database file.
+function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null } = {}) {
   const events = hub;
   // Shared devices (the staff-list screen) get tokens of their own: "d<choyxona>_…".
   const devicePrefix = tokenPrefix.replace(/^t/, 'd');
@@ -71,6 +79,12 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     out.has_cancel_code = !!out.cancel_code_hash;
     delete out.cancel_code_hash;
     out.auto_lock_minutes = Number(out.auto_lock_minutes) || 0;
+    try { out.lock_bg = JSON.parse(out.lock_bg || '{}'); } catch { out.lock_bg = {}; }
+    if (!out.lock_bg.mode) out.lock_bg.mode = 'default';
+    out.logo = out.logo ? Number(out.logo) : null;
+    for (const k of ['perm_admin_reports', 'perm_admin_finance', 'perm_cashier_reports', 'perm_cashier_finance', 'finance_lock']) out[k] = out[k] === '1';
+    out.has_finance_code = !!out.finance_code_hash;
+    delete out.finance_code_hash;
     out.expense_categories = JSON.parse(out.expense_categories || '[]');
     out.income_categories = JSON.parse(out.income_categories || '[]');
     return out;
@@ -132,7 +146,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
 
   function startSession(user, how) {
     const token = tokenPrefix + newToken();
-    q('INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)').run(token, user.id, now());
+    q('INSERT INTO sessions (token, user_id, created_at, via) VALUES (?, ?, ?, ?)').run(token, user.id, now(), how === 'platform_login' ? 'platform' : '');
     audit(user, how);
     return { token, user: publicUser(user) };
   }
@@ -219,9 +233,25 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     return disabledModules().includes('kitchen') ? 'off' : 'full';
   }
 
-  function me({ user }) {
+  function businessType() {
     const t = tenant();
-    return { user: publicUser(user), settings: settings(), modules: MODULES, disabled: disabledModules(), kitchen_mode: kitchenMode(),
+    return t && BUSINESS_TYPES[t.business_type] ? t.business_type : 'choyxona';
+  }
+
+  // Which money pages this person may open: the boss always; admin and cashier as the boss allows.
+  function moneyAccess(user, s = settings()) {
+    if (user.role === 'owner') return { reports: true, finance: true, payroll: true };
+    if (user.role === 'admin') return { reports: s.perm_admin_reports, finance: s.perm_admin_finance, payroll: false };
+    if (user.role === 'cashier') return { reports: s.perm_cashier_reports, finance: s.perm_cashier_finance, payroll: false };
+    return { reports: false, finance: false, payroll: false };
+  }
+
+  function me({ user, token }) {
+    const t = tenant();
+    const s = settings();
+    const session = q('SELECT via FROM sessions WHERE token = ?').get(token);
+    return { user: publicUser(user), settings: s, modules: MODULES, disabled: disabledModules(), kitchen_mode: kitchenMode(),
+      business_type: businessType(), money: moneyAccess(user, s), platform_session: !!(session && session.via === 'platform'),
       tenant: t && { code: t.code, name: t.name, paid_until: t.paid_until } };
   }
 
@@ -238,11 +268,22 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
   // ---------- Settings ----------
   function updateSettings({ user, body }) {
     const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width',
-      'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes'];
+      'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo', ...OWNER_SETTINGS];
+    if (user.role !== 'owner' && OWNER_SETTINGS.some((k) => body[k] !== undefined)) throw new HttpError(403, "Moliya huquqlarini faqat boshliq o'zgartiradi");
     const set = q('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     for (const k of allowed) {
       if (body[k] === undefined) continue;
       let v = body[k];
+      if (k === 'finance_code') {
+        const code = String(v);
+        if (code.length < 4 || code.length > 32) throw new HttpError(400, "Moliya paroli 4–32 belgidan iborat bo'lsin");
+        set.run('finance_code_hash', hashPassword(code));
+        financeTokens.clear();
+        continue;
+      }
+      if (k.startsWith('perm_') || k === 'finance_lock') v = v ? '1' : '0';
+      if (k === 'logo') v = v ? String(assetId(v, 'logo')) : '';
+      if (k === 'lock_bg') v = JSON.stringify(lockBgInput(v));
       if (k === 'service_pct') {
         v = Number(v);
         if (!(v >= 0 && v <= 50)) throw new HttpError(400, "Xizmat haqi 0–50% oralig'ida bo'lsin");
@@ -263,9 +304,60 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
       }
       set.run(k, String(v));
     }
-    audit(user, 'settings_update', { ...body, cancel_code: body.cancel_code ? '***' : undefined });
+    if (settings().finance_lock && !settings().has_finance_code) {
+      set.run('finance_lock', '0');
+      throw new HttpError(400, 'Avval moliya parolini kiriting');
+    }
+    cleanAssets();
+    audit(user, 'settings_update', { ...body, cancel_code: body.cancel_code ? '***' : undefined, finance_code: body.finance_code ? '***' : undefined });
     events.publish('settings');
     return settings();
+  }
+
+  const OWNER_SETTINGS = ['perm_admin_reports', 'perm_admin_finance', 'perm_cashier_reports', 'perm_cashier_finance', 'finance_lock', 'finance_code'];
+
+  function lockBgInput(v) {
+    if (!v || typeof v !== 'object') throw new HttpError(400, "Fon noto'g'ri");
+    const mode = ['default', 'auto', 'color', 'image'].includes(v.mode) ? v.mode : null;
+    if (!mode) throw new HttpError(400, "Fon noto'g'ri");
+    const out = { mode };
+    if (mode === 'color') {
+      if (!/^#[0-9a-f]{6}$/i.test(String(v.color || ''))) throw new HttpError(400, "Rang noto'g'ri");
+      out.color = String(v.color).toLowerCase();
+    }
+    if (mode === 'image') out.image = assetId(v.image, 'bg');
+    return out;
+  }
+
+  // ---------- Pictures: the choyxona's logo and desktop background ----------
+  function assetId(v, kind) {
+    const id = int(v, 'Rasm', { min: 1, required: true });
+    if (!q('SELECT 1 FROM assets WHERE id = ? AND kind = ?').get(id, kind)) throw new HttpError(404, 'Rasm topilmadi');
+    return id;
+  }
+
+  function uploadAsset({ user, body }) {
+    const kind = str(body.kind, 'Turi', { required: true });
+    if (!['logo', 'bg'].includes(kind)) throw new HttpError(400, "Rasm turi noto'g'ri");
+    const m = /^data:([a-z/+-]+);base64,([A-Za-z0-9+/=]+)$/.exec(String(body.data || ''));
+    if (!m || !IMAGE_TYPES[m[1]]) throw new HttpError(400, 'Faqat JPG, PNG yoki WEBP rasm yuklash mumkin');
+    const data = Buffer.from(m[2], 'base64');
+    if (data.length > 3_000_000) throw new HttpError(413, 'Rasm juda katta (3 MB dan oshmasin)');
+    const id = q('INSERT INTO assets (kind, mime, data, created_at) VALUES (?, ?, ?, ?)').run(kind, m[1], data, now()).lastInsertRowid;
+    audit(user, 'asset_upload', kind);
+    return { id };
+  }
+
+  function getAsset(id) {
+    return q('SELECT mime, data FROM assets WHERE id = ?').get(id) || null;
+  }
+
+  // Pictures no setting points to any more are removed (an upload not saved within a day, an old logo).
+  function cleanAssets() {
+    const s = settings();
+    const keep = [s.logo, s.lock_bg.image].filter(Boolean);
+    q(`DELETE FROM assets WHERE created_at < ? ${keep.length ? `AND id NOT IN (${keep.map(Number).join(',')})` : ''}`).run(now() - 24 * 60 * MIN);
+    q(`DELETE FROM assets WHERE kind = 'logo' AND id != ? AND created_at < ?`).run(s.logo || 0, now());
   }
 
   // ---------- Users ----------
@@ -398,6 +490,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     const type = body.type !== undefined ? str(body.type, 'Turi') : prev.type || 'banket';
     if (!['banket', 'vip', 'supa', 'stol', 'zal', 'boshqa'].includes(type)) throw new HttpError(400, "Xona turi noto'g'ri");
     return {
+      section: body.section !== undefined ? str(body.section, "Bo'lim", { max: 40 }) : prev.section || '',
       number: body.number !== undefined ? str(body.number, 'Raqam', { required: true, max: 10 }) : prev.number,
       name: body.name !== undefined ? str(body.name, 'Nomi', { required: true, max: 60 }) : prev.name,
       type,
@@ -409,7 +502,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     const f = roomFields(body);
     if (!f.number || !f.name) throw new HttpError(400, 'Raqam va nom kiritilishi kerak');
     const id = tx(() => {
-      const id = q('INSERT INTO rooms (number, name, type, capacity) VALUES (?, ?, ?, ?)').run(f.number, f.name, f.type, f.capacity).lastInsertRowid;
+      const id = q('INSERT INTO rooms (number, name, type, capacity, section) VALUES (?, ?, ?, ?, ?)').run(f.number, f.name, f.type, f.capacity, f.section).lastInsertRowid;
       saveRoomWaiters(id, body.waiter_ids);
       return id;
     });
@@ -424,7 +517,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     const f = roomFields(body, prev);
     const active = body.active === undefined ? prev.active : body.active ? 1 : 0;
     tx(() => {
-      q('UPDATE rooms SET number = ?, name = ?, type = ?, capacity = ?, active = ? WHERE id = ?').run(f.number, f.name, f.type, f.capacity, active, prev.id);
+      q('UPDATE rooms SET number = ?, name = ?, type = ?, capacity = ?, section = ?, active = ? WHERE id = ?').run(f.number, f.name, f.type, f.capacity, f.section, active, prev.id);
       saveRoomWaiters(prev.id, body.waiter_ids);
     });
     audit(user, 'room_update', f.name);
@@ -491,18 +584,25 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
       needs_kitchen: pick('needs_kitchen', (v) => (v ? 1 : 0)) ?? 1,
       icon: pick('icon', (v) => str(v, 'Belgi', { max: 8 })) ?? '',
       stock: pick('stock', (v) => (v === null || v === '' ? null : int(v, 'Qoldiq'))) ?? null,
+      barcode: pick('barcode', (v) => str(v, 'Shtrix-kod', { max: 40 })) ?? '',
+      size: pick('size', (v) => str(v, "O'lcham", { max: 20 })) ?? '',
+      color: pick('color', (v) => str(v, 'Rang', { max: 30 })) ?? '',
     };
+    if (d.barcode && q('SELECT 1 FROM dishes WHERE barcode = ? AND active = 1 AND id != ?').get(d.barcode, prev.id || 0)) {
+      throw new HttpError(409, 'Bu shtrix-kod boshqa mahsulotda bor');
+    }
     if (!d.name || d.price == null) throw new HttpError(400, 'Nomi va narxi kiritilishi kerak');
     let id = prev.id;
     if (id) {
       q(`UPDATE dishes SET category_id = ?, name = ?, price = ?, cost = ?, prep_minutes = ?, unit = ?, needs_kitchen = ?, icon = ?, stock = ?,
-        available = CASE WHEN ? = 0 THEN 0 ELSE available END WHERE id = ?`).run(
-        d.category_id, d.name, d.price, d.cost, d.prep_minutes, d.unit, d.needs_kitchen, d.icon, d.stock, d.stock ?? 1, id
+        barcode = ?, size = ?, color = ?, available = CASE WHEN ? = 0 THEN 0 WHEN ? > 0 AND available = 0 AND stock = 0 THEN 1 ELSE available END WHERE id = ?`).run(
+        d.category_id, d.name, d.price, d.cost, d.prep_minutes, d.unit, d.needs_kitchen, d.icon, d.stock, d.barcode, d.size, d.color, d.stock ?? 1, d.stock ?? 0, id
       );
       if (prev.price !== d.price) audit(user, 'price_change', `${d.name}: ${prev.price} → ${d.price}`);
     } else {
-      id = q(`INSERT INTO dishes (category_id, name, price, cost, prep_minutes, unit, needs_kitchen, icon, stock)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(d.category_id, d.name, d.price, d.cost, d.prep_minutes, d.unit, d.needs_kitchen, d.icon, d.stock).lastInsertRowid;
+      id = q(`INSERT INTO dishes (category_id, name, price, cost, prep_minutes, unit, needs_kitchen, icon, stock, barcode, size, color, available)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(d.category_id, d.name, d.price, d.cost, d.prep_minutes, d.unit, d.needs_kitchen, d.icon, d.stock,
+        d.barcode, d.size, d.color, d.stock === 0 ? 0 : 1).lastInsertRowid;
     }
     audit(user, prev.id ? 'dish_update' : 'dish_create', d.name);
     events.publish('menu');
@@ -516,6 +616,25 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     audit(user, 'dish_delete', d.name);
     events.publish('menu');
     return { ok: true };
+  }
+
+  // Goods arrived: the stock grows; optionally the purchase is written down as an expense.
+  function receiveStock({ user, params, body }) {
+    const d = q('SELECT * FROM dishes WHERE id = ? AND active = 1').get(params.id);
+    if (!d) throw new HttpError(404, 'Mahsulot topilmadi');
+    const qty = int(body.qty, 'Soni', { min: 1, max: 1_000_000, required: true });
+    const cost = body.cost !== undefined && body.cost !== '' ? int(body.cost, 'Tannarxi') : d.cost;
+    tx(() => {
+      q('UPDATE dishes SET stock = COALESCE(stock, 0) + ?, cost = ?, available = 1 WHERE id = ?').run(qty, cost, d.id);
+      if (body.expense && cost * qty > 0) {
+        q("INSERT INTO transactions (type, category, amount, method, note, user_id, created_at) VALUES ('expense', 'Mahsulotlar', ?, ?, ?, ?, ?)")
+          .run(cost * qty, METHODS.includes(body.method) ? body.method : 'cash', `${d.name} × ${qty}`, user.id, now());
+      }
+    });
+    audit(user, 'stock_receive', `${d.name} +${qty}`);
+    events.publish('menu');
+    if (body.expense) events.publish('finance');
+    return q('SELECT * FROM dishes WHERE id = ?').get(d.id);
   }
 
   // "Tugadi" / "Bor" — stop-list. Chef, cashier, admin, owner.
@@ -573,7 +692,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     const waiter = q('SELECT id, name FROM users WHERE id = ?').get(order.waiter_id);
     const cashier = order.cashier_id ? q('SELECT id, name FROM users WHERE id = ?').get(order.cashier_id) : null;
     const t = order.status === 'open' ? totals(order, items) : order;
-    return { ...order, ...{ subtotal: t.subtotal, service_type: t.service_type || 'percent', service_pct: t.service_pct,
+    const refunded = order.status === 'closed' ? q("SELECT COALESCE(SUM(amount), 0) s FROM transactions WHERE category = 'Qaytarish' AND order_id = ?").get(id).s : 0;
+    return { ...order, refunded, ...{ subtotal: t.subtotal, service_type: t.service_type || 'percent', service_pct: t.service_pct,
       service_amount: t.service_amount, discount: t.discount, total: t.total },
       items, room, waiter, cashier };
   }
@@ -674,35 +794,43 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     assertOrderAccess(user, o);
     if (o.status !== 'open') throw new HttpError(400, 'Buyurtma yopilgan');
     if (!Array.isArray(body.items) || !body.items.length) throw new HttpError(400, "Taom tanlanmagan");
+    const t = now();
+    const added = tx(() => insertItems(o, body.items, t));
+    afterItems(user, o, added, t);
+    return orderDetails(o.id);
+  }
+
+  // Writes dishes onto a check (inside a transaction): stock, stop-list and the kitchen mode decide each line's status.
+  function insertItems(o, items, t) {
     const load = kitchenLoad();
     const mode = kitchenMode();
-    const t = now();
-    const added = tx(() => {
-      const out = [];
-      for (const it of body.items) {
-        const d = q('SELECT * FROM dishes WHERE id = ? AND active = 1').get(int(it.dish_id, 'Taom', { min: 1, required: true }));
-        if (!d) throw new HttpError(404, 'Taom topilmadi');
-        const qty = int(it.qty, 'Soni', { min: 1, max: 999, def: 1 });
-        if (!d.available) throw new HttpError(409, `"${d.name}" tugagan`);
-        if (d.stock !== null && d.stock < qty) throw new HttpError(409, `"${d.name}" dan faqat ${d.stock} ta qoldi`);
-        if (d.stock !== null) {
-          const left = d.stock - qty;
-          q('UPDATE dishes SET stock = ?, available = ? WHERE id = ?').run(left, left > 0 ? 1 : 0, d.id);
-          if (left === 0) events.publish('stoplist', { name: d.name, by: 'Tizim' });
-        }
-        const kitchen = d.needs_kitchen === 1 && mode !== 'off';
-        const status = !kitchen ? 'served' : mode === 'notify' ? 'cooking' : 'new';
-        const id = q(`INSERT INTO order_items (order_id, dish_id, name, price, cost, qty, note, status, needs_kitchen, prep_minutes, created_at, eta_at, served_at, accepted_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-          o.id, d.id, d.name, d.price, d.cost, qty, str(it.note, 'Izoh', { max: 200 }), status, kitchen ? 1 : 0,
-          d.prep_minutes, t, kitchen ? t + (d.prep_minutes + (mode === 'full' ? load.extra_minutes : 0)) * MIN : null,
-          kitchen ? null : t, status === 'cooking' ? t : null
-        ).lastInsertRowid;
-        out.push({ id, name: d.name, qty, kitchen, note: str(it.note, 'Izoh', { max: 200 }) });
+    const out = [];
+    for (const it of items) {
+      const d = q('SELECT * FROM dishes WHERE id = ? AND active = 1').get(int(it.dish_id, 'Taom', { min: 1, required: true }));
+      if (!d) throw new HttpError(404, 'Taom topilmadi');
+      const qty = int(it.qty, 'Soni', { min: 1, max: 99999, def: 1 });
+      if (!d.available) throw new HttpError(409, `"${d.name}" tugagan`);
+      if (d.stock !== null && d.stock < qty) throw new HttpError(409, `"${d.name}" dan faqat ${d.stock} ta qoldi`);
+      if (d.stock !== null) {
+        const left = d.stock - qty;
+        q('UPDATE dishes SET stock = ?, available = ? WHERE id = ?').run(left, left > 0 ? 1 : 0, d.id);
+        if (left === 0) events.publish('stoplist', { name: d.name, by: 'Tizim' });
       }
-      q('UPDATE orders SET bill_requested = 0 WHERE id = ?').run(o.id);
-      return out;
-    });
+      const kitchen = d.needs_kitchen === 1 && mode !== 'off';
+      const status = !kitchen ? 'served' : mode === 'notify' ? 'cooking' : 'new';
+      const id = q(`INSERT INTO order_items (order_id, dish_id, name, price, cost, qty, note, status, needs_kitchen, prep_minutes, created_at, eta_at, served_at, accepted_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        o.id, d.id, d.name, d.price, d.cost, qty, str(it.note, 'Izoh', { max: 200 }), status, kitchen ? 1 : 0,
+        d.prep_minutes, t, kitchen ? t + (d.prep_minutes + (mode === 'full' ? load.extra_minutes : 0)) * MIN : null,
+        kitchen ? null : t, status === 'cooking' ? t : null
+      ).lastInsertRowid;
+      out.push({ id, name: d.name, qty, kitchen, note: str(it.note, 'Izoh', { max: 200 }) });
+    }
+    q('UPDATE orders SET bill_requested = 0 WHERE id = ?').run(o.id);
+    return out;
+  }
+
+  function afterItems(user, o, added, t) {
     const room = q('SELECT name FROM rooms WHERE id = ?').get(o.room_id);
     room.name = placeName(o, room);
     const kitchenItems = added.filter((a) => a.kitchen);
@@ -713,7 +841,6 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     }
     events.publish('rooms');
     if (added.some((a) => !a.kitchen)) events.publish('menu');
-    return orderDetails(o.id);
   }
 
   function getItem(id) {
@@ -819,6 +946,15 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     if (unfinished.length) throw new HttpError(409, `Hali tayyor bo'lmagan taomlar bor: ${unfinished.map((i) => i.name).join(', ')}`);
     const live = items.filter((i) => i.status !== 'cancelled');
     if (!live.length) throw new HttpError(400, "Chekda taom yo'q. Bo'sh buyurtmani bekor qiling");
+    const r = tx(() => settle(user, o, items, body, true));
+    audit(user, 'order_close', `#${o.id} jami ${r.total}${r.discount ? `, chegirma ${r.discount}` : ''}`);
+    events.publish('rooms');
+    events.publish('finance');
+    return { ...orderDetails(o.id), change: r.change };
+  }
+
+  // Takes the payment and closes the check (inside a transaction). serveAll: dishes still in the kitchen count as served.
+  function settle(user, o, items, body, serveAll) {
     // The service charge always comes from the boss's settings; it cannot be changed per check.
     const discount = int(body.discount, 'Chegirma');
     if (discount && !['owner', 'admin', 'cashier'].includes(user.role)) throw new HttpError(403, "Chegirma berish huquqi yo'q");
@@ -831,19 +967,69 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     if (change > paid.cash) throw new HttpError(400, "Karta yoki o'tkazma bo'yicha ortiqcha to'lov qabul qilinmaydi");
     paid.cash -= change;
     const ts = now();
-    tx(() => {
-      q("UPDATE order_items SET status = 'served', served_at = ? WHERE order_id = ? AND status IN ('new', 'cooking', 'ready')").run(ts, o.id);
-      q(`UPDATE orders SET status = 'closed', closed_at = ?, cashier_id = ?, subtotal = ?, service_type = ?, service_pct = ?, service_amount = ?,
-        discount = ?, total = ?, paid_cash = ?, paid_card = ?, paid_transfer = ?, bill_requested = 0 WHERE id = ?`).run(
-        ts, user.id, t.subtotal, t.service_type, t.service_pct, t.service_amount, t.discount, t.total, paid.cash, paid.card, paid.transfer, o.id
-      );
-      const ins = q("INSERT INTO transactions (type, category, amount, method, note, order_id, user_id, created_at) VALUES ('income', 'Savdo', ?, ?, ?, ?, ?, ?)");
-      for (const m of METHODS) if (paid[m] > 0) ins.run(paid[m], m, `Chek #${o.id}`, o.id, user.id, ts);
+    if (serveAll) q("UPDATE order_items SET status = 'served', served_at = ? WHERE order_id = ? AND status IN ('new', 'cooking', 'ready')").run(ts, o.id);
+    q(`UPDATE orders SET status = 'closed', closed_at = ?, cashier_id = ?, subtotal = ?, service_type = ?, service_pct = ?, service_amount = ?,
+      discount = ?, total = ?, paid_cash = ?, paid_card = ?, paid_transfer = ?, bill_requested = 0 WHERE id = ?`).run(
+      ts, user.id, t.subtotal, t.service_type, t.service_pct, t.service_amount, t.discount, t.total, paid.cash, paid.card, paid.transfer, o.id
+    );
+    const ins = q("INSERT INTO transactions (type, category, amount, method, note, order_id, user_id, created_at) VALUES ('income', 'Savdo', ?, ?, ?, ?, ?, ?)");
+    for (const m of METHODS) if (paid[m] > 0) ins.run(paid[m], m, `Chek #${o.id}`, o.id, user.id, ts);
+    return { ...t, change };
+  }
+
+  // Counter sale (shops, fast food): goods and payment in one step. Kitchen dishes of a fast food order
+  // still go to the kitchen; the check is already paid.
+  function createSale({ user, body }) {
+    if (!perms(user).close) throw new HttpError(403, "Chekni yopish huquqingiz yo'q");
+    if (!Array.isArray(body.items) || !body.items.length) throw new HttpError(400, 'Mahsulot tanlanmagan');
+    const room = q("SELECT id FROM rooms WHERE type = 'soboy'").get();
+    const t = now();
+    let added;
+    const r = tx(() => {
+      const id = q("INSERT INTO orders (room_id, waiter_id, guests, opened_at, takeaway, label) VALUES (?, ?, 1, ?, 1, ?)").run(
+        room.id, user.id, t, str(body.label, 'Mijoz', { max: 60 })
+      ).lastInsertRowid;
+      const o = getOrderRow(id);
+      added = insertItems(o, body.items, t);
+      const items = q('SELECT * FROM order_items WHERE order_id = ?').all(id);
+      return { id, o, ...settle(user, o, items, body, false) };
     });
-    audit(user, 'order_close', `#${o.id} jami ${t.total}${t.discount ? `, chegirma ${t.discount}` : ''}`);
-    events.publish('rooms');
+    afterItems(user, r.o, added, t);
+    audit(user, 'sale', `#${r.id} jami ${r.total}`);
     events.publish('finance');
-    return { ...orderDetails(o.id), change };
+    return { ...orderDetails(r.id), change: r.change };
+  }
+
+  // Goods brought back: money goes back as an expense "Qaytarish", the stock returns.
+  function refundItems({ user, params, body }) {
+    const o = getOrderRow(params.id);
+    if (o.status !== 'closed') throw new HttpError(400, 'Faqat yopilgan chekni qaytarish mumkin');
+    if (!Array.isArray(body.items) || !body.items.length) throw new HttpError(400, 'Qaytariladigan mahsulot tanlanmagan');
+    const method = METHODS.includes(body.method) ? body.method : 'cash';
+    const reason = str(body.reason, 'Sabab', { max: 200 });
+    let amount = 0;
+    const lines = [];
+    tx(() => {
+      for (const r of body.items) {
+        const it = q("SELECT * FROM order_items WHERE id = ? AND order_id = ? AND status != 'cancelled'").get(int(r.item_id, 'Mahsulot', { min: 1, required: true }), o.id);
+        if (!it) throw new HttpError(404, 'Mahsulot topilmadi');
+        const qty = int(r.qty, 'Soni', { min: 1, max: it.qty - it.refunded_qty, def: it.qty - it.refunded_qty });
+        if (qty < 1) throw new HttpError(400, `"${it.name}" allaqachon qaytarilgan`);
+        q('UPDATE order_items SET refunded_qty = refunded_qty + ? WHERE id = ?').run(qty, it.id);
+        if (it.dish_id) q('UPDATE dishes SET stock = stock + ?, available = 1 WHERE id = ? AND stock IS NOT NULL').run(qty, it.dish_id);
+        amount += it.price * qty;
+        lines.push(`${it.name}×${qty}`);
+      }
+      const already = q("SELECT COALESCE(SUM(amount), 0) s FROM transactions WHERE category = 'Qaytarish' AND order_id = ?").get(o.id).s;
+      amount = Math.min(amount, o.total - already);
+      if (amount <= 0) throw new HttpError(400, "Bu chek bo'yicha pul to'liq qaytarilgan");
+      q("INSERT INTO transactions (type, category, amount, method, note, order_id, user_id, created_at) VALUES ('expense', 'Qaytarish', ?, ?, ?, ?, ?, ?)")
+        .run(amount, method, `Chek #${o.id}: ${lines.join(', ')}${reason ? ` (${reason})` : ''}`, o.id, user.id, now());
+    });
+    audit(user, 'refund', `#${o.id} ${amount}: ${lines.join(', ')}`);
+    events.publish('menu');
+    events.publish('finance');
+    return { ...orderDetails(o.id), refunded: amount };
   }
 
   // Printing a bill is recorded, so the boss sees how many times each check was printed.
@@ -1202,6 +1388,79 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     return q('SELECT * FROM shifts WHERE id = ?').get(s.id);
   }
 
+  // ---------- Money pages: who may open them, and the optional finance password ----------
+  // Unlocking with the finance password gives a short-lived key the browser sends as "X-Finance".
+  const financeTokens = new Map();
+  const FINANCE_TTL = 15 * MIN;
+  const LOCK_FREE = /^\/api\/(shifts\/(current|open|close)|my\/payroll)$/;
+
+  function guard(route, user, financeKey) {
+    const m = route.module;
+    if (!user || !['reports', 'finance', 'payroll'].includes(m) || LOCK_FREE.test(route.pattern)) return;
+    const access = moneyAccess(user);
+    if (!access[m]) throw new HttpError(403, "Bu bo'limni ko'rishga boshliq ruxsat bermagan");
+    const s = settings();
+    if (!s.finance_lock || !s.has_finance_code) return;
+    const k = financeTokens.get(financeKey || '');
+    if (!k || k.user_id !== user.id || k.exp < now()) throw new HttpError(423, "Moliya bo'limi qulflangan. Parolni kiriting");
+    k.exp = now() + FINANCE_TTL;
+  }
+
+  function financeUnlock({ user, body }) {
+    const key = `finance|${user.id}`;
+    const f = pinFailures.get(key);
+    if (f && f.count >= 5 && now() - f.first < 5 * MIN) throw new HttpError(429, "Juda ko'p xato. 5 daqiqadan keyin urinib ko'ring");
+    const hash = (q("SELECT value FROM settings WHERE key = 'finance_code_hash'").get() || {}).value;
+    if (!hash) return { finance_key: null };
+    if (!verifyPassword(String(body.code ?? ''), hash)) {
+      pinFailures.set(key, !f || now() - f.first >= 5 * MIN ? { count: 1, first: now() } : { ...f, count: f.count + 1 });
+      throw new HttpError(403, "Moliya paroli noto'g'ri");
+    }
+    pinFailures.delete(key);
+    const financeKey = newToken();
+    for (const [k, v] of financeTokens) if (v.exp < now()) financeTokens.delete(k);
+    financeTokens.set(financeKey, { user_id: user.id, exp: now() + FINANCE_TTL });
+    audit(user, 'finance_unlock');
+    return { finance_key: financeKey };
+  }
+
+  // ---------- Backups ----------
+  // A copy of this choyxona's whole database as one file.
+  function backupFile(name) {
+    if (!file) throw new HttpError(400, 'Zaxira bu rejimda ishlamaydi');
+    const tmp = path.join(os.tmpdir(), `flowi-${process.pid}-${newToken().slice(0, 8)}.db`);
+    try {
+      snapshot(file, tmp);
+      const body = fs.readFileSync(tmp);
+      const d = new Date();
+      const p2 = (n) => String(n).padStart(2, '0');
+      const stamp = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}_${p2(d.getHours())}-${p2(d.getMinutes())}`;
+      return { __file: { name: `flowi_${name}_${stamp}.db`, type: 'application/octet-stream', body } };
+    } finally {
+      fs.rmSync(tmp, { force: true });
+    }
+  }
+  const tenantCode = () => (tenant() || {}).code || 'flowi';
+
+  function downloadBackup({ user }) {
+    audit(user, 'backup_download');
+    return backupFile(tenantCode());
+  }
+
+  // The boss marks this computer as the one that keeps automatic backups in a folder.
+  function setDeviceBackup({ user, body }) {
+    const d = authenticateDevice(str(body.device_token, 'Qurilma', { required: true, max: 200 }));
+    if (!d) throw new HttpError(404, 'Qurilma topilmadi');
+    q('UPDATE devices SET backup = ? WHERE id = ?').run(body.on ? 1 : 0, d.id);
+    audit(user, 'backup_device', `${d.name}: ${body.on ? 'on' : 'off'}`);
+    return { ok: true };
+  }
+
+  function deviceBackup({ device }) {
+    if (!device.backup) throw new HttpError(403, 'Bu qurilmada avtomatik zaxira yoqilmagan');
+    return backupFile(tenantCode());
+  }
+
   function listAudit({ query }) {
     const limit = Math.min(Number(query.limit) || 300, 2000);
     return q(`SELECT a.*, u.name user_name, u.role FROM audit a LEFT JOIN users u ON u.id = a.user_id ORDER BY a.id DESC LIMIT ?`).all(limit);
@@ -1213,6 +1472,14 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     ['POST', '/api/login', null, login],
     ['POST', '/api/device/register', null, registerDevice],
     ['GET', '/api/device/staff', 'device', deviceStaff],
+    ['GET', '/api/device/backup', 'device', deviceBackup],
+    ['PUT', '/api/devices/backup', ['owner'], setDeviceBackup],
+    ['GET', '/api/backup/download', ['owner'], downloadBackup],
+    ['POST', '/api/assets', MANAGERS, uploadAsset],
+    ['POST', '/api/finance/unlock', MONEY, financeUnlock],
+    ['POST', '/api/sales', ['owner', 'admin', 'cashier', 'waiter'], createSale],
+    ['POST', '/api/orders/:id/refund', MONEY, refundItems],
+    ['POST', '/api/dishes/:id/receive', MANAGERS, receiveStock],
     ['POST', '/api/device/pin', 'device', pinLogin],
     ['GET', '/api/devices', MANAGERS, listDevices],
     ['DELETE', '/api/devices/:id', MANAGERS, deleteDevice],
@@ -1278,7 +1545,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
   ].map(([method, pattern, roles, handler]) => {
     const keys = [];
     const re = new RegExp('^' + pattern.replace(/:(\w+)/g, (_, k) => { keys.push(k); return '(\\d+)'; }) + '$');
-    return { method, re, keys, roles, handler, module: routeModule(pattern) };
+    return { method, pattern, re, keys, roles, handler, module: routeModule(pattern) };
   });
 
   function match(method, pathname) {
@@ -1298,7 +1565,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null } = {}) {
     return null;
   }
 
-  return { match, authenticate, authenticateDevice, settings, ROLES };
+  return { match, guard, authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, ROLES };
 }
 
-module.exports = { createApi, MODULES };
+module.exports = { createApi, MODULES, BUSINESS_TYPES, SHOP_TYPES };

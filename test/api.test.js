@@ -26,7 +26,9 @@ async function login(username, password, code = 'demo') {
 }
 
 test.before(async () => {
-  server = createServer({ dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'choyxona-test-')) });
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'choyxona-test-'));
+  server = createServer({ dataDir });
+  server.dataDir = dataDir;
   await new Promise((r) => server.listen(0, r));
   base = `http://127.0.0.1:${server.address().port}`;
 });
@@ -418,4 +420,187 @@ test('kitchen modes: notify skips accepting and does not block closing', async (
   assert.equal((await call('POST', `/api/orders/${o.id}/close`, boss, { paid_cash: 1e6 })).status, 200);
   assert.equal((await call('PUT', `/api/platform/tenants/${demo.id}`, admin, { kitchen_mode: 'xyz' })).status, 400);
   await call('PUT', `/api/platform/tenants/${demo.id}`, admin, { kitchen_mode: 'full' });
+});
+
+async function platformAdmin() {
+  return (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+}
+async function newBusiness(admin, code, type, extra = {}) {
+  const r = await call('POST', '/api/platform/tenants', admin, {
+    name: `Test ${code}`, code, owner_name: 'Boss', owner_username: 'boss', owner_password: 'boss1234', business_type: type, sample: true, ...extra,
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  return { tenant: r.data, boss: await login('boss', 'boss1234', code) };
+}
+
+test('shop: counter sale with barcode goods, stock, refund, stock receipt', async () => {
+  const admin = await platformAdmin();
+  const { tenant, boss } = await newBusiness(admin, 'baraka', 'market');
+  assert.equal(tenant.kitchen_mode, 'off');
+  assert.deepEqual(JSON.parse(tenant.disabled_modules), ['reservations']);
+  const me = (await call('GET', '/api/me', boss)).data;
+  assert.equal(me.business_type, 'market');
+  assert.equal(me.settings.service_pct, 0);
+  assert.equal((await call('GET', '/api/rooms', boss)).data.length, 0, 'a shop has no rooms');
+
+  const menu = (await call('GET', '/api/menu', boss)).data;
+  const milk = menu.dishes.find((d) => d.barcode === '4780000000035');
+  assert.equal(milk.stock, 30);
+  const sale = await call('POST', '/api/sales', boss, { items: [{ dish_id: milk.id, qty: 3 }], paid_cash: 40000 });
+  assert.equal(sale.status, 200, JSON.stringify(sale.data));
+  assert.equal(sale.data.status, 'closed');
+  assert.equal(sale.data.total, 36000);
+  assert.equal(sale.data.change, 4000);
+  assert.equal(sale.data.paid_cash, 36000);
+  assert.ok(sale.data.items.every((i) => i.status === 'served'));
+  assert.equal((await call('GET', '/api/menu', boss)).data.dishes.find((d) => d.id === milk.id).stock, 27);
+  assert.equal((await call('POST', '/api/sales', boss, { items: [{ dish_id: milk.id, qty: 100 }], paid_cash: 9e6 })).status, 409, 'not more than in stock');
+
+  // Barcodes are unique.
+  assert.equal((await call('POST', '/api/dishes', boss, { name: 'Copy', price: 1, barcode: '4780000000035' })).status, 409);
+
+  // Refund one: money back as an expense, stock back; never more than was sold.
+  const item = sale.data.items[0];
+  const ref = await call('POST', `/api/orders/${sale.data.id}/refund`, boss, { items: [{ item_id: item.id, qty: 1 }], reason: 'buzilgan' });
+  assert.equal(ref.status, 200, JSON.stringify(ref.data));
+  assert.equal(ref.data.refunded, 12000);
+  assert.equal((await call('GET', '/api/menu', boss)).data.dishes.find((d) => d.id === milk.id).stock, 28);
+  assert.equal((await call('POST', `/api/orders/${sale.data.id}/refund`, boss, { items: [{ item_id: item.id, qty: 3 }] })).status, 400);
+  const day = new Date(); day.setHours(0, 0, 0, 0);
+  const rep = (await call('GET', `/api/reports?from=${day.getTime()}&to=${day.getTime() + 86400000}`, boss)).data;
+  assert.equal(rep.expense_by_category.find((x) => x.key === 'Qaytarish').value, 12000);
+
+  // Goods arrive: stock grows and the purchase becomes an expense.
+  const rec = await call('POST', `/api/dishes/${milk.id}/receive`, boss, { qty: 12, cost: 9000, expense: true });
+  assert.equal(rec.status, 200);
+  assert.equal(rec.data.stock, 40);
+  const txs = (await call('GET', `/api/transactions?from=${day.getTime()}`, boss)).data;
+  assert.ok(txs.some((x) => x.category === 'Mahsulotlar' && x.amount === 108000));
+});
+
+test('fast food: a paid counter order still goes to the kitchen', async () => {
+  const admin = await platformAdmin();
+  const { tenant, boss } = await newBusiness(admin, 'burger', 'fastfood');
+  assert.equal(tenant.kitchen_mode, 'notify');
+  const menu = (await call('GET', '/api/menu', boss)).data;
+  const burger = menu.dishes.find((d) => d.name === 'Gamburger');
+  const sale = await call('POST', '/api/sales', boss, { items: [{ dish_id: burger.id, qty: 2 }], paid_card: 56000 });
+  assert.equal(sale.status, 200, JSON.stringify(sale.data));
+  assert.equal(sale.data.status, 'closed');
+  assert.equal(sale.data.items[0].status, 'cooking');
+  const k = (await call('GET', '/api/kitchen', boss)).data;
+  assert.ok(k.items.some((i) => i.order_id === sale.data.id && i.status === 'cooking'));
+});
+
+test('room sections, pictures and the desktop background', async () => {
+  const owner = await login('ega', 'ega123');
+  const rooms = (await call('GET', '/api/rooms', owner)).data;
+  assert.deepEqual([...new Set(rooms.map((r) => r.section).filter(Boolean))], ['1-qavat', '2-qavat', 'Hovli']);
+  const r = await call('PUT', `/api/rooms/${rooms[0].id}`, owner, { section: '3-qavat' });
+  assert.equal(r.data.section, '3-qavat');
+  await call('PUT', `/api/rooms/${rooms[0].id}`, owner, { section: '1-qavat' });
+
+  const png = 'data:image/png;base64,' + fs.readFileSync(path.join(__dirname, '..', 'public', 'icon-192.png')).toString('base64');
+  assert.equal((await call('POST', '/api/assets', owner, { kind: 'bg', data: 'data:image/svg+xml;base64,PHN2Zy8+' })).status, 400, 'no svg');
+  const waiter = await login('jasur', '1234');
+  assert.equal((await call('POST', '/api/assets', waiter, { kind: 'logo', data: png })).status, 403);
+  const logo = (await call('POST', '/api/assets', owner, { kind: 'logo', data: png })).data;
+  const bg = (await call('POST', '/api/assets', owner, { kind: 'bg', data: png })).data;
+  const s = await call('PUT', '/api/settings', owner, { logo: logo.id, lock_bg: { mode: 'image', image: bg.id } });
+  assert.equal(s.status, 200, JSON.stringify(s.data));
+  assert.equal((await call('PUT', '/api/settings', owner, { lock_bg: { mode: 'color', color: 'red' } })).status, 400);
+  const info = (await call('GET', '/api/info?code=demo')).data;
+  assert.equal(info.logo, `/media/demo/${logo.id}`);
+  assert.equal(info.lock_bg.url, `/media/demo/${bg.id}`);
+  const pic = await fetch(base + info.logo);
+  assert.equal(pic.status, 200);
+  assert.equal(pic.headers.get('content-type'), 'image/png');
+  await call('PUT', '/api/settings', owner, { logo: '', lock_bg: { mode: 'auto' } });
+  assert.equal((await call('GET', '/api/info?code=demo')).data.lock_bg.mode, 'auto');
+});
+
+test('money pages: the boss decides who sees them and can lock them with a password', async () => {
+  const admin = await platformAdmin();
+  const { boss } = await newBusiness(admin, 'pul', 'choyxona');
+  await call('POST', '/api/users', boss, { name: 'Kassir', username: 'k1', password: 'k1234', role: 'cashier' });
+  await call('POST', '/api/users', boss, { name: 'Admin', username: 'a1', password: 'a1234', role: 'admin' });
+  const cashier = await login('k1', 'k1234', 'pul');
+  const adm = await login('a1', 'a1234', 'pul');
+  const day = new Date(); day.setHours(0, 0, 0, 0);
+  const rep = `/api/reports?from=${day.getTime()}&to=${day.getTime() + 86400000}`;
+  assert.equal((await call('GET', rep, cashier)).status, 403, 'cashier: no reports by default');
+  assert.equal((await call('GET', '/api/transactions', cashier)).status, 200, 'cashier: cash book by default');
+  assert.equal((await call('GET', '/api/shifts/current', cashier)).status, 200);
+  assert.equal((await call('GET', rep, adm)).status, 200);
+  assert.equal((await call('PUT', '/api/settings', adm, { perm_cashier_reports: true })).status, 403, 'only the boss');
+  await call('PUT', '/api/settings', boss, { perm_cashier_reports: true, perm_admin_finance: false });
+  assert.equal((await call('GET', rep, cashier)).status, 200);
+  assert.equal((await call('GET', '/api/transactions', adm)).status, 403);
+  assert.deepEqual((await call('GET', '/api/me', adm)).data.money, { reports: true, finance: false, payroll: false });
+
+  assert.equal((await call('PUT', '/api/settings', boss, { finance_lock: true })).status, 400, 'a password first');
+  assert.equal((await call('PUT', '/api/settings', boss, { finance_lock: true, finance_code: 'sir123' })).status, 200);
+  assert.equal((await call('GET', rep, boss)).status, 423);
+  assert.equal((await call('GET', '/api/shifts/current', cashier)).status, 200, 'the cash desk keeps working');
+  assert.equal((await call('POST', '/api/finance/unlock', boss, { code: 'xato' })).status, 403);
+  const key = (await call('POST', '/api/finance/unlock', boss, { code: 'sir123' })).data.finance_key;
+  const ok = await fetch(base + rep, { headers: { Authorization: `Bearer ${boss}`, 'X-Finance': key } });
+  assert.equal(ok.status, 200);
+  const other = await fetch(base + rep, { headers: { Authorization: `Bearer ${cashier}`, 'X-Finance': key } });
+  assert.equal(other.status, 423, 'the key is personal');
+});
+
+test('backups: download, restore keeps devices, platform copies, enter as boss, support line', async () => {
+  const admin = await platformAdmin();
+  const { tenant, boss } = await newBusiness(admin, 'zaxira', 'choyxona', { sample: false });
+  const dev = (await call('POST', '/api/device/register', null, { code: 'zaxira', username: 'boss', password: 'boss1234', name: 'Kassa' })).data.device_token;
+  await call('POST', '/api/rooms', boss, { number: '1', name: 'Eski xona' });
+
+  assert.equal((await fetch(base + '/api/device/backup', { headers: { Authorization: `Bearer ${dev}` } })).status, 403, 'device backup off');
+  assert.equal((await call('PUT', '/api/devices/backup', boss, { device_token: dev, on: true })).status, 200);
+  const devCopy = await fetch(base + '/api/device/backup', { headers: { Authorization: `Bearer ${dev}` } });
+  assert.equal(devCopy.status, 200);
+  const res = await fetch(base + '/api/backup/download', { headers: { Authorization: `Bearer ${boss}` } });
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-disposition'), /flowi_zaxira_/);
+  const file = Buffer.from(await res.arrayBuffer());
+  assert.equal(file.subarray(0, 15).toString(), 'SQLite format 3');
+
+  // Changes after the backup are undone by the restore.
+  await call('POST', '/api/rooms', boss, { number: '2', name: 'Yangi xona' });
+  assert.equal((await call('GET', '/api/rooms', boss)).data.length, 2);
+  const bad = await fetch(base + '/api/backup/restore', { method: 'POST', headers: { Authorization: `Bearer ${boss}` }, body: Buffer.from('not a database at all, sorry') });
+  assert.equal(bad.status, 400);
+  const restored = await fetch(base + '/api/backup/restore', { method: 'POST', headers: { Authorization: `Bearer ${boss}` }, body: file });
+  assert.equal(restored.status, 200, await restored.clone().text());
+  assert.deepEqual((await call('GET', '/api/rooms', boss)).data.map((r) => r.name), ['Eski xona'], 'boss session survives the restore');
+  assert.equal((await call('GET', '/api/device/staff', dev)).status, 200, 'device stays connected');
+
+  // The platform owner opens the business as its boss; the visit is logged.
+  const imp = await call('POST', `/api/platform/tenants/${tenant.id}/impersonate`, admin);
+  assert.equal(imp.status, 200);
+  const me = (await call('GET', '/api/me', imp.data.token)).data;
+  assert.equal(me.user.role, 'owner');
+  assert.equal(me.platform_session, true);
+  assert.ok((await call('GET', '/api/audit', boss)).data.some((a) => a.action === 'platform_login'));
+  assert.equal((await call('POST', `/api/platform/tenants/${tenant.id}/impersonate`, boss)).status, 401);
+
+  // Support line: platform default, business override.
+  await call('PUT', '/api/platform/settings', admin, { support_text: "To'lov: @flowi_support" });
+  let info = (await call('GET', '/api/info?code=zaxira')).data;
+  assert.deepEqual(info.support, { text: "To'lov: @flowi_support", link: 'https://t.me/flowi_support' });
+  await call('PUT', `/api/platform/tenants/${tenant.id}`, admin, { support: { text: 'Yordam: +998 90 123 45 67' } });
+  info = (await call('GET', '/api/info?code=zaxira')).data;
+  assert.equal(info.support.link, 'tel:+998901234567');
+
+  // Server-side dated copies can be put back from the platform.
+  const { backupAll } = require('../server/backup');
+  backupAll(server.dataDir);
+  const list = (await call('GET', `/api/platform/tenants/${tenant.id}/backups`, admin)).data;
+  assert.ok(list.some((b) => b.kind === 'daily'));
+  assert.ok(list.some((b) => b.kind === 'pre-restore'), 'the restore above kept the old state');
+  await call('POST', '/api/rooms', boss, { number: '3', name: 'Keyin' });
+  const back = await call('POST', `/api/platform/tenants/${tenant.id}/restore`, admin, { stamp: list.find((b) => b.kind === 'daily').stamp, kind: 'daily' });
+  assert.equal(back.status, 200, JSON.stringify(back.data));
+  assert.equal((await call('GET', '/api/rooms', boss)).data.length, 1);
 });

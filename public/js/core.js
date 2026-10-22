@@ -13,11 +13,16 @@ const App = {
   connected: false,
   readyItems: [],
   badges: {},
+  biz: 'choyxona', // business type: choyxona | restoran | fastfood | market | clothing
+  money: {}, // which money pages this person may open
+  financeKey: null, // short-lived key after typing the finance password
+  version: null,
+  platformSession: false,
 };
 
 const MIN = 60000;
 const ROLE_ICONS = { owner: 'key-round', admin: 'shield-check', cashier: 'wallet', waiter: 'user-round', chef: 'chef-hat' };
-const roleName = (r) => ({ owner: t('Boshliq'), admin: t('Admin'), cashier: t('Kassir'), waiter: t('Ofitsant'), chef: t('Oshpaz') }[r] || r);
+const roleName = (r) => ({ owner: t('Boshliq'), admin: t('Admin'), cashier: t('Kassir'), waiter: isShop() ? t('Sotuvchi') : t('Ofitsant'), chef: t('Oshpaz') }[r] || r);
 const statusName = (s) => ({ new: t('Yangi'), cooking: t('Tayyorlanmoqda'), ready: t('Tayyor'), served: t('Berildi'), cancelled: t('Bekor') }[s] || s);
 const methodName = (m) => ({ cash: t('Naqd'), card: t('Karta'), transfer: t("O'tkazma") }[m] || m);
 const METHOD_ICONS = { cash: 'banknote', card: 'credit-card', transfer: 'smartphone' };
@@ -45,6 +50,18 @@ function fmtDuration(ms) {
 function localDay(ts = Date.now()) { const d = new Date(ts); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 function dayStart(d = new Date()) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 function toLocalInput(ts) { const d = new Date(ts); return `${localDay(ts)}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+// ---------- Business type ----------
+const BIZ_TYPES = () => ({ choyxona: t('Choyxona'), restoran: t('Restoran / kafe'), fastfood: t('Fast food'), market: t("Do'kon (oziq-ovqat)"), clothing: t('Kiyim-kechak') });
+const BIZ_ICONS = { choyxona: 'house', restoran: 'utensils', fastfood: 'sandwich', market: 'shopping-cart', clothing: 'shirt' };
+function isShop() { return App.biz === 'market' || App.biz === 'clothing'; }
+// Fast food and shops sell at the counter (the "Sotuv" screen).
+function sellsAtCounter() { return App.biz === 'fastfood' || isShop(); }
+// Words that differ in a shop: "Menyu" is "Mahsulotlar", "Taom" is "Mahsulot".
+const SHOP_WORDS = { 'Menyu': 'Mahsulotlar', 'Taom': 'Mahsulot', 'Yangi taom': 'Yangi mahsulot', 'Taom qidirish': 'Mahsulot qidirish',
+  'Taom topilmadi': 'Mahsulot topilmadi', 'Taomlar': 'Mahsulotlar', "Menyudan taom tanlang": 'Mahsulot tanlang', 'Eng ko\'p sotilgan': 'Eng ko\'p sotilgan',
+  "Bu bo'limda taom yo'q": "Bu bo'limda mahsulot yo'q", "Taomni o'chirish": "Mahsulotni o'chirish", 'Taom menyudan olib tashlansinmi?': 'Mahsulot olib tashlansinmi?' };
+function W(s, ...args) { return t(isShop() && SHOP_WORDS[s] ? SHOP_WORDS[s] : s, ...args); }
+
 function moduleOn(m) { return !m || !(App.disabled || []).includes(m); }
 function can(...roles) { return !!App.user && roles.includes(App.user.role); }
 function initials(name) { return String(name).split(/\s+/).filter(Boolean).slice(-2).map((w) => w[0]).join('').toUpperCase(); }
@@ -54,7 +71,7 @@ function flowiLogo(height = 22) {
   return `<svg class="flowi" viewBox="0 0 1280 267" height="${height}" role="img" aria-label="FLOWI"><path fill="currentColor" fill-rule="evenodd" d="${FLOWI_PATH}"/></svg>`;
 }
 function placeName(o) {
-  if (o.takeaway) return `${t('Olib ketish')} #${o.id}${o.label ? ` · ${o.label}` : ''}`;
+  if (o.takeaway) return `${isShop() ? t('Sotuv') : t('Olib ketish')} #${o.id}${o.label ? ` · ${o.label}` : ''}`;
   return o.room ? o.room.name : o.room_name || '';
 }
 
@@ -72,9 +89,10 @@ function store(key, val) {
 async function api(method, path, body, token = App.token) {
   const res = await fetch(path, {
     method,
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(App.financeKey ? { 'X-Finance': App.financeKey } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
+  checkVersion(res.headers.get('X-App-Version'));
   let data = null;
   try { data = await res.json(); } catch { /* empty */ }
   if (res.status === 401 && token && token === App.token) {
@@ -97,10 +115,24 @@ const DEL = (p) => api('DELETE', p);
 function endSession() {
   App.token = null;
   App.user = null;
+  App.financeKey = null;
   store('cp_token', null);
   Live.stop();
-  location.hash = App.device ? '#/lock' : '#/login';
+  location.hash = App.device ? '#/lock' : '#/setup';
   if (typeof render === 'function') render();
+}
+
+// ---------- New version: devices reload by themselves, never losing an unsent order ----------
+function checkVersion(v) {
+  if (!v) return;
+  if (!App.version) { App.version = v; return; }
+  if (v !== App.version && !App.updatePending) { App.updatePending = true; tryReload(); }
+}
+function tryReload() {
+  const busy = Object.values(typeof Carts === 'object' ? Carts : {}).some((c) => c.lines && c.lines.length)
+    || (typeof PosCart === 'object' && PosCart.lines.length) || document.querySelector('.modal-back');
+  if (!busy) { location.reload(); return; }
+  setTimeout(tryReload, 20000);
 }
 
 // ---------- Live updates (SSE) ----------
@@ -379,12 +411,13 @@ function printReceipt(o) {
   const lines = live.map((i) => `<tr><td>${esc(i.name)}<br><small>${i.qty} × ${money(i.price)}</small></td><td class="r">${money(i.qty * i.price)}</td></tr>`).join('');
   const share = perPerson(o);
   printDoc(`${t('Chek')} #${o.id}`, `
+    ${s.logo && App.tenant ? `<div class="c"><img src="/media/${esc(App.tenant.code)}/${s.logo}" style="max-width:60%;max-height:22mm;filter:grayscale(1)"></div>` : ''}
     <h1>${esc(s.name)}</h1>${s.address ? `<div class="c">${esc(s.address)}</div>` : ''}${s.phone ? `<div class="c">${esc(s.phone)}</div>` : ''}
     <hr><div>${t('Chek')}: #${o.id}${o.status !== 'closed' ? ` (${t('hisob')})` : ''}</div><div>${esc(placeName(o))}</div>
-    <div>${t('Ofitsant')}: ${esc(o.waiter.name)}</div><div>${t('Mehmonlar')}: ${o.guests}</div>
+    ${o.takeaway && sellsAtCounter() ? `<div class="c huge">№ ${o.id}</div>` : `<div>${roleName('waiter')}: ${esc(o.waiter.name)}</div><div>${t('Mehmonlar')}: ${o.guests}</div>`}
     <div>${t('Ochildi')}: ${fmtDateTime(o.opened_at)}</div>${o.closed_at ? `<div>${t('Yopildi')}: ${fmtDateTime(o.closed_at)}</div>` : ''}
     <hr><table>${lines}</table><hr><table>
-    <tr><td>${t('Taomlar')}</td><td class="r">${money(o.subtotal)}</td></tr>
+    <tr><td>${W('Taomlar')}</td><td class="r">${money(o.subtotal)}</td></tr>
     ${o.service_amount ? `<tr><td>${esc(serviceLabel(o))}</td><td class="r">${money(o.service_amount)}</td></tr>` : ''}
     ${o.discount ? `<tr><td>${t('Chegirma')}</td><td class="r">-${money(o.discount)}</td></tr>` : ''}
     <tr class="big"><td>${t('JAMI')}</td><td class="r">${money(o.total)}</td></tr>
@@ -398,6 +431,25 @@ function printKitchenTicket(tk) {
   printDoc(`${t('Oshxona')} #${tk.order_id}`, `<div class="c huge">${esc(tk.room)}</div>
     <div class="c">${t('Chek')} #${tk.order_id} · ${esc(tk.waiter || '')} · ${fmtTime(tk.at || Date.now())}</div><hr>
     <table>${tk.items.map((i) => `<tr class="big"><td>${i.qty} ×</td><td>${esc(i.name)}${i.note ? `<br><small>* ${esc(i.note)}</small>` : ''}</td></tr>`).join('')}</table><hr>`);
+}
+
+// Shrinks a picture before upload (a phone photo can be 8 MB; the desktop needs ~300 KB).
+function imageToDataUrl(file, max, type = 'image/jpeg') {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      const g = c.getContext('2d');
+      if (type === 'image/jpeg') { g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); }
+      g.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL(type, 0.85));
+    };
+    img.onerror = () => reject(new Error(t("Rasm o'qilmadi")));
+    img.src = URL.createObjectURL(file);
+  });
 }
 
 function downloadCsv(filename, rows) {
@@ -472,14 +524,57 @@ const Screen = {
   },
   canFullscreen() { return !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen); },
   isFull() { return !!(document.fullscreenElement || document.webkitFullscreenElement); },
+  standalone() { return window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches || navigator.standalone === true; },
+  // iPhone Safari has no full-screen mode for sites: there the app is added to the home screen instead.
   toggleFull() {
     const el = document.documentElement;
+    if (!this.canFullscreen()) { if (this.standalone()) toast(t("Ilova allaqachon to'liq ekranda"), 'ok'); else installApp(); return; }
     if (this.isFull()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-    else (el.requestFullscreen || el.webkitRequestFullscreen).call(el).catch(() => {});
+    else {
+      const r = (el.requestFullscreen || el.webkitRequestFullscreen).call(el, { navigationUI: 'hide' });
+      if (r && r.catch) r.catch(() => installApp());
+    }
+  },
+  button(id, cls = 'icon-btn') {
+    return `<button class="${cls}" id="${id}" title="${esc(t("To'liq ekran"))}">${icon(this.isFull() ? 'minimize' : 'maximize')}</button>`;
   },
 };
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') Screen.keepAwake(); });
 document.addEventListener('pointerdown', () => Screen.keepAwake());
+['fullscreenchange', 'webkitfullscreenchange'].forEach((e) => document.addEventListener(e, () => {
+  document.querySelectorAll('#lock-full, #top-full').forEach((b) => { b.innerHTML = icon(Screen.isFull() ? 'minimize' : 'maximize'); });
+}));
+
+// ---------- Desktop background: the boss's colour or picture, or a built-in picture that changes daily ----------
+const WALLPAPERS = 16;
+const LIGHT_WALLS = [4, 6, 8, 11, 16];
+function wallpaperOfDay(d = new Date()) {
+  const day = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000);
+  return (day % WALLPAPERS) + 1;
+}
+function hexLuma(hex) {
+  const n = parseInt(String(hex).slice(1), 16);
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+}
+// Returns { style, cls }: light colours get dark text; pictures get a shade so the clock and names stay readable.
+function lockBackground(bg) {
+  bg = bg || { mode: 'default' };
+  const shade = (k) => `linear-gradient(180deg, rgba(0,0,0,${k}) 0%, rgba(0,0,0,${k * 0.6}) 40%, rgba(0,0,0,${k + 0.15}) 100%)`;
+  if (bg.mode === 'color' && /^#[0-9a-f]{6}$/i.test(bg.color || '')) {
+    const light = hexLuma(bg.color) > 0.45;
+    return { style: `background:${bg.color}`, cls: light ? 'on-light' : '' };
+  }
+  if (bg.mode === 'image' && bg.url) return { style: `background:${shade(0.45)}, url('${bg.url}') center/cover no-repeat ${bg.color || '#0b1f33'}`, cls: 'on-image' };
+  if (bg.mode === 'auto') {
+    const n = wallpaperOfDay();
+    const url = `url('/bg/${String(n).padStart(2, '0')}.svg') center/cover no-repeat`;
+    // Light pictures keep their colours and get dark text; dark ones get a soft shade and white text.
+    if (LIGHT_WALLS.includes(n)) return { style: `background:linear-gradient(rgba(255,255,255,.18), rgba(255,255,255,.18)), ${url} #f5f5f4`, cls: 'on-light' };
+    return { style: `background:${shade(0.3)}, ${url} #0b1f33`, cls: 'on-image' };
+  }
+  return { style: '', cls: '' };
+}
 
 // Live timers: [data-eta] counts down, [data-since] counts up.
 function tickTimers() {
