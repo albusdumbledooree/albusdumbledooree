@@ -39,6 +39,15 @@ function supportHtml() {
   return s.link ? `<a class="support" href="${esc(s.link)}" target="_blank" rel="noopener">${inner}</a>` : `<div class="support">${inner}</div>`;
 }
 
+// The desktop reminds everyone when the subscription is about to run out, with the support contact for paying.
+function lockPayNotice() {
+  const n = App.info && subscriptionNotice(App.info.paid_until);
+  if (!n) return '';
+  const s = App.info.support;
+  const contact = s && s.text ? (s.link ? ` <a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.text)}</a>` : ` ${esc(s.text)}`) : '';
+  return `<div class="pay-notice ${n.cls}">${icon('triangle-alert', 22)}<div><b>${n.text}</b>${contact ? `<div class="small">${contact}</div>` : ''}</div></div>`;
+}
+
 // ---------- First screen: the boss connects this computer, tablet or phone once ----------
 Views.setup = {
   public: true,
@@ -111,6 +120,7 @@ Views.lock = {
         ${Screen.button('lock-full')}
         <button class="icon-btn" id="lock-menu" title="${esc(t('Qurilma'))}">${icon('settings')}</button></div>
       <div class="lock-time"><div class="big" data-clock>${fmtTime(Date.now())}</div><div class="date">${esc(longDate())}</div></div>
+      ${lockPayNotice()}
       ${backup.state === 'prompt' ? `<div class="lock-note"><button class="btn sm" id="allow-backup">${icon('folder-open', 16)} ${t('Zaxira papkasiga ruxsat bering')}</button></div>` : ''}
       <div class="staff-grid">${staff.map((u) => `<button class="staff-tile ${u.has_pin ? '' : 'nopin'}" data-staff="${u.id}">
           <span class="avatar ${u.role}">${esc(initials(u.name))}</span><b>${esc(u.name)}</b>

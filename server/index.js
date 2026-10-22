@@ -117,7 +117,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
         const pic = (id) => (id ? `/media/${ctx.row.code}/${id}` : null);
         return reply({ code: ctx.row.code, name: s.name, demo: s.demo === '1', blocked: ctx.row.status !== 'active',
           business_type: ctx.api.businessType(), logo: pic(s.logo), lock_bg: { ...s.lock_bg, url: pic(s.lock_bg.image) },
-          support: platform.supportFor(ctx.row), version: VERSION });
+          support: platform.supportFor(ctx.row), paid_until: ctx.row.paid_until, version: VERSION });
       }
 
       // Every other request belongs to one choyxona: found by the code at login, by the token afterwards.

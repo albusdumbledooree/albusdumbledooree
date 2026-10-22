@@ -50,6 +50,16 @@ function fmtDuration(ms) {
 function localDay(ts = Date.now()) { const d = new Date(ts); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 function dayStart(d = new Date()) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 function toLocalInput(ts) { const d = new Date(ts); return `${localDay(ts)}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+// ---------- Subscription reminder: shown from 5 days before the paid term ends ----------
+function subscriptionNotice(until) {
+  if (!until) return null;
+  const days = Math.floor((until - Date.now()) / (24 * 60 * MIN));
+  if (days > 5) return null;
+  if (days < 0) return { cls: 'red', text: t("Obuna muddati {0} da tugagan. Iltimos, to'lovni amalga oshiring.", fmtDate(until)) };
+  if (days === 0) return { cls: 'red', text: t("Obuna muddati bugun tugaydi. Iltimos, to'lovni amalga oshiring.") };
+  return { cls: '', text: t('Obuna muddati {0} kundan keyin ({1}) tugaydi.', days, fmtDate(until)) };
+}
+
 // ---------- Business type ----------
 const BIZ_TYPES = () => ({ choyxona: t('Choyxona'), restoran: t('Restoran / kafe'), fastfood: t('Fast food'), market: t("Do'kon (oziq-ovqat)"), clothing: t('Kiyim-kechak') });
 const BIZ_ICONS = { choyxona: 'house', restoran: 'utensils', fastfood: 'sandwich', market: 'shopping-cart', clothing: 'shirt' };

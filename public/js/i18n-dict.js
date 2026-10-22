@@ -450,6 +450,7 @@
     "Ofitsant yoki kassir yozgan har bir buyurtma (taomlar, soni, izoh) shu kompyuterga ulangan printerdan chiqadi. Xodimlar ro'yxati ochiq turganda ham ishlaydi.": ['Каждый заказ официанта или кассира (блюда, количество, комментарий) печатается на принтере этого компьютера. Работает и когда открыт список сотрудников.', "Every order a waiter or cashier sends (dishes, quantity, notes) prints on this computer's printer. Works even while the staff list is shown."],
     "Chop etish oynasi chiqmasligi uchun Chrome'ni --kiosk-printing bilan oching.": ['Чтобы окно печати не появлялось, запускайте Chrome с --kiosk-printing.', 'To skip the print dialog, start Chrome with --kiosk-printing.'],
     "Login paroli yoki Sozlamalarda qo'yilgan kirish paroli": ['Пароль от логина или пароль входа из настроек', 'Your login password, or the desktop password set in Settings'],
+    "Obuna muddati bugun tugaydi. Iltimos, to'lovni amalga oshiring.": ['Подписка заканчивается сегодня. Пожалуйста, оплатите.', 'The subscription ends today. Please pay.'],
   };
   for (const [uz, [ru, en]] of Object.entries(T)) {
     I18N.ru[uz] = ru;

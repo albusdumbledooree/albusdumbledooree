@@ -73,13 +73,8 @@ function shellHtml() {
 
 // Reminds the boss when the subscription set on the platform is about to run out.
 function subscriptionBanner() {
-  const until = App.tenant && App.tenant.paid_until;
-  if (!until || !can('owner', 'admin')) return '';
-  const days = Math.ceil((until - Date.now()) / (24 * 60 * MIN));
-  if (days > 5) return '';
-  return `<div class="notice ${days < 0 ? 'red' : ''}" style="margin:12px 20px 0">${icon('triangle-alert', 18)} ${days < 0
-    ? t("Obuna muddati {0} da tugagan. Iltimos, to'lovni amalga oshiring.", fmtDate(until))
-    : t('Obuna muddati {0} kundan keyin ({1}) tugaydi.', days, fmtDate(until))}</div>`;
+  const n = can('owner', 'admin') && subscriptionNotice(App.tenant && App.tenant.paid_until);
+  return n ? `<div class="notice ${n.cls}" style="margin:12px 20px 0">${icon('triangle-alert', 18)} ${n.text}</div>` : '';
 }
 
 function updateNav() { document.querySelectorAll('.rail, .tabbar').forEach((n) => { n.innerHTML = (n.classList.contains('rail') ? railLogo() : '') + navHtml(); }); }
@@ -241,8 +236,10 @@ Live.on('settings', async () => {
     const changed = JSON.stringify([me.disabled, me.kitchen_mode, me.business_type, me.money]) !== JSON.stringify([App.disabled, App.kitchenMode, App.biz, App.money]);
     App.settings = me.settings; App.disabled = me.disabled || []; App.kitchenMode = me.kitchen_mode; App.user = me.user;
     App.biz = me.business_type || 'choyxona'; App.money = me.money || {};
+    const termChanged = JSON.stringify(me.tenant) !== JSON.stringify(App.tenant);
+    App.tenant = me.tenant;
     await loadInfo(me.tenant.code);
-    if (changed) { document.getElementById('app').innerHTML = ''; render(); } else updateNav();
+    if (changed || termChanged) { document.getElementById('app').innerHTML = ''; render(); } else updateNav();
   } catch { /* ignore */ }
 });
 Live.on('item_ready', (d) => {
