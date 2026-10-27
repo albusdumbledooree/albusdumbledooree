@@ -801,7 +801,7 @@ Views.settings = {
         };
       } else if (cur.mode === 'builtin') {
         ex.innerHTML = `<div class="wall-grid">${Array.from({ length: WALLPAPERS }, (_, i) => i + 1).map((n) => `<button type="button" class="wall ${cur.n === n ? 'on' : ''}" data-wall="${n}"
-          style="background-image:url('/bg/${String(n).padStart(2, '0')}.svg')"></button>`).join('')}</div>`;
+          style="background-image:url('${wallpaperUrl(n, true)}')"></button>`).join('')}</div>`;
         ex.querySelectorAll('[data-wall]').forEach((b) => b.onclick = () => save({ lock_bg: { mode: 'builtin', n: Number(b.dataset.wall) } }));
       } else if (cur.mode === 'auto') {
         ex.innerHTML = `<p class="small muted">${t("Har kuni chiroyli rasmlardan biri o'zi tanlanadi. Internet shart emas.")}</p>`;
@@ -1104,7 +1104,10 @@ Views.settings = {
     const pf = root.querySelector('#pin-form');
     pf.onsubmit = async (e) => {
       e.preventDefault();
-      try { await PUT('/api/me/pin', formData(pf)); pf.reset(); toast(t('Saqlandi'), 'ok'); } catch (err) { toastError(err); }
+      try {
+        await PUT('/api/me/pin', formData(pf)); pf.reset(); toast(t('Saqlandi'), 'ok');
+        if (!App.user.has_pin) { App.user.has_pin = true; document.getElementById('app').innerHTML = ''; render(); }
+      } catch (err) { toastError(err); }
     };
     const pw = root.querySelector('#pw-form');
     pw.onsubmit = async (e) => {

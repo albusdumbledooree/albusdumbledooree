@@ -1,0 +1,96 @@
+<!doctype html>
+<!-- Paints desktop backgrounds 17–28 (public/bg/*.jpg). Open in Chrome and call renderScene(n) / thumb() from the console. -->
+<html><body style="margin:0"><canvas id="c" width="1920" height="1080"></canvas><script>
+const W = 1920, H = 1080, c = document.getElementById('c'), g = c.getContext('2d');
+let seed = 1; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const R = (a, b) => a + rnd() * (b - a);
+function lin(stops, x0 = 0, y0 = 0, x1 = 0, y1 = H) { const l = g.createLinearGradient(x0, y0, x1, y1); stops.forEach(([o, col]) => l.addColorStop(o, col)); return l; }
+function sky(stops) { g.fillStyle = lin(stops); g.fillRect(0, 0, W, H); }
+// Fade to the same colour with alpha 0 (fading to transparent black leaves grey halos).
+const clear = (col) => col.replace(/rgba\(([^,]+),([^,]+),([^,]+),[^)]+\)/, 'rgba($1,$2,$3,0)');
+function glow(x, y, r, col, a = 1) { const rg = g.createRadialGradient(x, y, 0, x, y, r); rg.addColorStop(0, col); rg.addColorStop(.45, col.replace(/,[^,)]+\)$/, (m) => `,${parseFloat(m.slice(1)) * .45})`)); rg.addColorStop(1, clear(col)); g.globalAlpha = a; g.fillStyle = rg; g.fillRect(x - r, y - r, 2 * r, 2 * r); g.globalAlpha = 1; }
+function grain(k = 10) { const d = g.getImageData(0, 0, W, H); for (let i = 0; i < d.data.length; i += 4) { const n = (rnd() - .5) * k; d.data[i] += n; d.data[i + 1] += n; d.data[i + 2] += n; } g.putImageData(d, 0, 0); }
+function vignette(a = .45) { const rg = g.createRadialGradient(W / 2, H / 2, H * .35, W / 2, H / 2, H * 1.05); rg.addColorStop(0, 'rgba(0,0,0,0)'); rg.addColorStop(1, `rgba(0,0,0,${a})`); g.fillStyle = rg; g.fillRect(0, 0, W, H); }
+function ridge(base, amp, freq, col, jag = 0) {
+  g.beginPath(); g.moveTo(0, H);
+  const ph = R(0, 10), ph2 = R(0, 10);
+  for (let x = 0; x <= W; x += 6) {
+    const y = base - amp * (Math.sin(x / W * freq + ph) * .6 + Math.sin(x / W * freq * 2.7 + ph2) * .3 + (jag ? (rnd() - .5) * jag : 0));
+    g.lineTo(x, y);
+  }
+  g.lineTo(W, H); g.closePath(); g.fillStyle = col; g.fill();
+}
+function fog(y, h, col) { g.fillStyle = lin([[0, clear(col)], [.5, col], [1, clear(col)]], 0, y - h, 0, y + h); g.fillRect(0, y - h, W, 2 * h); }
+function stars(n, maxY, a = 1) { for (let i = 0; i < n; i++) { const r = rnd() < .97 ? R(.4, 1.3) : R(1.4, 2.4); g.globalAlpha = R(.3, 1) * a; g.fillStyle = '#fff'; g.beginPath(); g.arc(R(0, W), R(0, maxY), r, 0, 7); g.fill(); } g.globalAlpha = 1; }
+function bokeh(n, cols, rmin, rmax, blur, aMin = .25, aMax = .7, yMin = 0, yMax = H) {
+  g.filter = `blur(${blur}px)`;
+  for (let i = 0; i < n; i++) { g.globalAlpha = R(aMin, aMax); g.fillStyle = cols[Math.floor(R(0, cols.length))]; g.beginPath(); g.arc(R(0, W), R(yMin, yMax), R(rmin, rmax), 0, 7); g.fill(); }
+  g.filter = 'none'; g.globalAlpha = 1;
+}
+const scenes = {
+  // 17 city lights at night
+  17() { sky([[0, '#060b1f'], [1, '#1b1035']]); bokeh(90, ['#ffb347', '#ff6f91', '#4fc3f7', '#ffd54f', '#b388ff'], 20, 90, 18, .15, .55); bokeh(60, ['#ffe0a3', '#ffffff', '#ffcc80'], 6, 22, 4, .3, .8); vignette(.55); grain(8); },
+  // 18 misty mountains at dawn
+  18() { sky([[0, '#f8c9a0'], [.45, '#f4a3a8'], [1, '#6f7bb8']]); glow(1300, 560, 520, 'rgba(255,236,200,.95)');
+    const cols = ['#9aa3c9', '#7f88b5', '#646ea0', '#4c5585', '#363e6a', '#232a4d'];
+    cols.forEach((col, i) => { ridge(520 + i * 95, 120 - i * 10, 3 + i, col, 0.02); fog(600 + i * 95, 50, 'rgba(255,228,230,.22)'); }); grain(6); },
+  // 19 golden dunes
+  19() { sky([[0, '#ffcf8a'], [.5, '#ff9a62'], [1, '#c4553b']]); glow(480, 420, 380, 'rgba(255,248,220,1)');
+    for (let i = 0; i < 6; i++) { const base = 560 + i * 90; ridge(base, 80, 2 + i * .7, lin([[0, ['#f2a65a', '#e08a45', '#c96f36', '#a9552a', '#8a4122', '#6a301b'][i]], [1, '#4a1f12']], 0, base - 100, 0, H)); }
+    grain(7); },
+  // 20 aurora over snowy peaks
+  20() { sky([[0, '#020617'], [.6, '#071a33'], [1, '#0b2a3f']]); stars(500, 700, .9);
+    g.filter = 'blur(28px)'; for (let k = 0; k < 3; k++) { const col = ['rgba(52,211,153,.55)', 'rgba(56,189,248,.45)', 'rgba(167,139,250,.4)'][k];
+      for (let x = -200; x < W + 200; x += 14) { const y = 260 + Math.sin(x / 260 + k * 2) * 110 + k * 40; g.fillStyle = lin([[0, clear(col)], [.5, col], [1, clear(col)]], 0, y - 260, 0, y + 120); g.fillRect(x, y - 260, 16, 380); } }
+    g.filter = 'none';
+    ridge(820, 260, 4, '#c9d6e6', .06); ridge(900, 160, 6, '#8ea3bd', .05); ridge(980, 90, 9, '#1b2a3d', .03); grain(6); },
+  // 21 ocean sunset
+  21() { sky([[0, '#2a1b5c'], [.35, '#c2477a'], [.55, '#ff9e5e'], [.62, '#ffd59a'], [.621, '#1d3557'], [1, '#0b1a2e']]);
+    glow(960, 660, 260, 'rgba(255,230,170,1)'); g.fillStyle = '#fff4d6'; g.beginPath(); g.arc(960, 660, 95, Math.PI, 0); g.fill();
+    g.filter = 'blur(14px)'; for (let i = 0; i < 9; i++) { g.globalAlpha = R(.25, .5); g.fillStyle = '#ffd1dc'; g.beginPath(); g.ellipse(R(0, W), R(120, 520), R(160, 380), R(18, 40), 0, 0, 7); g.fill(); } g.filter = 'none'; g.globalAlpha = 1;
+    for (let y = 672; y < H; y += 6) { const w = (H - y) * .05 + 30 + R(0, 120); g.globalAlpha = R(.25, .7) * (1 - (y - 670) / 420); g.fillStyle = '#ffd59a'; g.fillRect(960 - w / 2 + R(-30, 30), y, w, 2.2); }
+    g.globalAlpha = 1; grain(6); },
+  // 22 silk waves
+  22() { sky([[0, '#1e1b4b'], [1, '#4c1d95']]);
+    for (let k = 0; k < 26; k++) { g.beginPath(); for (let x = 0; x <= W; x += 8) { const y = 300 + k * 22 + Math.sin(x / 300 + k * .25) * 140 + Math.sin(x / 120 + k) * 10; x ? g.lineTo(x, y) : g.moveTo(x, y); }
+      g.strokeStyle = `hsla(${280 - k * 4}, 85%, ${55 + k}%, ${.12 + k * .012})`; g.lineWidth = 18; g.stroke(); }
+    glow(1500, 250, 500, 'rgba(244,114,182,.35)'); vignette(.4); grain(6); },
+  // 23 colour glass blobs
+  23() { sky([[0, '#0f172a'], [1, '#111827']]); g.filter = 'blur(90px)';
+    [['#22d3ee', 400, 300, 330], ['#a78bfa', 1300, 260, 380], ['#f472b6', 1000, 760, 360], ['#34d399', 300, 860, 300], ['#fbbf24', 1650, 820, 260]].forEach(([col, x, y, r]) => { g.fillStyle = col; g.globalAlpha = .75; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); });
+    g.filter = 'none'; g.globalAlpha = 1; grain(12); },
+  // 24 warm teahouse lights
+  24() { sky([[0, '#1a0f0a'], [1, '#3b2312']]); glow(960, 1100, 900, 'rgba(255,170,80,.35)');
+    for (let s = 0; s < 3; s++) { const y0 = 160 + s * 120; for (let x = 0; x <= W; x += 70) { const y = y0 + Math.sin(x / W * Math.PI) * 120; glow(x, y, 46, 'rgba(255,200,120,.9)', .75); g.fillStyle = '#fff1d0'; g.beginPath(); g.arc(x, y, 4, 0, 7); g.fill(); } }
+    bokeh(40, ['#ffb347', '#ffcc80', '#ff8a50'], 30, 90, 22, .15, .4, 500, 1080); vignette(.5); grain(8); },
+  // 25 forest in fog
+  25() { sky([[0, '#dfe9e4'], [1, '#9fb8ad']]); glow(1400, 300, 500, 'rgba(255,255,240,.8)');
+    const layers = ['#a7bdb2', '#86a395', '#5f8172', '#3e5f51', '#223a31'];
+    layers.forEach((col, i) => { g.fillStyle = col; for (let x = -40; x < W + 40; x += R(26, 60)) { const h = R(160, 340) * (1 + i * .35); const b = 620 + i * 110; g.beginPath(); g.moveTo(x, b - h); g.lineTo(x - h * .22, b); g.lineTo(x + h * .22, b); g.closePath(); g.fill(); }
+      g.fillRect(0, 620 + i * 110, W, H); fog(640 + i * 110, 70, 'rgba(235,245,240,.45)'); }); grain(5); },
+  // 26 milky way
+  26() { sky([[0, '#030712'], [1, '#111a33']]); stars(1600, H, .8);
+    g.save(); g.translate(W / 2, H / 2); g.rotate(-.5); g.filter = 'blur(60px)'; g.fillStyle = 'rgba(180,170,255,.25)'; g.fillRect(-1400, -110, 2800, 220); g.fillStyle = 'rgba(255,200,170,.18)'; g.fillRect(-1400, -40, 2800, 80); g.restore(); g.filter = 'none';
+    g.save(); g.translate(W / 2, H / 2); g.rotate(-.5); for (let i = 0; i < 2500; i++) { g.globalAlpha = R(.2, .9); g.fillStyle = '#fff'; g.fillRect(R(-1400, 1400), (rnd() + rnd() + rnd() - 1.5) * 110, R(.6, 1.6), R(.6, 1.6)); } g.restore(); g.globalAlpha = 1;
+    ridge(900, 70, 3, '#05080f', .2); grain(6); },
+  // 27 Samarkand at night
+  27() { sky([[0, '#0b1533'], [.6, '#1d3b6e'], [1, '#e79a5e']]); stars(260, 520, .8); glow(960, 980, 700, 'rgba(255,170,90,.45)');
+    const sil = '#0a0f1f'; g.fillStyle = sil;
+    const dome = (x, b, w, h, col) => { g.fillStyle = col; g.beginPath(); g.moveTo(x - w / 2, b); g.lineTo(x - w / 2, b - h * .45); g.quadraticCurveTo(x - w / 2, b - h, x, b - h * 1.18); g.quadraticCurveTo(x + w / 2, b - h, x + w / 2, b - h * .45); g.lineTo(x + w / 2, b); g.fill(); };
+    g.fillRect(0, 930, W, 200); g.fillRect(520, 640, 880, 300); g.fillRect(800, 500, 320, 440);
+    dome(960, 540, 260, 190, '#13406b'); dome(640, 660, 160, 120, '#13406b'); dome(1280, 660, 160, 120, '#13406b');
+    for (const x of [470, 1450]) { g.fillStyle = sil; g.fillRect(x - 30, 330, 60, 610); g.fillRect(x - 42, 330, 84, 24); dome(x, 330, 64, 56, '#13406b'); }
+    g.fillStyle = sil; g.beginPath(); g.moveTo(880, 940); g.lineTo(880, 740); g.arc(960, 740, 80, Math.PI, 0); g.lineTo(1040, 940); g.fill();
+    glow(960, 800, 120, 'rgba(255,190,110,.9)'); g.fillStyle = 'rgba(255,200,120,.95)'; g.beginPath(); g.moveTo(905, 940); g.lineTo(905, 760); g.arc(960, 760, 55, Math.PI, 0); g.lineTo(1015, 940); g.fill();
+    for (let i = 0; i < 18; i++) { const x = 560 + i * 46; if (Math.abs(x - 960) < 110) continue; g.fillStyle = 'rgba(255,200,120,.75)'; g.fillRect(x, 780, 16, 40); }
+    grain(6); },
+  // 28 deep blue ornament with golden light
+  28() { sky([[0, '#06142e'], [1, '#0b2147']]); glow(960, 540, 700, 'rgba(250,204,21,.18)');
+    g.strokeStyle = 'rgba(234,179,8,.35)'; g.lineWidth = 2;
+    const star = (cx, cy, r1, r2) => { g.beginPath(); for (let k = 0; k < 16; k++) { const r = k % 2 ? r2 : r1; const a = Math.PI * k / 8; g.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a)); } g.closePath(); g.stroke(); };
+    for (let y = -60; y < H + 120; y += 180) for (let x = -60; x < W + 120; x += 180) { star(x, y, 80, 50); star(x, y, 36, 22); g.beginPath(); g.arc(x + 90, y + 90, 14, 0, 7); g.stroke(); }
+    vignette(.7); grain(6); },
+};
+window.renderScene = (n) => { seed = n * 7919; g.filter = 'none'; g.globalAlpha = 1; scenes[n](); return c.toDataURL('image/jpeg', .84); };
+window.thumb = () => { const t = document.createElement('canvas'); t.width = 384; t.height = 216; t.getContext('2d').drawImage(c, 0, 0, 384, 216); return t.toDataURL('image/jpeg', .8); };
+</script></body></html>

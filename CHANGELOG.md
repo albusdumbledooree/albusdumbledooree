@@ -2,6 +2,11 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.5.1
+- Boshliq va admin ish stolida parol qo'ymaguncha parolsiz kiradi (ekranda "parol qo'ying" eslatmasi turadi).
+- 12 ta yangi chiroyli fon rasmi (jami 28 ta): shahar chiroqlari, tumanli tog'lar, qumtepalar, shimol yog'dusi,
+  dengizdagi quyosh botishi, choyxona chiroqlari, tumanli o'rmon, somon yo'li, kechki Samarqand va boshqalar.
+
 ## 1.5.0
 - Chek yozuvlari qalin, qora shriftda — termoprinterda xira chiqmaydi.
 - Chek tepasida logotip (yoqish/o'chirish, chek uchun alohida oq-qora logotip; PNG va JPG).

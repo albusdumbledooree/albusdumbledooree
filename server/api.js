@@ -18,7 +18,7 @@ const BUSINESS_TYPES = { choyxona: 'Choyxona', restoran: 'Restoran / kafe', fast
 const SHOP_TYPES = ['market', 'clothing'];
 const IMAGE_TYPES = { 'image/jpeg': 1, 'image/png': 1, 'image/webp': 1 };
 const DEFAULT_ROOM_TYPES = [['banket', 'Banket'], ['vip', 'VIP'], ['supa', 'Supa'], ['stol', 'Stol'], ['zal', 'Zal'], ['boshqa', 'Boshqa']].map(([key, name]) => ({ key, name }));
-const WALLPAPERS = 16;
+const WALLPAPERS = 28;
 const MIN = 60_000;
 // Sections the platform owner can switch off per choyxona (e.g. for cheaper plans).
 const MODULES = {
@@ -185,7 +185,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
     const order = { owner: 0, admin: 1, cashier: 2, waiter: 3, chef: 4 };
     return q('SELECT * FROM users WHERE active = 1').all()
       .sort((a, b) => order[a.role] - order[b.role] || a.name.localeCompare(b.name))
-      .map((u) => ({ id: u.id, name: u.name, role: u.role, has_pin: !!u.pin_hash || MANAGERS.includes(u.role) }));
+      .map((u) => ({ id: u.id, name: u.name, role: u.role, has_pin: !!u.pin_hash || MANAGERS.includes(u.role),
+        open: !u.pin_hash && MANAGERS.includes(u.role) }));
   }
 
   // 5 wrong PINs for one worker on one device lock that worker there for 5 minutes.
@@ -198,10 +199,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
     if (tries > 0 && f && f.count >= tries && now() - f.first < mins * MIN) throw new HttpError(429, `Juda ko'p xato. ${mins} daqiqadan keyin urinib ko'ring`);
     const user = q('SELECT * FROM users WHERE id = ? AND active = 1').get(id);
     if (!user) throw new HttpError(404, 'Xodim topilmadi');
-    // Boss and admin without a separate desktop password use their login password.
-    const hash = user.pin_hash || (MANAGERS.includes(user.role) ? user.pass_hash : null);
-    if (!hash) throw new HttpError(400, "PIN o'rnatilmagan. Boshliqqa murojaat qiling");
-    if (!verifyPassword(String(body.pin ?? ''), hash)) {
+    // Boss and admin enter without a password until they set a desktop password (the screen keeps reminding them).
+    if (!user.pin_hash && MANAGERS.includes(user.role)) return startSession(user, 'pin_login');
+    if (!user.pin_hash) throw new HttpError(400, "PIN o'rnatilmagan. Boshliqqa murojaat qiling");
+    if (!verifyPassword(String(body.pin ?? ''), user.pin_hash)) {
       pinFailures.set(key, !f || now() - f.first >= mins * MIN ? { count: 1, first: now() } : { ...f, count: f.count + 1 });
       throw new HttpError(401, "PIN noto'g'ri");
     }

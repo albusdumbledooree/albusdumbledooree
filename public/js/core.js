@@ -631,8 +631,13 @@ document.addEventListener('pointerdown', () => Screen.keepAwake());
 }));
 
 // ---------- Desktop background: the boss's colour or picture, or a built-in picture that changes daily ----------
-const WALLPAPERS = 16;
-const LIGHT_WALLS = [4, 6, 8, 11, 16];
+// 1–16 drawn as SVG, 17–28 painted pictures (JPG, made by scripts/wallpapers.html).
+const WALLPAPERS = 28;
+const LIGHT_WALLS = [4, 6, 8, 11, 16, 18, 19, 25];
+function wallpaperUrl(n, small = false) {
+  const nn = String(n).padStart(2, '0');
+  return n > 16 ? `/bg/${small ? 'thumb/' : ''}${nn}.jpg` : `/bg/${nn}.svg`;
+}
 function wallpaperOfDay(d = new Date()) {
   const day = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000);
   return (day % WALLPAPERS) + 1;
@@ -653,7 +658,7 @@ function lockBackground(bg) {
   if (bg.mode === 'image' && bg.url) return { style: `background:${shade(0.45)}, url('${bg.url}') center/cover no-repeat ${bg.color || '#0b1f33'}`, cls: 'on-image' };
   if (bg.mode === 'auto' || bg.mode === 'builtin') {
     const n = bg.mode === 'builtin' && bg.n >= 1 && bg.n <= WALLPAPERS ? bg.n : wallpaperOfDay();
-    const url = `url('/bg/${String(n).padStart(2, '0')}.svg') center/cover no-repeat`;
+    const url = `url('${wallpaperUrl(n)}') center/cover no-repeat`;
     // Light pictures keep their colours and get dark text; dark ones get a soft shade and white text.
     if (LIGHT_WALLS.includes(n)) return { style: `background:linear-gradient(rgba(255,255,255,.18), rgba(255,255,255,.18)), ${url} #f5f5f4`, cls: 'on-light' };
     return { style: `background:${shade(0.3)}, ${url} #0b1f33`, cls: 'on-image' };

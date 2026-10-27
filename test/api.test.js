@@ -605,16 +605,22 @@ test('backups: download, restore keeps devices, platform copies, enter as boss, 
   assert.equal((await call('GET', '/api/rooms', boss)).data.length, 1);
 });
 
-test('a new business boss logs in on the desktop with the login password; orders reach printer devices', async () => {
+test('a new business boss enters the desktop without a password until setting one; orders reach printer devices', async () => {
   const admin = await platformAdmin();
   await newBusiness(admin, 'yangi', 'choyxona');
   const dev = (await call('POST', '/api/device/register', null, { code: 'yangi', username: 'boss', password: 'boss1234' })).data.device_token;
   const staff = (await call('GET', '/api/device/staff', dev)).data;
   assert.equal(staff[0].has_pin, true, 'the boss tile is usable at once');
-  assert.equal((await call('POST', '/api/device/pin', dev, { user_id: staff[0].id, pin: 'xato' })).status, 401);
-  const r = await call('POST', '/api/device/pin', dev, { user_id: staff[0].id, pin: 'boss1234' });
+  assert.equal(staff[0].open, true);
+  const r = await call('POST', '/api/device/pin', dev, { user_id: staff[0].id, pin: '' });
   assert.equal(r.status, 200, JSON.stringify(r.data));
   const boss = r.data.token;
+  assert.equal((await call('GET', '/api/me', boss)).data.user.has_pin, false, 'the screen keeps reminding');
+  // Once the boss sets a desktop password, it is asked.
+  assert.equal((await call('PUT', '/api/me/pin', boss, { pin: 'kalit77' })).status, 200);
+  assert.equal((await call('GET', '/api/device/staff', dev)).data[0].open, false);
+  assert.equal((await call('POST', '/api/device/pin', dev, { user_id: staff[0].id, pin: '' })).status, 401);
+  assert.equal((await call('POST', '/api/device/pin', dev, { user_id: staff[0].id, pin: 'kalit77' })).status, 200);
 
   // The device's own event stream receives every new order.
   const ctrl = new AbortController();

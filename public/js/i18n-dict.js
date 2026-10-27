@@ -496,6 +496,9 @@
     "Bu tur xonalarda ishlatilmoqda, avval xonalarni boshqa turga o'tkazing": ['Этот тип используется комнатами — сначала переведите их на другой тип', 'Rooms use this type — move them to another type first'],
     "Xona turlari ro'yxati noto'g'ri": ['Неверный список типов комнат', 'Invalid list of room types'],
     'Xona turlari takrorlangan': ['Типы комнат повторяются', 'Room types repeat'],
+    "Sozlamalarda qo'yilgan kirish paroli": ['Пароль входа из настроек', 'The desktop password set in Settings'],
+    "Ish stolida sizning ismingizga parol qo'yilmagan — ismingizni bosgan har kim kira oladi.": ['На рабочем столе у вас нет пароля — любой, кто нажмёт ваше имя, войдёт.', 'Your name on the desktop has no password — anyone who taps it gets in.'],
+    "Parol qo'yish": ['Поставить пароль', 'Set a password'],
   };
   for (const [uz, [ru, en]] of Object.entries(T)) {
     I18N.ru[uz] = ru;

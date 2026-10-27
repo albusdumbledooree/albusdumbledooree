@@ -187,6 +187,11 @@ setInterval(() => {
 
 function pinDialog(u) {
   if (!u.has_pin) return toast(t("PIN o'rnatilmagan. Boshliqqa murojaat qiling"), 'warn');
+  // No desktop password yet: the boss goes straight in.
+  if (u.open) {
+    api('POST', '/api/device/pin', { user_id: u.id, pin: '' }, App.device.token).then((r) => startSession(r.token)).catch(toastError);
+    return;
+  }
   const boss = u.role === 'owner' || u.role === 'admin';
   const submit = async (pin) => {
     try {
@@ -204,7 +209,7 @@ function pinDialog(u) {
     body: `<div class="pin-box"><div class="pin-who"><span class="avatar ${u.role}">${esc(initials(u.name))}</span><b>${esc(u.name)}</b>
       <span class="muted small">${roleName(u.role)}</span></div>
       ${boss ? `<label class="field" style="width:100%">${t('Parol')}<input type="password" name="pin" autocomplete="off" required>
-        <span class="small muted" style="font-weight:500">${t('Login paroli yoki Sozlamalarda qo\'yilgan kirish paroli')}</span></label>`
+        <span class="small muted" style="font-weight:500">${t('Sozlamalarda qo\'yilgan kirish paroli')}</span></label>`
         : keypadHtml(4)}</div>`,
     actions: [{ label: t('Bekor') }, { label: t('Kirish'), cls: 'primary', icon: 'lock-open', onClick: (f) => { submit(boss ? f.pin.value : pad.get()); return false; } }],
   });

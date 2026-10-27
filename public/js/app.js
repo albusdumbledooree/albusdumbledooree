@@ -67,6 +67,8 @@ function shellHtml() {
     </header>
     ${App.platformSession ? `<div class="notice blue slim">${icon('shield-check', 18)} ${t('Platforma orqali boshliq sifatida kirdingiz. Amallar tarixga yoziladi.')}</div>` : ''}
     ${subscriptionBanner()}
+    ${can('owner', 'admin') && !App.user.has_pin && App.device ? `<div class="notice slim">${icon('key-round', 18)} <span>${t("Ish stolida sizning ismingizga parol qo'yilmagan — ismingizni bosgan har kim kira oladi.")}
+      <a href="#/settings" id="set-pin">${t("Parol qo'yish")}</a></span></div>` : ''}
     <main class="content" id="view"></main>
     <footer class="statusbar">${statusBarHtml()}</footer>
     <nav class="tabbar">${navHtml()}</nav>
@@ -122,6 +124,8 @@ async function render() {
   if (!document.getElementById('view')) {
     app.innerHTML = shellHtml();
     app.querySelector('#top-exit').onclick = logout;
+    const sp = app.querySelector('#set-pin');
+    if (sp) sp.onclick = () => { UI.settingsTab = 'me'; };
     const full = app.querySelector('#top-full');
     if (full) full.onclick = () => Screen.toggleFull();
     updateConn();
