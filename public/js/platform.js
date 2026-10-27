@@ -104,7 +104,7 @@ function mainHtml() {
   const active = P.tenants.filter((t) => t.status === 'active');
   const due = active.filter((t) => { const d = daysLeft(t); return d !== null && d <= 5; });
   const types = [...new Set(P.tenants.map((t) => t.business_type))];
-  return `<header class="ptop">${flowiLogo(22)}<b class="hide-xs">Platforma</b><span class="grow"></span>
+  return `<header class="ptop">${flowiLogo(22)}<b class="hide-xs">Platforma</b>${P.release ? `<span class="chip">v${esc(P.release)}</span>` : ''}<span class="grow"></span>
       <span class="muted small hide-xs">${esc(P.admin.name)}</span>
       <button class="icon-btn" id="psettings" title="Yordam kontakti">${icon('life-buoy')}</button>
       <button class="icon-btn" id="pw" title="Parol">${icon('key-round')}</button>
@@ -134,7 +134,7 @@ function kpiP(label, value, sub, ic, cls = '') {
 function emptyState(ic, text) { return `<div class="empty">${icon(ic, 56)}<div>${text}</div></div>`; }
 
 async function load() {
-  [P.tenants, P.modules, P.types] = await Promise.all([GET('/api/platform/tenants'), GET('/api/platform/modules'), GET('/api/platform/types')]);
+  [P.tenants, P.modules, P.types, { release: P.release }] = await Promise.all([GET('/api/platform/tenants'), GET('/api/platform/modules'), GET('/api/platform/types'), GET('/api/platform/release')]);
 }
 
 // ---------- Forms ----------

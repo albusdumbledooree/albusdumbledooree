@@ -52,5 +52,5 @@ for _ in $(seq 1 20); do
 done
 [ "$ok" = 1 ] || rollback
 
-say "6/6 Tayyor: $(git log -1 --format='%h %s')"
+say "6/6 Tayyor: FLOWI v$(node -p "require('./package.json').version") — $(git log -1 --format='%h %s')"
 echo "Ochiq qurilmalar bo'sh paytida o'zi yangilanadi (yuborilmagan buyurtma yo'qolmaydi)."

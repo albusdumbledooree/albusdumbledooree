@@ -382,15 +382,24 @@ function cancelItemDialog(item) {
   const form = openModal({
     title: `${icon('ban')} ${t('Taomni bekor qilish')}`,
     body: `<p class="lead"><b>${item.qty}× ${esc(item.name)}</b></p>
+      ${item.qty > 1 ? `<div class="field" style="margin-bottom:12px">${t('Nechtasi bekor qilinadi?')}
+        <div class="row" style="margin-top:6px"><span class="stepper big-step"><button type="button" data-cq="-1">${icon('minus', 20)}</button><span id="cq">${item.qty}</span><button type="button" data-cq="1">${icon('plus', 20)}</button></span>
+          <span class="muted">/ ${item.qty}</span><button type="button" class="btn sm" data-cq="all">${t('Hammasi')}</button></div></div>` : ''}
       <label class="field">${needReason ? t('Sabab (majburiy)') : t('Sabab (ixtiyoriy)')}<input name="reason"></label>
       ${waiter ? `<p class="small muted" style="margin:14px 0 6px">${t('Boshliq bergan bekor qilish kodi')}</p><div class="pin-box">${keypadHtml(8)}</div>` : ''}`,
     actions: [{ label: t('Orqaga') }, { label: t('Bekor qilish'), cls: 'danger', icon: 'ban', onClick: async (f) => {
       const reason = f.reason.value.trim();
       if (needReason && !reason) { toast(t('Sababni yozing'), 'warn'); return false; }
-      await POST(`/api/items/${item.id}/cancel`, { reason, code: pad ? pad.get() : undefined });
-      toast(t('Bekor qilindi'), 'warn');
+      await POST(`/api/items/${item.id}/cancel`, { reason, qty, code: pad ? pad.get() : undefined });
+      toast(t('Bekor qilindi: {0} × {1}', item.name, qty), 'warn');
       refreshView();
     } }],
+  });
+  let qty = item.qty;
+  form.querySelectorAll('[data-cq]').forEach((b) => b.onclick = () => {
+    const v = b.dataset.cq;
+    qty = v === 'all' ? item.qty : Math.min(item.qty, Math.max(1, qty + Number(v)));
+    form.querySelector('#cq').textContent = qty;
   });
   if (waiter) pad = bindKeypad(form, { maxLen: 8 });
 }

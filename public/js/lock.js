@@ -55,7 +55,7 @@ Views.setup = {
     const code = store('cp_code') || '';
     return `<div class="setup-wrap"><form class="card setup" id="setup-form" autocomplete="on">
       <div class="brand"><div class="grow">${flowiLogo(26)}
-        <span class="muted small">${App.info && App.info.name ? esc(App.info.name) : t('Boshqaruv tizimi')}</span></div>${venueLogo('setup-logo')}${langSelect()}</div>
+        <span class="muted small">${App.info && App.info.name ? esc(App.info.name) : t('Boshqaruv tizimi')}</span></div>${venueLogo('setup-logo')}${keyboardToggle()}${langSelect()}</div>
       <p class="small muted">${icon('monitor-smartphone', 16)} ${t("Kassa kompyuteri, planshet yoki telefonni boshliq bir marta ulaydi. Keyin xodimlar ismini bosib PIN kod bilan kiradi.")}</p>
       <div class="stack">
         <label class="field">${t('Kod')}<input name="code" autocapitalize="none" value="${esc(code)}" placeholder="navruz" required></label>
@@ -67,11 +67,13 @@ Views.setup = {
       </div>
       ${App.info && App.info.demo ? `<p class="small muted" style="margin-top:14px">${t('Sinov uchun')}: <b>ega / ega123</b></p>` : ''}
       ${supportHtml()}
+      ${App.info && App.info.release ? `<p class="small muted" style="margin:12px 0 0;text-align:right">FLOWI v${esc(App.info.release)}</p>` : ''}
     </form></div>`;
   },
   bind(root) {
     const form = root.querySelector('#setup-form');
     bindLang(root);
+    bindKeyboardToggle(root);
     form.code.onchange = async () => {
       const code = form.code.value.trim().toLowerCase();
       if (!code) return;
@@ -130,7 +132,7 @@ Views.lock = {
       ${names ? `<div class="staff-grid">${staff.map((u) => `<button class="staff-tile ${u.role} ${u.has_pin ? '' : 'nopin'}" data-staff="${u.id}">
           <span class="role">${roleName(u.role)}</span><b>${esc(u.name)}</b></button>`).join('')}</div>`
         : `<div class="lock-actions"><button class="lock-btn" id="lock-enter">${icon('log-in', 22)} ${t('Kirish')}</button></div>`}
-      <div class="lock-foot">${supportHtml()}<span class="grow"></span><span class="lock-brand">${flowiLogo(14)}</span></div>
+      <div class="lock-foot">${supportHtml()}<span class="grow"></span><span class="lock-brand">${flowiLogo(14)}${App.info && App.info.release ? `<small>v${esc(App.info.release)}</small>` : ''}</span></div>
     </div>`;
   },
   bind(root, { staff }) {
@@ -149,10 +151,13 @@ Views.lock = {
       body: `<p>${t('Kod')}: <b>${esc(App.device.code)}</b></p>
         <label class="check" style="margin:12px 0"><input type="checkbox" id="order-print" ${OrderPrinter.on() ? 'checked' : ''}> ${icon('printer', 18)} ${t('Shu qurilmadan har bir yangi buyurtmani chop etish')}</label>
         ${keyboardSelect()}
+        <button type="button" class="btn block" id="kiosk-bat" style="margin-top:12px">${icon('download', 18)} ${t('Kassa yorlig\'ini yuklab olish (Windows)')}</button>
+        <p class="small muted" style="margin-top:6px">${t("Shu yorliq bilan ochilsa, chek chiqqanda chop etish oynasi ochilmaydi — darhol printerdan chiqadi.")}</p>
         <p class="small muted">${t("Qurilmani uzsangiz, uni qayta ulash uchun boshliq logini kerak bo'ladi.")}</p>`,
       onMount: (f) => {
         f.querySelector('#order-print').onchange = (e) => OrderPrinter.set(e.target.checked);
         f.querySelector('#kb-mode').onchange = (e) => Keyboard.setMode(e.target.value);
+        f.querySelector('#kiosk-bat').onclick = downloadKioskLauncher;
       },
       actions: [{ label: t('Yopish') }, { label: t('Qurilmani uzish'), cls: 'danger', icon: 'log-out', onClick: () => {
         OrderPrinter.set(false); App.device = null; store('cp_device', null); location.hash = '#/setup';

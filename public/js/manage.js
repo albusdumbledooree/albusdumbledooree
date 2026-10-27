@@ -751,13 +751,19 @@ Views.settings = {
     const s = App.settings;
     const bg = s.lock_bg || { mode: 'default' };
     const code = App.tenant.code;
-    const modes = [['default', 'sparkles', t('Standart')], ['auto', 'image', t('Avtomatik rasm')], ['color', 'palette', t('Rang')], ['image', 'upload', t("O'z rasmingiz")]];
+    const modes = [['default', 'sparkles', t('Standart')], ['builtin', 'grid-2x2', t('Tayyor rasmlar')], ['auto', 'image', t('Har kuni boshqa')], ['color', 'palette', t('Rang')], ['image', 'upload', t("O'z rasmingiz")]];
     return `<div class="grid grid-2">
       <form class="card" id="logo-form"><div class="card-head"><h2>${icon('image')} ${t('Logotip')}</h2></div>
         <div class="logo-box">${s.logo ? `<img src="/media/${esc(code)}/${s.logo}" alt="">` : `<span class="muted">${t("Logotip yo'q")}</span>`}</div>
         <p class="small muted">${t("Ish stoli, yuqori panel va chekda chiqadi. PNG (shaffof fon) yoki JPG.")}</p>
-        <div class="row"><label class="btn primary">${icon('upload', 18)} ${t('Yuklash')}<input type="file" id="logo-file" accept="image/png,image/jpeg,image/webp" hidden></label>
+        <div class="row"><label class="btn primary">${icon('upload', 18)} ${t('Yuklash')}<input type="file" id="logo-file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg" hidden></label>
           ${s.logo ? `<button type="button" class="btn red-text" id="logo-del">${icon('trash-2', 18)} ${t("O'chirish")}</button>` : ''}</div></form>
+      <form class="card" id="rlogo-form"><div class="card-head"><h2>${icon('printer')} ${t('Chekdagi logotip')}</h2></div>
+        <label class="check"><input type="checkbox" id="rlogo-on" ${s.receipt_logo ? 'checked' : ''}> ${t("Chek tepasida logotip chiqsin")}</label>
+        <div class="logo-box receipt-box" style="margin-top:10px">${s.receipt_logo_id || s.logo ? `<img src="/media/${esc(code)}/${s.receipt_logo_id || s.logo}" alt="">` : `<span class="muted">${t("Logotip yo'q")}</span>`}</div>
+        <p class="small muted">${t("Chek printeri oq-qora chiqaradi. Alohida oq-qora logotip yuklasangiz, chekda o'sha chiqadi; bo'lmasa — asosiy logotip. PNG yoki JPG.")}</p>
+        <div class="row"><label class="btn">${icon('upload', 18)} ${t('Chek uchun yuklash')}<input type="file" id="rlogo-file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg" hidden></label>
+          ${s.receipt_logo_id ? `<button type="button" class="btn red-text" id="rlogo-del">${icon('trash-2', 18)} ${t("O'chirish")}</button>` : ''}</div></form>
       <form class="card" id="bg-form"><div class="card-head"><h2>${icon('monitor-smartphone')} ${t('Ish stoli foni')}</h2></div>
         <div class="seg" style="margin-bottom:12px">${modes.map(([k, ic, n]) => `<button type="button" class="${bg.mode === k ? 'active' : ''}" data-bgmode="${k}">${icon(ic, 16)} ${n}</button>`).join('')}</div>
         <div id="bg-extra"></div>
@@ -793,6 +799,10 @@ Views.settings = {
             await save({ lock_bg: { mode: 'image', image: r.id } });
           } catch (err) { toastError(err); }
         };
+      } else if (cur.mode === 'builtin') {
+        ex.innerHTML = `<div class="wall-grid">${Array.from({ length: WALLPAPERS }, (_, i) => i + 1).map((n) => `<button type="button" class="wall ${cur.n === n ? 'on' : ''}" data-wall="${n}"
+          style="background-image:url('/bg/${String(n).padStart(2, '0')}.svg')"></button>`).join('')}</div>`;
+        ex.querySelectorAll('[data-wall]').forEach((b) => b.onclick = () => save({ lock_bg: { mode: 'builtin', n: Number(b.dataset.wall) } }));
       } else if (cur.mode === 'auto') {
         ex.innerHTML = `<p class="small muted">${t("Har kuni chiroyli rasmlardan biri o'zi tanlanadi. Internet shart emas.")}</p>`;
       } else ex.innerHTML = '';
@@ -804,6 +814,7 @@ Views.settings = {
       if (cur.mode === 'color' && !cur.color) cur.color = '#0b1f33';
       if (cur.mode === 'color') return save({ lock_bg: { mode: 'color', color: cur.color } });
       if (cur.mode === 'image' && cur.image) return save({ lock_bg: { mode: 'image', image: cur.image } });
+      if (cur.mode === 'builtin' && cur.n) return save({ lock_bg: { mode: 'builtin', n: cur.n } });
       preview();
     });
     preview();
@@ -811,12 +822,23 @@ Views.settings = {
       const f = e.target.files[0];
       if (!f) return;
       try {
-        const r = await POST('/api/assets', { kind: 'logo', data: await imageToDataUrl(f, 600, f.type === 'image/jpeg' ? 'image/jpeg' : 'image/png') });
+        const r = await POST('/api/assets', { kind: 'logo', data: await imageToDataUrl(f, 800, f.type === 'image/jpeg' ? 'image/jpeg' : 'image/png') });
         await save({ logo: r.id });
       } catch (err) { toastError(err); }
     };
     const del = root.querySelector('#logo-del');
     if (del) del.onclick = () => save({ logo: '' }, t("O'chirildi"));
+    root.querySelector('#rlogo-on').onchange = (e) => save({ receipt_logo: e.target.checked });
+    root.querySelector('#rlogo-file').onchange = async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      try {
+        const r = await POST('/api/assets', { kind: 'logo', data: await imageToDataUrl(f, 600, 'image/png') });
+        await save({ receipt_logo_id: r.id, receipt_logo: true });
+      } catch (err) { toastError(err); }
+    };
+    const rdel = root.querySelector('#rlogo-del');
+    if (rdel) rdel.onclick = () => save({ receipt_logo_id: '' }, t("O'chirildi"));
   },
 
   tab_rooms({ rooms }) {
@@ -828,16 +850,37 @@ Views.settings = {
       <div class="table-wrap"><table>${rs.map((r) => `<tr class="clickable" data-room="${r.id}" style="${r.active ? '' : 'opacity:.5'}">
         <td style="width:60px"><b style="font-size:22px">${esc(r.number)}</b></td><td><b>${esc(r.name)}</b><br><span class="small muted">${icon(ROOM_TYPE_ICONS[r.type] || 'door-open', 13)} ${roomTypeName(r.type)} · ${icon('users', 13)} ${r.capacity}</span></td>
         <td>${r.waiters.map((w) => `<span class="chip">${icon('user-round', 13)} ${esc(w.name)}</span>`).join(' ') || `<span class="chip red">${t('Ofitsant yo\'q')}</span>`}</td>
-        <td class="actions">${icon('chevron-right', 18)}</td></tr>`).join('')}</table></div>`).join('')}</div>`;
+        <td class="actions">${icon('chevron-right', 18)}</td></tr>`).join('')}</table></div>`).join('')}</div>
+      <form class="card" id="types-form"><div class="card-head"><h2>${icon('list')} ${t('Xona turlari')}</h2>
+        <button type="button" class="btn" id="add-type">${icon('plus', 18)} ${t('Tur')}</button></div>
+        <p class="small muted">${t("Nomini o'zgartiring yoki yangi tur qo'shing (masalan: Tapchan, Kabina, Terassa).")}</p>
+        <div class="types-list">${roomTypes().map((x) => `<div class="row type-row" data-key="${esc(x.key)}">
+          <input name="tname" value="${esc(roomTypeName(x.key))}" maxlength="30" style="max-width:260px">
+          <span class="small muted">${rooms.filter((r) => r.type === x.key).length} ${t('xona')}</span>
+          ${rooms.some((r) => r.type === x.key) ? '' : `<button type="button" class="icon-btn ghost danger" data-del-type>${icon('trash-2', 18)}</button>`}</div>`).join('')}</div>
+        <button class="btn primary" style="margin-top:12px">${icon('check', 18)} ${t('Saqlash')}</button></form>`;
   },
   bind_rooms(root, { rooms, users }) {
+    const tf = root.querySelector('#types-form');
+    const list = tf.querySelector('.types-list');
+    tf.querySelector('#add-type').onclick = () => {
+      list.insertAdjacentHTML('beforeend', `<div class="row type-row" data-key=""><input name="tname" placeholder="${esc(t('Yangi tur nomi'))}" maxlength="30" style="max-width:260px">
+        <button type="button" class="icon-btn ghost danger" data-del-type>${icon('trash-2', 18)}</button></div>`);
+      list.lastElementChild.querySelector('input').focus();
+    };
+    list.addEventListener('click', (e) => { const b = e.target.closest('[data-del-type]'); if (b) b.closest('.type-row').remove(); });
+    tf.onsubmit = async (e) => {
+      e.preventDefault();
+      const room_types = [...list.querySelectorAll('.type-row')].map((r) => ({ key: r.dataset.key, name: r.querySelector('input').value.trim() })).filter((x) => x.name);
+      try { App.settings = await PUT('/api/settings', { room_types }); toast(t('Saqlandi'), 'ok'); refreshView(); } catch (err) { toastError(err); }
+    };
     const waiters = users.filter((u) => u.role === 'waiter' && u.active);
     const edit = (r = {}) => openModal({
       title: `${icon('door-open')} ${r.id ? esc(r.name) : t('Yangi xona')}`,
       body: `<div class="form-grid">
         <label class="field">${t('Raqami')}<input name="number" value="${esc(r.number || String(rooms.length + 1))}" required></label>
         <label class="field">${t('Nomi')}<input name="name" value="${esc(r.name || '')}" placeholder="Banket 1" required></label>
-        <label class="field">${t('Turi')}<select name="type">${ROOM_TYPES.map((k) => `<option value="${k}" ${r.type === k ? 'selected' : ''}>${roomTypeName(k)}</option>`).join('')}</select></label>
+        <label class="field">${t('Turi')}<select name="type">${roomTypes().map((x) => `<option value="${esc(x.key)}" ${r.type === x.key ? 'selected' : ''}>${esc(roomTypeName(x.key))}</option>`).join('')}</select></label>
         <label class="field">${t("Sig'imi (kishi)")}<input type="number" name="capacity" min="1" value="${r.capacity || 10}"></label>
         <label class="field">${t("Bo'lim (qavat)")}<input name="section" list="sections-list" value="${esc(r.section || '')}" placeholder="${esc(t('Masalan: 1-qavat'))}">
           <datalist id="sections-list">${roomSections(rooms).map((x) => `<option value="${esc(x)}">`).join('')}</datalist></label></div>
@@ -865,6 +908,12 @@ Views.settings = {
       <div class="switch-row"><span>${icon('key-round', 24)}</span><div class="grow"><b>${t('Bekor qilish kodi')}</b>
         <span class="small muted">${s.has_cancel_code ? t("Kod o'rnatilgan. Yangisini yozsangiz almashadi.") : t("Kod hali o'rnatilmagan.")}</span></div>
         <input name="cancel_code" inputmode="numeric" placeholder="4–8 ${esc(t('raqam'))}" style="max-width:160px" autocomplete="off"></div>
+      <div class="switch-row"><span>${icon('key-round', 24)}</span><div class="grow"><b>${t("PIN xato kiritilsa bloklash")}</b>
+        <span class="small muted">${t("Xodim PIN kodni necha marta xato tersa, necha daqiqaga bloklanadi. 0 — hech qachon bloklanmaydi.")}</span></div>
+        <input type="number" name="pin_lock_attempts" min="0" max="50" value="${s.pin_lock_attempts}" style="max-width:90px" title="${esc(t('Urinishlar'))}">
+        <span class="small muted">${t('marta')} →</span>
+        <input type="number" name="pin_lock_minutes" min="1" max="1440" value="${s.pin_lock_minutes}" style="max-width:90px" title="${esc(t('Daqiqa'))}">
+        <span class="small muted">${t('daq')}</span></div>
       <div class="switch-row"><span>${icon('lock', 24)}</span><div class="grow"><b>${t('Avtomatik qulf')}</b>
         <span class="small muted">${t("Umumiy qurilmada shuncha daqiqa hech narsa bosilmasa, xodimlar ro'yxatiga qaytadi. 0 — o'chiq.")}</span></div>
         <input type="number" name="auto_lock_minutes" min="0" max="240" value="${s.auto_lock_minutes}" style="max-width:110px"></div>
@@ -1008,7 +1057,8 @@ Views.settings = {
       ${App.device ? `<div class="card"><div class="card-head"><h2>${icon('printer')} ${t('Buyurtma printeri')}</h2></div>
         <label class="check"><input type="checkbox" id="order-print" ${OrderPrinter.on() ? 'checked' : ''}> ${t('Shu qurilmadan har bir yangi buyurtmani chop etish')}</label>
         <p class="small muted" style="margin-top:8px">${t("Ofitsant yoki kassir yozgan har bir buyurtma (taomlar, soni, izoh) shu kompyuterga ulangan printerdan chiqadi. Xodimlar ro'yxati ochiq turganda ham ishlaydi.")}</p>
-        <p class="small muted">${icon('info', 14)} ${t("Chop etish oynasi chiqmasligi uchun Chrome'ni --kiosk-printing bilan oching.")}</p></div>` : ''}
+        <div class="notice blue" style="margin:10px 0 8px">${icon('info', 18)} <span>${t("Chek chiqqanda chop etish oynasi ochilmasligi uchun FLOWI'ni maxsus yorliq orqali oching: yuklab oling, ish stoliga qo'ying va shu bilan ishga tushiring. Chek darhol asosiy printerdan chiqadi.")}</span></div>
+        <button class="btn primary" id="kiosk-bat">${icon('download', 18)} ${t('Kassa yorlig\'ini yuklab olish (Windows)')}</button></div>` : ''}
       <div class="card"><div class="card-head"><h2>${icon('volume-2')} ${t('Ovozli xabar')}</h2></div>
         <form id="voice-form" class="stack">
           <label class="check"><input type="checkbox" name="enabled" ${v.enabled ? 'checked' : ''}> ${t('Ovozli xabarlar yoqilgan')}</label>
@@ -1036,6 +1086,8 @@ Views.settings = {
     root.querySelectorAll('[data-theme]').forEach((b) => b.onclick = () => { store('cp_theme', b.dataset.theme); applyTheme(); refreshView(); });
     root.querySelector('#install').onclick = installApp;
     root.querySelector('#kb-mode').onchange = (e) => { Keyboard.setMode(e.target.value); toast(t('Saqlandi'), 'ok'); };
+    const kb = root.querySelector('#kiosk-bat');
+    if (kb) kb.onclick = downloadKioskLauncher;
     const op = root.querySelector('#order-print');
     if (op) op.onchange = () => { OrderPrinter.set(op.checked); toast(op.checked ? t('Yangi buyurtmalar shu qurilmada avtomatik chop etiladi') : t("Avtomatik chop etish o'chirildi"), 'ok'); };
     const full = root.querySelector('#full');

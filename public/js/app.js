@@ -80,7 +80,7 @@ function statusBarHtml() {
     ${App.device ? dot(OrderPrinter.on(), t('Buyurtma printeri')) : ''}
     ${App.device && App.device.name ? `<span class="sb-item">${icon('monitor-smartphone', 14)} ${esc(App.device.name)}</span>` : ''}
     <span class="grow"></span>
-    <span class="sb-item muted">FLOWI ${esc((App.version || '').slice(0, 7))}</span>
+    <span class="sb-item muted" title="${esc(App.version || '')}">FLOWI ${App.info && App.info.release ? `v${esc(App.info.release)}` : ''}</span>
     <span class="sb-item"><b>${esc(fmtDate(Date.now()))}</b> · <b data-clock>${fmtTime(Date.now())}</b></span>`;
 }
 

@@ -651,3 +651,13 @@ body.kb-open .statusbar, body.kb-open .tabbar { display: none; }
 .shell:has(> .notice) .checkpane:not(.hist-pane) { height: calc(100vh - 64px - 30px - 28px - 56px); }
 .shell:has(> .notice + .notice) .checkpane:not(.hist-pane) { height: calc(100vh - 64px - 30px - 28px - 112px); }
 @media print { .topnav, .statusbar, .osk { display: none !important; } }
+
+.wall-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.wall { aspect-ratio: 16 / 10; border-radius: 8px; border: 2px solid var(--line); background: center / cover no-repeat; cursor: pointer; }
+.wall.on { outline: 3px solid var(--primary); outline-offset: 2px; }
+.receipt-box img { filter: grayscale(1) contrast(1.8); }
+.type-row { margin-bottom: 8px; flex-wrap: nowrap; }
+.big-step button { width: 52px; height: 48px; } .big-step span { min-width: 48px; font-size: 22px; }
+.kb-toggle.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.setup .brand select { width: auto; }
+.lock-brand { display: inline-flex; align-items: center; gap: 6px; } .lock-brand small { font-size: 12px; font-weight: 600; }

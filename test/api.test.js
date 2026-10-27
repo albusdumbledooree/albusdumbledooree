@@ -630,3 +630,49 @@ test('a new business boss logs in on the desktop with the login password; orders
   ctrl.abort();
   assert.match(text, /achchiq/);
 });
+
+test('v1.5: cancel part of a line, PIN lock settings, room type names, built-in wallpaper, check logo', async () => {
+  const admin = await platformAdmin();
+  const { boss } = await newBusiness(admin, 'versiya', 'choyxona');
+  const room = (await call('GET', '/api/rooms', boss)).data[0];
+  const dish = (await call('GET', '/api/menu', boss)).data.dishes.find((d) => d.needs_kitchen);
+  const o = (await call('POST', '/api/orders', boss, { room_id: room.id })).data;
+  const it = (await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: dish.id, qty: 5 }] })).data.items[0];
+  const c = await call('POST', `/api/items/${it.id}/cancel`, boss, { qty: 2, reason: 'mijoz voz kechdi' });
+  assert.equal(c.status, 200, JSON.stringify(c.data));
+  const live = c.data.items.filter((i) => i.status !== 'cancelled');
+  const gone = c.data.items.filter((i) => i.status === 'cancelled');
+  assert.deepEqual([live[0].qty, gone[0].qty], [3, 2]);
+  assert.equal(c.data.subtotal, dish.price * 3);
+  assert.equal((await call('POST', `/api/items/${it.id}/cancel`, boss, { qty: 9, reason: 'x' })).status, 400);
+
+  // Wrong PINs: lock after 2 tries, or never.
+  await call('POST', '/api/users', boss, { name: 'Ali', role: 'waiter', pin: '1111' });
+  const dev = (await call('POST', '/api/device/register', null, { code: 'versiya', username: 'boss', password: 'boss1234' })).data.device_token;
+  const ali = (await call('GET', '/api/device/staff', dev)).data.find((u) => u.name === 'Ali');
+  await call('PUT', '/api/settings', boss, { pin_lock_attempts: 2, pin_lock_minutes: 3 });
+  for (let i = 0; i < 2; i++) await call('POST', '/api/device/pin', dev, { user_id: ali.id, pin: '9999' });
+  const locked = await call('POST', '/api/device/pin', dev, { user_id: ali.id, pin: '1111' });
+  assert.equal(locked.status, 429);
+  assert.match(locked.data.error, /3 daqiqadan/);
+  await call('PUT', '/api/settings', boss, { pin_lock_attempts: 0 });
+  assert.equal((await call('POST', '/api/device/pin', dev, { user_id: ali.id, pin: '1111' })).status, 200, '0 = never locks');
+
+  // Room types: rename, add; a used type cannot be removed.
+  const types = (await call('GET', '/api/me', boss)).data.settings.room_types;
+  const renamed = types.map((x) => (x.key === 'supa' ? { ...x, name: 'Tapchan' } : x)).concat({ name: 'Kabina' });
+  const s = await call('PUT', '/api/settings', boss, { room_types: renamed });
+  assert.equal(s.status, 200, JSON.stringify(s.data));
+  assert.equal(s.data.room_types.find((x) => x.key === 'supa').name, 'Tapchan');
+  const kabina = s.data.room_types.find((x) => x.name === 'Kabina');
+  assert.equal((await call('POST', '/api/rooms', boss, { number: '20', name: 'Kabina 1', type: kabina.key })).status, 200);
+  assert.equal((await call('PUT', '/api/settings', boss, { room_types: renamed.filter((x) => x.key !== 'banket') })).status, 400, 'banket rooms exist');
+
+  // Built-in wallpaper and the check logo switch.
+  assert.equal((await call('PUT', '/api/settings', boss, { lock_bg: { mode: 'builtin', n: 7 } })).status, 200);
+  assert.deepEqual((await call('GET', '/api/info?code=versiya')).data.lock_bg.n, 7);
+  assert.equal((await call('PUT', '/api/settings', boss, { lock_bg: { mode: 'builtin', n: 99 } })).status, 400);
+  const off = await call('PUT', '/api/settings', boss, { receipt_logo: false });
+  assert.equal(off.data.receipt_logo, false);
+  assert.match((await call('GET', '/api/info?code=versiya')).data.release, /^\d+\.\d+\.\d+$/);
+});

@@ -222,6 +222,14 @@ const DEFAULT_SETTINGS = {
   perm_cashier_finance: '1',
   finance_lock: '0',
   finance_code_hash: '',
+  // Logo at the top of printed checks: on/off, and an optional separate (black-and-white) picture.
+  receipt_logo: '1',
+  receipt_logo_id: '',
+  // Wrong PINs on a shared device: after this many tries the worker waits this many minutes (0 tries = never locks).
+  pin_lock_attempts: '5',
+  pin_lock_minutes: '5',
+  // Room types named by the boss: [{"key","name"}]; empty = the standard list.
+  room_types: '[]',
 };
 
 function seedSettings(db, name) {

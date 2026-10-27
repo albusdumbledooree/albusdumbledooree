@@ -26,8 +26,15 @@ const roleName = (r) => ({ owner: t('Boshliq'), admin: t('Admin'), cashier: t('K
 const statusName = (s) => ({ new: t('Yangi'), cooking: t('Tayyorlanmoqda'), ready: t('Tayyor'), served: t('Berildi'), cancelled: t('Bekor') }[s] || s);
 const methodName = (m) => ({ cash: t('Naqd'), card: t('Karta'), transfer: t("O'tkazma") }[m] || m);
 const METHOD_ICONS = { cash: 'banknote', card: 'credit-card', transfer: 'smartphone' };
-const ROOM_TYPES = ['banket', 'vip', 'supa', 'stol', 'zal', 'boshqa'];
-const roomTypeName = (k) => ({ banket: t('Banket'), vip: 'VIP', supa: t('Supa'), stol: t('Stol'), zal: t('Zal'), boshqa: t('Boshqa'), soboy: t('Olib ketish') }[k] || k);
+// Room types come from the boss's settings (renamable); the standard ones keep their translations.
+const STD_ROOM_TYPES = { banket: 'Banket', vip: 'VIP', supa: 'Supa', stol: 'Stol', zal: 'Zal', boshqa: 'Boshqa' };
+function roomTypes() { return (App.settings.room_types && App.settings.room_types.length ? App.settings.room_types : Object.entries(STD_ROOM_TYPES).map(([key, name]) => ({ key, name }))); }
+function roomTypeName(k) {
+  if (k === 'soboy') return t('Olib ketish');
+  const x = roomTypes().find((r) => r.key === k);
+  if (!x) return k;
+  return STD_ROOM_TYPES[k] === x.name ? t(x.name) : x.name;
+}
 const ROOM_TYPE_ICONS = { banket: 'party-popper', vip: 'star', supa: 'sofa', stol: 'utensils', zal: 'store', boshqa: 'door-open', soboy: 'shopping-bag' };
 
 // ---------- Formatting ----------
@@ -409,11 +416,16 @@ function bindKeypad(root, { maxLen, masked = true, onChange, onFull }) {
 // With Chrome started as "chrome --kiosk-printing" receipts print without the dialog.
 function printDoc(title, body) {
   const narrow = String(App.settings.receipt_width) === '58';
+  // Thermal printers fade thin letters: a bold sans font in pure black prints clearly.
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
-    body{font:${narrow ? 11 : 12}px/1.35 "Courier New",monospace;width:${narrow ? 48 : 72}mm;margin:0 auto;padding:3mm 0;color:#000}
-    h1{font-size:${narrow ? 14 : 16}px;text-align:center;margin:0}.c{text-align:center}.r{text-align:right;white-space:nowrap}
-    table{width:100%;border-collapse:collapse}td{padding:2px 0;vertical-align:top}hr{border:0;border-top:1px dashed #000;margin:6px 0}
-    .big{font-size:${narrow ? 13 : 15}px;font-weight:bold}.huge{font-size:${narrow ? 16 : 20}px;font-weight:bold}
+    *{color:#000 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    body{font:700 ${narrow ? 12 : 13.5}px/1.35 Arial,"Segoe UI",Tahoma,sans-serif;width:${narrow ? 48 : 72}mm;margin:0 auto;padding:3mm 0;color:#000;-webkit-font-smoothing:none}
+    h1{font-size:${narrow ? 16 : 19}px;font-weight:900;text-align:center;margin:0}.c{text-align:center}.r{text-align:right;white-space:nowrap}
+    table{width:100%;border-collapse:collapse}td{padding:2px 0;vertical-align:top;font-weight:700}small{font-size:.92em;font-weight:700}
+    hr{border:0;border-top:2px dashed #000;margin:6px 0}
+    .big{font-size:${narrow ? 14 : 17}px;font-weight:900}.huge{font-size:${narrow ? 19 : 24}px;font-weight:900}
+    .logo{display:block;margin:0 auto 4px;max-width:70%;max-height:24mm;filter:grayscale(1) contrast(1.8)}
+    .inv{background:#000;color:#fff !important;padding:3px 0}
     @page{size:${narrow ? 58 : 80}mm auto;margin:0}
   </style></head><body>${body}</body></html>`;
   // A fresh frame per print, so two receipts in a row never overwrite each other.
@@ -436,13 +448,21 @@ async function printCheck(orderId) {
   try { printReceipt(await POST(`/api/orders/${orderId}/print`)); } catch (e) { toastError(e); }
 }
 
+// Logo at the top of the check: a separate check logo if the boss uploaded one, otherwise the main logo.
+function receiptLogo() {
+  const s = App.settings;
+  const code = (App.tenant && App.tenant.code) || (App.info && App.info.code);
+  const id = s.receipt_logo_id || s.logo;
+  return s.receipt_logo !== false && id && code ? `<img class="logo" src="/media/${esc(code)}/${id}" alt="">` : '';
+}
+
 function printReceipt(o) {
   const s = App.settings;
   const live = o.items.filter((i) => i.status !== 'cancelled');
   const lines = live.map((i) => `<tr><td>${esc(i.name)}<br><small>${i.qty} × ${money(i.price)}</small></td><td class="r">${money(i.qty * i.price)}</td></tr>`).join('');
   const share = perPerson(o);
   printDoc(`${t('Chek')} #${o.id}`, `
-    ${s.logo && App.tenant ? `<div class="c"><img src="/media/${esc(App.tenant.code)}/${s.logo}" style="max-width:60%;max-height:22mm;filter:grayscale(1)"></div>` : ''}
+    ${receiptLogo()}
     <h1>${esc(s.name)}</h1>${s.address ? `<div class="c">${esc(s.address)}</div>` : ''}${s.phone ? `<div class="c">${esc(s.phone)}</div>` : ''}
     <hr><div>${t('Chek')}: #${o.id}${o.status !== 'closed' ? ` (${t('hisob')})` : ''}</div><div>${esc(placeName(o))}</div>
     ${o.takeaway && sellsAtCounter() ? `<div class="c huge">№ ${o.id}</div>` : `<div>${roleName('waiter')}: ${esc(o.waiter.name)}</div><div>${t('Mehmonlar')}: ${o.guests}</div>`}
@@ -459,7 +479,7 @@ function printReceipt(o) {
 
 // Kitchen ticket: big place name, dishes and notes — no prices.
 function printKitchenTicket(tk) {
-  printDoc(`${t('Buyurtma')} #${tk.order_id}`, `<div class="c huge">${esc(tk.room)}</div>
+  printDoc(`${t('Buyurtma')} #${tk.order_id}`, `${tk.cancel ? `<div class="c huge inv">${t('BEKOR QILINDI')}</div>` : ''}<div class="c huge">${esc(tk.room)}</div>
     <div class="c">${t('Chek')} #${tk.order_id} · ${esc(tk.waiter || '')}${tk.by && tk.by !== tk.waiter ? ` (${esc(tk.by)})` : ''} · ${fmtTime(tk.at || Date.now())}</div><hr>
     <table>${tk.items.map((i) => `<tr class="big"><td>${i.qty} ×</td><td>${esc(i.name)}${i.note ? `<br><small>* ${esc(i.note)}</small>` : ''}</td></tr>`).join('')}</table><hr>`);
 }
@@ -501,6 +521,21 @@ const OrderPrinter = {
     };
   },
 };
+
+/* Browsers always show a print window, except Chrome/Edge started with --kiosk-printing:
+   then checks go straight to the default printer. This makes a Windows launcher that opens FLOWI that way
+   (its own browser profile, so it works even while another Chrome window is open). */
+function downloadKioskLauncher() {
+  const code = (App.device && App.device.code) || (App.tenant && App.tenant.code) || '';
+  const url = `${location.origin}/c/${code}`;
+  const bat = ['@echo off', 'chcp 65001 >nul', 'title FLOWI',
+    `set "URL=${url}"`, 'set "PROFILE=%LOCALAPPDATA%\\FLOWI-kassa"',
+    'set "FLAGS=--kiosk-printing --start-fullscreen --disable-session-crashed-bubble --no-first-run --user-data-dir="%PROFILE%" --app=%URL%"',
+    'for %%B in ("%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe" "%LOCALAPPDATA%\\Google\\Chrome\\Application\\chrome.exe" "%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe" "%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe") do (',
+    '  if exist %%B ( start "" %%B %FLAGS% & exit /b )', ')',
+    'echo Chrome yoki Edge topilmadi. Google Chrome ni o\'rnating.', 'pause'].join('\r\n');
+  downloadBlob('FLOWI-kassa.bat', new Blob([bat + '\r\n'], { type: 'application/octet-stream' }));
+}
 
 function downloadCsv(filename, rows) {
   const csv = '﻿' + rows.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
@@ -616,8 +651,8 @@ function lockBackground(bg) {
     return { style: `background:${bg.color}`, cls: light ? 'on-light' : '' };
   }
   if (bg.mode === 'image' && bg.url) return { style: `background:${shade(0.45)}, url('${bg.url}') center/cover no-repeat ${bg.color || '#0b1f33'}`, cls: 'on-image' };
-  if (bg.mode === 'auto') {
-    const n = wallpaperOfDay();
+  if (bg.mode === 'auto' || bg.mode === 'builtin') {
+    const n = bg.mode === 'builtin' && bg.n >= 1 && bg.n <= WALLPAPERS ? bg.n : wallpaperOfDay();
     const url = `url('/bg/${String(n).padStart(2, '0')}.svg') center/cover no-repeat`;
     // Light pictures keep their colours and get dark text; dark ones get a soft shade and white text.
     if (LIGHT_WALLS.includes(n)) return { style: `background:linear-gradient(rgba(255,255,255,.18), rgba(255,255,255,.18)), ${url} #f5f5f4`, cls: 'on-light' };

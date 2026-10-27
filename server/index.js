@@ -33,6 +33,8 @@ function appVersion() {
   return h.digest('hex').slice(0, 12);
 }
 const VERSION = appVersion();
+// The version number people see (raised with every update): package.json "version".
+const RELEASE = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')).version;
 
 function send(res, status, data) {
   const body = JSON.stringify(data);
@@ -107,6 +109,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       };
 
       // Site owner's panel: choyxonas, subscriptions, boss accounts.
+      if (pathname === '/api/platform/release') return reply({ release: RELEASE });
       if (pathname.startsWith('/api/platform/')) return reply(platform.handle(req.method, pathname, { body, query, token, ip }));
 
       // Login screen: which choyxona does this code belong to?
@@ -117,7 +120,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
         const pic = (id) => (id ? `/media/${ctx.row.code}/${id}` : null);
         return reply({ code: ctx.row.code, name: s.name, demo: s.demo === '1', blocked: ctx.row.status !== 'active',
           business_type: ctx.api.businessType(), logo: pic(s.logo), lock_bg: { ...s.lock_bg, url: pic(s.lock_bg.image) },
-          support: platform.supportFor(ctx.row), paid_until: ctx.row.paid_until, version: VERSION });
+          support: platform.supportFor(ctx.row), paid_until: ctx.row.paid_until, version: VERSION, release: RELEASE });
       }
 
       // Every other request belongs to one choyxona: found by the code at login, by the token afterwards.
@@ -177,7 +180,7 @@ if (require.main === module) {
   server.listen(port, () => {
     const lan = Object.values(require('node:os').networkInterfaces()).flat()
       .filter((a) => a && a.family === 'IPv4' && !a.internal).map((a) => `http://${a.address}:${port}`);
-    console.log(`\n  FLOWI ishga tushdi!\n\n  Shu kompyuterda:   http://localhost:${port}`);
+    console.log(`\n  FLOWI v${RELEASE} ishga tushdi!\n\n  Shu kompyuterda:   http://localhost:${port}`);
     if (lan.length) console.log(`  Telefonlardan (shu Wi-Fi):  ${lan.join('   ')}`);
     console.log(`  Platforma (siz uchun): http://localhost:${port}${PLATFORM_PATH}`);
     console.log(`\n  To'xtatish uchun shu oynani yoping yoki Ctrl+C bosing.\n`);

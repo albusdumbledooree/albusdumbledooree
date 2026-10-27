@@ -17,6 +17,8 @@ const METHODS = ['cash', 'card', 'transfer'];
 const BUSINESS_TYPES = { choyxona: 'Choyxona', restoran: 'Restoran / kafe', fastfood: 'Fast food', market: "Do'kon (oziq-ovqat)", clothing: 'Kiyim-kechak' };
 const SHOP_TYPES = ['market', 'clothing'];
 const IMAGE_TYPES = { 'image/jpeg': 1, 'image/png': 1, 'image/webp': 1 };
+const DEFAULT_ROOM_TYPES = [['banket', 'Banket'], ['vip', 'VIP'], ['supa', 'Supa'], ['stol', 'Stol'], ['zal', 'Zal'], ['boshqa', 'Boshqa']].map(([key, name]) => ({ key, name }));
+const WALLPAPERS = 16;
 const MIN = 60_000;
 // Sections the platform owner can switch off per choyxona (e.g. for cheaper plans).
 const MODULES = {
@@ -85,6 +87,12 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
     for (const k of ['perm_admin_reports', 'perm_admin_finance', 'perm_cashier_reports', 'perm_cashier_finance', 'finance_lock']) out[k] = out[k] === '1';
     out.has_finance_code = !!out.finance_code_hash;
     delete out.finance_code_hash;
+    out.receipt_logo = out.receipt_logo !== '0';
+    out.receipt_logo_id = out.receipt_logo_id ? Number(out.receipt_logo_id) : null;
+    out.pin_lock_attempts = Number(out.pin_lock_attempts ?? 5);
+    out.pin_lock_minutes = Number(out.pin_lock_minutes) || 5;
+    try { out.room_types = JSON.parse(out.room_types || '[]'); } catch { out.room_types = []; }
+    if (!out.room_types.length) out.room_types = DEFAULT_ROOM_TYPES;
     out.expense_categories = JSON.parse(out.expense_categories || '[]');
     out.income_categories = JSON.parse(out.income_categories || '[]');
     return out;
@@ -186,14 +194,15 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
     const id = int(body.user_id, 'Xodim', { min: 1, required: true });
     const key = `${device.id}|${id}`;
     const f = pinFailures.get(key);
-    if (f && f.count >= 5 && now() - f.first < 5 * MIN) throw new HttpError(429, "Juda ko'p xato. 5 daqiqadan keyin urinib ko'ring");
+    const { pin_lock_attempts: tries, pin_lock_minutes: mins } = settings();
+    if (tries > 0 && f && f.count >= tries && now() - f.first < mins * MIN) throw new HttpError(429, `Juda ko'p xato. ${mins} daqiqadan keyin urinib ko'ring`);
     const user = q('SELECT * FROM users WHERE id = ? AND active = 1').get(id);
     if (!user) throw new HttpError(404, 'Xodim topilmadi');
     // Boss and admin without a separate desktop password use their login password.
     const hash = user.pin_hash || (MANAGERS.includes(user.role) ? user.pass_hash : null);
     if (!hash) throw new HttpError(400, "PIN o'rnatilmagan. Boshliqqa murojaat qiling");
     if (!verifyPassword(String(body.pin ?? ''), hash)) {
-      pinFailures.set(key, !f || now() - f.first >= 5 * MIN ? { count: 1, first: now() } : { ...f, count: f.count + 1 });
+      pinFailures.set(key, !f || now() - f.first >= mins * MIN ? { count: 1, first: now() } : { ...f, count: f.count + 1 });
       throw new HttpError(401, "PIN noto'g'ri");
     }
     pinFailures.delete(key);
@@ -270,7 +279,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
   // ---------- Settings ----------
   function updateSettings({ user, body }) {
     const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width',
-      'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo', ...OWNER_SETTINGS];
+      'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo',
+      'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', ...OWNER_SETTINGS];
     if (user.role !== 'owner' && OWNER_SETTINGS.some((k) => body[k] !== undefined)) throw new HttpError(403, "Moliya huquqlarini faqat boshliq o'zgartiradi");
     const set = q('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     for (const k of allowed) {
@@ -284,7 +294,11 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
         continue;
       }
       if (k.startsWith('perm_') || k === 'finance_lock') v = v ? '1' : '0';
-      if (k === 'logo') v = v ? String(assetId(v, 'logo')) : '';
+      if (k === 'logo' || k === 'receipt_logo_id') v = v ? String(assetId(v, 'logo')) : '';
+      if (k === 'receipt_logo') v = v ? '1' : '0';
+      if (k === 'pin_lock_attempts') v = int(v, 'Urinishlar soni', { max: 50 });
+      if (k === 'pin_lock_minutes') v = int(v, 'Daqiqalar', { min: 1, max: 1440 });
+      if (k === 'room_types') v = JSON.stringify(roomTypesInput(v));
       if (k === 'lock_bg') v = JSON.stringify(lockBgInput(v));
       if (k === 'service_pct') {
         v = Number(v);
@@ -318,11 +332,29 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
 
   const OWNER_SETTINGS = ['perm_admin_reports', 'perm_admin_finance', 'perm_cashier_reports', 'perm_cashier_finance', 'finance_lock', 'finance_code'];
 
+  // Room types: the boss renames them or adds new ones. Keys of types still used by a room cannot disappear.
+  function roomTypesInput(v) {
+    if (!Array.isArray(v) || !v.length || v.length > 30) throw new HttpError(400, "Xona turlari ro'yxati noto'g'ri");
+    const out = [];
+    for (const x of v) {
+      const name = str(x && x.name, 'Turi nomi', { required: true, max: 30 });
+      let key = str(x && x.key, 'Turi', { max: 20 }).toLowerCase();
+      if (!/^[a-z0-9_-]{1,20}$/.test(key)) key = `t${Date.now().toString(36)}${out.length}`;
+      if (out.some((y) => y.key === key)) throw new HttpError(400, "Xona turlari takrorlangan");
+      out.push({ key, name });
+    }
+    const used = q("SELECT DISTINCT type FROM rooms WHERE type != 'soboy'").all().map((r) => r.type);
+    const missing = used.filter((k) => !out.some((y) => y.key === k));
+    if (missing.length) throw new HttpError(400, "Bu tur xonalarda ishlatilmoqda, avval xonalarni boshqa turga o'tkazing");
+    return out;
+  }
+
   function lockBgInput(v) {
     if (!v || typeof v !== 'object') throw new HttpError(400, "Fon noto'g'ri");
-    const mode = ['default', 'auto', 'color', 'image'].includes(v.mode) ? v.mode : null;
+    const mode = ['default', 'auto', 'builtin', 'color', 'image'].includes(v.mode) ? v.mode : null;
     if (!mode) throw new HttpError(400, "Fon noto'g'ri");
     const out = { mode };
+    if (mode === 'builtin') out.n = int(v.n, 'Rasm', { min: 1, max: WALLPAPERS, required: true });
     if (mode === 'color') {
       if (!/^#[0-9a-f]{6}$/i.test(String(v.color || ''))) throw new HttpError(400, "Rang noto'g'ri");
       out.color = String(v.color).toLowerCase();
@@ -357,9 +389,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
   // Pictures no setting points to any more are removed (an upload not saved within a day, an old logo).
   function cleanAssets() {
     const s = settings();
-    const keep = [s.logo, s.lock_bg.image].filter(Boolean);
-    q(`DELETE FROM assets WHERE created_at < ? ${keep.length ? `AND id NOT IN (${keep.map(Number).join(',')})` : ''}`).run(now() - 24 * 60 * MIN);
-    q(`DELETE FROM assets WHERE kind = 'logo' AND id != ? AND created_at < ?`).run(s.logo || 0, now());
+    const keep = [s.logo, s.receipt_logo_id, s.lock_bg.image].filter(Boolean).map(Number);
+    q(`DELETE FROM assets WHERE created_at < ? ${keep.length ? `AND id NOT IN (${keep.join(',')})` : ''}`).run(now() - 24 * 60 * MIN);
+    q(`DELETE FROM assets WHERE kind = 'logo' AND created_at < ? ${keep.length ? `AND id NOT IN (${keep.join(',')})` : ''}`).run(now());
   }
 
   // ---------- Users ----------
@@ -489,8 +521,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
   }
 
   function roomFields(body, prev = {}) {
-    const type = body.type !== undefined ? str(body.type, 'Turi') : prev.type || 'banket';
-    if (!['banket', 'vip', 'supa', 'stol', 'zal', 'boshqa'].includes(type)) throw new HttpError(400, "Xona turi noto'g'ri");
+    const types = settings().room_types.map((x) => x.key);
+    const type = body.type !== undefined ? str(body.type, 'Turi') : prev.type || types[0];
+    if (!types.includes(type)) throw new HttpError(400, "Xona turi noto'g'ri");
     return {
       section: body.section !== undefined ? str(body.section, "Bo'lim", { max: 40 }) : prev.section || '',
       number: body.number !== undefined ? str(body.number, 'Raqam', { required: true, max: 10 }) : prev.number,
@@ -918,16 +951,28 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
     }
     const reason = str(body.reason, 'Sabab', { max: 200 });
     if (user.role !== 'waiter' && it.status !== 'new' && !reason) throw new HttpError(400, "Bekor qilish sababini yozing");
+    // Part of a line can be cancelled (2 of 5 kabobs): the cancelled part becomes its own line.
+    const qty = int(body.qty, 'Soni', { min: 1, max: it.qty, def: it.qty });
     tx(() => {
-      q("UPDATE order_items SET status = 'cancelled', cancel_reason = ? WHERE id = ?").run(reason, it.id);
-      if (it.dish_id) q('UPDATE dishes SET stock = stock + ?, available = 1 WHERE id = ? AND stock IS NOT NULL').run(it.qty, it.dish_id);
+      if (qty < it.qty) {
+        q('UPDATE order_items SET qty = ? WHERE id = ?').run(it.qty - qty, it.id);
+        q(`INSERT INTO order_items (order_id, dish_id, name, price, cost, qty, note, status, needs_kitchen, prep_minutes, created_at, accepted_at, ready_at, eta_at, chef_id, cancel_reason)
+          SELECT order_id, dish_id, name, price, cost, ?, note, 'cancelled', needs_kitchen, prep_minutes, created_at, accepted_at, ready_at, eta_at, chef_id, ? FROM order_items WHERE id = ?`).run(qty, reason, it.id);
+      } else {
+        q("UPDATE order_items SET status = 'cancelled', cancel_reason = ? WHERE id = ?").run(reason, it.id);
+      }
+      if (it.dish_id) q('UPDATE dishes SET stock = stock + ?, available = 1 WHERE id = ? AND stock IS NOT NULL').run(qty, it.dish_id);
     });
-    audit(user, 'item_cancel', `#${it.order_id} ${it.name}×${it.qty} (${it.status}) ${reason}`);
+    audit(user, 'item_cancel', `#${it.order_id} ${it.name}×${qty} (${it.status}) ${reason}`);
     events.publish('kitchen');
     events.publish('rooms');
     if (it.needs_kitchen && ['new', 'cooking'].includes(it.status)) {
-      events.publish('kitchen_cancel', { name: it.name, qty: it.qty, room: it.room_name }, { roles: KITCHEN });
+      events.publish('kitchen_cancel', { name: it.name, qty, room: it.room_name }, { roles: KITCHEN });
     }
+    // The cancellation slip prints at once on the order printers.
+    const waiter = q('SELECT name FROM users WHERE id = ?').get(it.waiter_id);
+    events.publish('order_print', { cancel: true, order_id: it.order_id, room: it.room_name, waiter: waiter && waiter.name, by: user.name, at: now(),
+      items: [{ name: it.name, qty, note: reason }] }, { roles: ['device'] });
     return orderDetails(it.order_id);
   }
 

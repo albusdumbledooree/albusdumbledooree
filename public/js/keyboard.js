@@ -17,8 +17,10 @@ const Keyboard = {
     const m = this.mode();
     if (m === 'on') return true;
     if (m === 'off') return false;
-    const touch = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
-    return touch && Math.min(screen.width, screen.height) >= 700;
+    // Any touch screen counts (Windows terminals often report a mouse too); phones keep their own keyboard.
+    const touch = navigator.maxTouchPoints > 0 || 'ontouchstart' in window || window.matchMedia('(any-pointer: coarse)').matches;
+    const phone = /iPhone|iPod|Android.+Mobile|Mobile.+Firefox/i.test(navigator.userAgent) || Math.min(screen.width, screen.height) < 600;
+    return touch && !phone;
   },
 
   numeric(el) {
@@ -131,6 +133,20 @@ const Keyboard = {
     if (this.shift) { this.shift = false; this.draw(); }
   },
 };
+
+// A small switch on the first screens (before any settings are reachable): keyboard on / off for this device.
+function keyboardToggle() {
+  const on = Keyboard.enabled();
+  return `<button type="button" class="icon-btn kb-toggle ${on ? 'on' : ''}" id="kb-toggle" title="${esc(t('Ekran klaviaturasi'))}">${icon('keyboard', 20)}</button>`;
+}
+function bindKeyboardToggle(root) {
+  const b = root.querySelector('#kb-toggle');
+  if (b) b.onclick = () => {
+    Keyboard.setMode(Keyboard.enabled() ? 'off' : 'on');
+    b.classList.toggle('on', Keyboard.enabled());
+    toast(Keyboard.enabled() ? t('Ekran klaviaturasi yoqildi') : t("Ekran klaviaturasi o'chirildi"), 'ok');
+  };
+}
 
 function keyboardSelect(id = 'kb-mode') {
   const m = Keyboard.mode();
