@@ -26,43 +26,36 @@ class HttpError extends Error {
   }
 }
 
-function readJson(req, limit = 1_000_000) {
+// Reads a request body. Too large: the rest is read and dropped so the client still gets a clear 413
+// (cutting the connection would show only "connection reset"); a flood far over the limit is cut off.
+function readBody(req, limit, message) {
   return new Promise((resolve, reject) => {
     let size = 0;
-    const chunks = [];
+    let over = false;
+    let chunks = [];
     req.on('data', (c) => {
       size += c.length;
-      if (size > limit) {
-        reject(new HttpError(413, "So'rov juda katta"));
-        req.destroy();
-        return;
-      }
+      if (over) { if (size > limit + 20_000_000) req.destroy(); return; }
+      if (size > limit) { over = true; chunks = []; return; }
       chunks.push(c);
     });
-    req.on('end', () => {
-      if (!chunks.length) return resolve({});
-      try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-      } catch {
-        reject(new HttpError(400, "Noto'g'ri JSON"));
-      }
-    });
+    req.on('end', () => (over ? reject(new HttpError(413, message)) : resolve(Buffer.concat(chunks))));
     req.on('error', reject);
   });
 }
 
+async function readJson(req, limit = 1_000_000) {
+  const buf = await readBody(req, limit, "So'rov juda katta");
+  if (!buf.length) return {};
+  try {
+    return JSON.parse(buf.toString('utf8'));
+  } catch {
+    throw new HttpError(400, "Noto'g'ri JSON");
+  }
+}
+
 function readRaw(req, limit) {
-  return new Promise((resolve, reject) => {
-    let size = 0;
-    const chunks = [];
-    req.on('data', (c) => {
-      size += c.length;
-      if (size > limit) { reject(new HttpError(413, 'Fayl juda katta')); req.destroy(); return; }
-      chunks.push(c);
-    });
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
-  });
+  return readBody(req, limit, 'Fayl juda katta');
 }
 
 // Input helpers: throw 400 with an Uzbek message on bad input.

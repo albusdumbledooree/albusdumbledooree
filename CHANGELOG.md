@@ -2,6 +2,12 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.5.2
+To'liq tekshiruv (noldan o'rnatish, 96 ta API tekshiruvi, yuklama testi, brauzerda 4 xil biznes turi):
+- Juda katta so'rov endi aniq "So'rov juda katta" javobini oladi (oldin ulanish uzilib qolardi).
+- Telefonda stop-list: narx bir necha qatorga bo'linmaydi, "Tugadi" tugmasi ekranga sig'adi.
+- Jadvallardagi summalar bir qatorda turadi.
+
 ## 1.5.1
 - Boshliq va admin ish stolida parol qo'ymaguncha parolsiz kiradi (ekranda "parol qo'ying" eslatmasi turadi).
 - 12 ta yangi chiroyli fon rasmi (jami 28 ta): shahar chiroqlari, tumanli tog'lar, qumtepalar, shimol yog'dusi,

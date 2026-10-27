@@ -682,3 +682,9 @@ test('v1.5: cancel part of a line, PIN lock settings, room type names, built-in 
   assert.equal(off.data.receipt_logo, false);
   assert.match((await call('GET', '/api/info?code=versiya')).data.release, /^\d+\.\d+\.\d+$/);
 });
+
+test('a too large request gets a clear 413 answer instead of a dropped connection', async () => {
+  const res = await fetch(`${base}/api/platform/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'x'.repeat(2_000_000) }) });
+  assert.equal(res.status, 413);
+  assert.ok((await res.json()).error);
+});

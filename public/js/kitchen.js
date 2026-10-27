@@ -72,7 +72,7 @@ Views.stoplist = {
       <input type="search" id="stop-search" placeholder="${esc(t('Qidirish'))}" value="${esc(UI.search)}" style="max-width:260px"></div>
       <div class="notice blue">${icon('info', 18)} ${t('Taom tugasa "Tugadi" ni bosing. Qoldiq sonini yozsangiz, tugaganda o\'zi yopiladi.')}</div>
       ${groups.map(({ c, ds }) => `<div class="card"><div class="card-head"><h2>${esc(c.icon)} ${esc(c.name)}</h2></div><div class="table-wrap"><table>
-        ${ds.map((d) => `<tr><td>${esc(d.icon)} <b>${esc(d.name)}</b></td><td class="num">${money(d.price)}</td>
+        ${ds.map((d) => `<tr><td>${esc(d.icon)} <b>${esc(d.name)}</b></td><td class="num stop-price">${money(d.price)}</td>
           <td style="width:120px"><input type="number" min="0" placeholder="∞" value="${d.stock ?? ''}" data-stock="${d.id}" title="${esc(t('Qoldiq'))}" style="min-height:38px;padding:6px 10px"></td>
           <td class="actions">${d.available ? `<button class="btn sm danger" data-stop="${d.id}">${icon('ban', 16)} ${t('Tugadi')}</button>` : `<button class="btn sm ok" data-start="${d.id}">${icon('check', 16)} ${t('Bor')}</button>`}</td></tr>`).join('')}
       </table></div></div>`).join('')}`;
