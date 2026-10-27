@@ -132,6 +132,10 @@ Platforma: `http://localhost:3000/platform` — `superadmin` / `super123`.
 - **Logotip**: Sozlamalar → Ko'rinish. Ish stoli, chap menyu va chekda chiqadi.
 - Ish stoli pastida platforma egasi yozgan **yordam kontakti** (Telegram username yoki telefon) chiqadi.
 - iPhone'da brauzer to'liq ekranni qo'llamaydi — to'liq ekran tugmasi ilovani bosh ekranga qo'shishni ko'rsatadi.
+- Ish stoli ikki bosqichli: avval soat va bitta **Kirish** tugmasi, bosilganda xodimlar ro'yxati (ixcham, ko'p xodim bitta ekranga sig'adi).
+- **Ekran klaviaturasi**: sensorli kassa terminallarida (klaviaturasiz) har bir yozish maydonida o'zi chiqadi — raqam maydonlarida
+  katta raqamlar paneli, matnda lotin (oʻ, gʻ) yoki kirill harflari. Qurilma menyusida yoki Sozlamalar → Mening sozlamalarim'da:
+  Avtomatik / Doim yoqiq / O'chiq. Telefonda o'z klaviaturasi ishlatiladi.
 
 ## Buyurtma jarayoni
 

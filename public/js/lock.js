@@ -111,21 +111,26 @@ Views.lock = {
     const [staff, backup] = await Promise.all([api('GET', '/api/device/staff', null, App.device.token), FolderBackup.status()]);
     return { staff, backup };
   },
+  // Two steps, like a cash-desk terminal: the clock with one "Kirish" button, then the list of names.
+  step: 'clock',
   render({ staff, backup }) {
     const bg = lockBackground(App.info && App.info.lock_bg);
     const name = App.info && App.info.name;
-    return `<div class="lock ${bg.cls}" style="${bg.style}">
-      <div class="lock-top"><div class="name">${flowiLogo(22)}${name ? `<span class="venue">${venueLogo()}${esc(name)}</span>` : ''}</div>
+    const names = this.step === 'staff';
+    return `<div class="lock ${bg.cls} ${names ? 'names' : ''}" style="${bg.style}">
+      <div class="lock-top">${names ? `<button class="btn lock-back" id="lock-back">${icon('arrow-left', 18)} ${t('Orqaga')}</button>` : ''}
+        <span class="grow"></span>
         ${langSelect()}
         ${Screen.button('lock-full')}
         <button class="icon-btn" id="lock-menu" title="${esc(t('Qurilma'))}">${icon('settings')}</button></div>
-      <div class="lock-time"><div class="big" data-clock>${fmtTime(Date.now())}</div><div class="date">${esc(longDate())}</div></div>
+      <div class="lock-head">${venueLogo('lock-logo')}${name ? `<div class="lock-venue">${esc(name)}</div>` : ''}
+        ${names ? '' : `<div class="date">${esc(longDate())}</div><div class="big" data-clock>${fmtTime(Date.now())}</div>`}</div>
       ${lockPayNotice()}
       ${backup.state === 'prompt' ? `<div class="lock-note"><button class="btn sm" id="allow-backup">${icon('folder-open', 16)} ${t('Zaxira papkasiga ruxsat bering')}</button></div>` : ''}
-      <div class="staff-grid">${staff.map((u) => `<button class="staff-tile ${u.has_pin ? '' : 'nopin'}" data-staff="${u.id}">
-          <span class="avatar ${u.role}">${esc(initials(u.name))}</span><b>${esc(u.name)}</b>
-          <span class="role">${icon(ROLE_ICONS[u.role], 14)} ${roleName(u.role)}</span></button>`).join('')}</div>
-      <div class="lock-foot">${supportHtml()}</div>
+      ${names ? `<div class="staff-grid">${staff.map((u) => `<button class="staff-tile ${u.role} ${u.has_pin ? '' : 'nopin'}" data-staff="${u.id}">
+          <span class="role">${roleName(u.role)}</span><b>${esc(u.name)}</b></button>`).join('')}</div>`
+        : `<div class="lock-actions"><button class="lock-btn" id="lock-enter">${icon('log-in', 22)} ${t('Kirish')}</button></div>`}
+      <div class="lock-foot">${supportHtml()}<span class="grow"></span><span class="lock-brand">${flowiLogo(14)}</span></div>
     </div>`;
   },
   bind(root, { staff }) {
@@ -143,13 +148,25 @@ Views.lock = {
       title: `${icon('monitor-smartphone')} ${esc(App.device.name || t('Qurilma'))}`,
       body: `<p>${t('Kod')}: <b>${esc(App.device.code)}</b></p>
         <label class="check" style="margin:12px 0"><input type="checkbox" id="order-print" ${OrderPrinter.on() ? 'checked' : ''}> ${icon('printer', 18)} ${t('Shu qurilmadan har bir yangi buyurtmani chop etish')}</label>
+        ${keyboardSelect()}
         <p class="small muted">${t("Qurilmani uzsangiz, uni qayta ulash uchun boshliq logini kerak bo'ladi.")}</p>`,
-      onMount: (f) => { f.querySelector('#order-print').onchange = (e) => OrderPrinter.set(e.target.checked); },
+      onMount: (f) => {
+        f.querySelector('#order-print').onchange = (e) => OrderPrinter.set(e.target.checked);
+        f.querySelector('#kb-mode').onchange = (e) => Keyboard.setMode(e.target.value);
+      },
       actions: [{ label: t('Yopish') }, { label: t('Qurilmani uzish'), cls: 'danger', icon: 'log-out', onClick: () => {
         OrderPrinter.set(false); App.device = null; store('cp_device', null); location.hash = '#/setup';
       } }],
     });
     root.querySelectorAll('[data-staff]').forEach((b) => b.onclick = () => pinDialog(staff.find((u) => u.id === Number(b.dataset.staff))));
+    const go = (step) => { this.step = step; render(); };
+    const enter = root.querySelector('#lock-enter');
+    if (enter) enter.onclick = () => go('staff');
+    const back = root.querySelector('#lock-back');
+    if (back) back.onclick = () => go('clock');
+    // The list of names goes back to the clock if nobody chose a name.
+    clearTimeout(this.timer);
+    if (this.step === 'staff') this.timer = setTimeout(() => { if (parseHash().name === 'lock' && !App.user && !document.querySelector('.modal-back')) go('clock'); }, 45000);
   },
 };
 // The desktop re-reads the business (background, logo, support line, new version) every few minutes.

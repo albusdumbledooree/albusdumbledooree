@@ -44,40 +44,57 @@ function navHtml() {
   return navKeys().map((k) => {
     const v = Views[k];
     const b = v.badge && App.badges[v.badge] ? `<span class="badge">${App.badges[v.badge]}</span>` : '';
-    return `<a href="#/${k}" class="nav-item ${k === 'money' ? 'nav-quiet' : ''} ${active === k ? 'active' : ''}">${icon(v.icon(), 24)}<span>${esc(v.title())}</span>${b}</a>`;
+    return `<a href="#/${k}" class="nav-item ${k === 'money' ? 'nav-quiet' : ''} ${active === k ? 'active' : ''}" title="${esc(v.title())}">${icon(v.icon(), 22)}<span>${esc(v.title())}</span>${b}</a>`;
   }).join('');
 }
-function railLogo() {
-  return `<div class="logo">${App.info && App.info.logo ? `<img src="${esc(App.info.logo)}" alt="">` : '<img src="/icon.svg" alt="">'}</div>`;
+function brandHtml() {
+  const logo = App.info && App.info.logo;
+  return `${logo ? `<img src="${esc(logo)}" alt="">` : flowiLogo(18)}<span class="venue" id="top-title"></span>`;
 }
 
+/* Every working screen has the same frame (like a cash-desk program):
+   the sections across the top, the page in the middle, the state of the device at the bottom. */
 function shellHtml() {
   return `<div class="shell">
-    <aside class="rail">${railLogo()}${navHtml()}</aside>
-    <div class="main">
-      <header class="topbar">
-        <div class="title grow" id="top-title"></div>
-        <span class="conn" title=""></span>
-        <span class="clock hide-sm" data-clock>${fmtTime(Date.now())}</span>
-        <span class="me-chip hide-sm"><span class="avatar ${App.user.role}">${esc(initials(App.user.name))}</span>${esc(App.user.name)}</span>
+    <header class="topnav">
+      <div class="brandbox">${brandHtml()}</div>
+      <nav class="tabs">${navHtml()}</nav>
+      <div class="tright">
+        <span class="me-chip"><span class="avatar ${App.user.role}">${esc(initials(App.user.name))}</span><span class="hide-sm">${esc(App.user.name)}</span></span>
         ${Screen.standalone() && !Screen.canFullscreen() ? '' : Screen.button('top-full')}
-        <button class="icon-btn" id="top-exit" title="${esc(t('Chiqish'))}">${icon(App.device ? 'lock' : 'log-out')}</button>
-      </header>
-      ${App.platformSession ? `<div class="notice blue" style="margin:12px 20px 0">${icon('shield-check', 18)} ${t('Platforma orqali boshliq sifatida kirdingiz. Amallar tarixga yoziladi.')}</div>` : ''}
-      ${subscriptionBanner()}
-      <div class="content" id="view"></div>
-    </div>
+        <button class="icon-btn lockbtn" id="top-exit" title="${esc(t('Chiqish'))}">${icon(App.device ? 'lock' : 'log-out')}</button>
+      </div>
+    </header>
+    ${App.platformSession ? `<div class="notice blue slim">${icon('shield-check', 18)} ${t('Platforma orqali boshliq sifatida kirdingiz. Amallar tarixga yoziladi.')}</div>` : ''}
+    ${subscriptionBanner()}
+    <main class="content" id="view"></main>
+    <footer class="statusbar">${statusBarHtml()}</footer>
     <nav class="tabbar">${navHtml()}</nav>
   </div><div id="ready-banner"></div>`;
+}
+
+// Bottom line: live connection, order printer, folder backup, version, date and time.
+function statusBarHtml() {
+  const dot = (on, label) => `<span class="sb-item"><i class="${on ? 'on' : ''}"></i>${label}</span>`;
+  return `<span class="sb-item conn-item"><i class="conn"></i>${t('Jonli aloqa')}</span>
+    ${App.device ? dot(OrderPrinter.on(), t('Buyurtma printeri')) : ''}
+    ${App.device && App.device.name ? `<span class="sb-item">${icon('monitor-smartphone', 14)} ${esc(App.device.name)}</span>` : ''}
+    <span class="grow"></span>
+    <span class="sb-item muted">FLOWI ${esc((App.version || '').slice(0, 7))}</span>
+    <span class="sb-item"><b>${esc(fmtDate(Date.now()))}</b> · <b data-clock>${fmtTime(Date.now())}</b></span>`;
 }
 
 // Reminds the boss when the subscription set on the platform is about to run out.
 function subscriptionBanner() {
   const n = can('owner', 'admin') && subscriptionNotice(App.tenant && App.tenant.paid_until);
-  return n ? `<div class="notice ${n.cls}" style="margin:12px 20px 0">${icon('triangle-alert', 18)} ${n.text}</div>` : '';
+  return n ? `<div class="notice slim ${n.cls}">${icon('triangle-alert', 18)} ${n.text}</div>` : '';
 }
 
-function updateNav() { document.querySelectorAll('.rail, .tabbar').forEach((n) => { n.innerHTML = (n.classList.contains('rail') ? railLogo() : '') + navHtml(); }); }
+function updateNav() {
+  document.querySelectorAll('.topnav .tabs, .tabbar').forEach((n) => { n.innerHTML = navHtml(); });
+  const sb = document.querySelector('.statusbar');
+  if (sb) { sb.innerHTML = statusBarHtml(); updateConn(); }
+}
 
 async function render() {
   applyTheme();

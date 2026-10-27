@@ -375,6 +375,8 @@ function migrate(db) {
   addCol('dishes', 'size', "TEXT NOT NULL DEFAULT ''");
   addCol('dishes', 'color', "TEXT NOT NULL DEFAULT ''");
   addCol('order_items', 'refunded_qty', 'INTEGER NOT NULL DEFAULT 0');
+  // Colour of a menu section; its dishes get the same colour on the order screen ('' = automatic).
+  addCol('categories', 'color', "TEXT NOT NULL DEFAULT ''");
   // A device the boss chose to keep automatic backups on.
   addCol('devices', 'backup', 'INTEGER NOT NULL DEFAULT 0');
   // 'platform' marks a session opened by the site owner from the platform panel.

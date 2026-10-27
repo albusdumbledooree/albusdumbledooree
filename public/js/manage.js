@@ -84,41 +84,79 @@ function histQuery(extra = {}) {
   return p.toString();
 }
 
+// The selected check on the left (like the order screen), the list of checks on the right.
+function checkDetailHtml(o) {
+  if (!o) return `<aside class="checkpane hist-pane">${emptyState('receipt', t('Chekni tanlang'))}</aside>`;
+  const share = perPerson(o);
+  const permsOf = App.user.perms || {};
+  return `<aside class="checkpane hist-pane">
+    <div class="cp-head"><span class="avatar">${icon(o.takeaway ? 'shopping-bag' : 'receipt', 18)}</span>
+      <div class="grow"><b>${t('Chek')} #${o.id}</b><span class="small muted">${esc(placeName(o))} · ${icon('user-round', 12)} ${esc(o.waiter.name)} · ${icon('users', 12)} ${o.guests}</span></div>
+      ${o.status === 'cancelled' ? `<span class="chip red">${t('Bekor')}</span>` : ''}</div>
+    <div class="cp-body">
+      <p class="small muted" style="margin:8px 0">${icon('clock', 12)} ${fmtDateTime(o.opened_at)} → ${fmtDateTime(o.closed_at)}${o.cashier ? ` · ${icon('wallet', 12)} ${esc(o.cashier.name)}` : ''}${o.print_count ? ` · ${icon('printer', 12)} ${o.print_count}` : ''}</p>
+      ${o.items.map((i, n) => `<div class="line ${i.status === 'cancelled' ? 'cancelled' : ''}"><span class="q">${n + 1}</span><span class="n">${esc(i.name)} <span class="muted">× ${i.qty}</span></span><span class="p">${num(i.price * i.qty)}</span></div>`).join('')}
+      ${o.cancel_reason ? `<p class="small" style="color:var(--red);margin-top:8px">${esc(o.cancel_reason)}</p>` : ''}
+    </div>
+    <div class="cp-foot"><div class="sum-rows num">
+      <span>${W('Taomlar')}</span><span class="right">${money(o.subtotal)}</span>
+      <span>${o.service_amount ? esc(serviceLabel(o)) : t('Xizmat haqi')}</span><span class="right">${money(o.service_amount)}</span>
+      <span>${t('Chegirma')}</span><span class="right">${o.discount ? '−' : ''}${money(o.discount)}</span>
+      ${o.refunded ? `<span style="color:var(--red)">${t('Qaytarildi')}</span><span class="right" style="color:var(--red)">−${money(o.refunded)}</span>` : ''}
+      <span class="total">${t('Jami')}</span><span class="total right">${money(o.total)}</span>
+      ${share ? `<span class="share">${t('{0} kishi — har biriga', o.guests)}</span><span class="share right">${money(share)}</span>` : ''}
+      ${['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => `<span class="small muted">${methodName(m)}</span><span class="right small muted">${money(o[`paid_${m}`])}</span>`).join('')}</div>
+      ${o.status === 'closed' ? `<div class="order-actions">
+        ${can('owner', 'admin', 'cashier') && o.refunded < o.total ? `<button class="btn" id="h-refund">${icon('undo-2', 18)} ${t('Qaytarish')}</button>` : ''}
+        ${permsOf.print ? `<button class="btn primary" id="h-print">${icon('printer', 18)} ${t('Chop etish')}</button>` : ''}</div>` : ''}
+    </div></aside>`;
+}
+
 Views.history = {
   title: () => t('Cheklar'), icon: () => 'receipt', roles: ['owner', 'admin', 'cashier'], refreshOn: ['finance'], module: 'history',
-  async load() { return GET(`/api/checks?${histQuery({ limit: 100 })}`); },
+  async load() {
+    const list = await GET(`/api/checks?${histQuery({ limit: 100 })}`);
+    const sel = UI.hist.sel && (list.rows.some((r) => r.id === UI.hist.sel) ? UI.hist.sel : null);
+    list.order = sel ? await GET(`/api/orders/${sel}`).catch(() => null) : null;
+    if (list.order && list.order.status === 'closed') LocalBackup.save(list.order);
+    return list;
+  },
   render(d) {
     const h = UI.hist;
     const r = histRange();
     const s = d.sums;
     const cancelled = h.status === 'cancelled';
     const label = h.period === 'all' ? (s.first_at ? t('{0} dan beri', fmtDate(s.first_at)) : '') : `${fmtDate(r.from)}${r.to - r.from > 24 * 60 * MIN ? ` — ${fmtDate(r.to - 1)}` : ''}`;
-    return `<div class="page-head"><h1>${t('Cheklar tarixi')}</h1><span class="muted">${label}</span>
-      <button class="btn" id="hist-export" ${s.count ? '' : 'disabled'}>${icon('file-spreadsheet', 18)} Excel</button></div>
-      <div class="row" style="margin-bottom:12px"><div class="seg">${HIST_PERIODS().map(([k, n]) => `<button class="${h.period === k ? 'active' : ''}" data-hp="${k}">${n}</button>`).join('')}</div>
-        ${h.period === 'custom' ? `<input type="date" id="h-from" value="${h.from || localDay()}" style="width:auto"> — <input type="date" id="h-to" value="${h.to || localDay()}" style="width:auto">` : ''}</div>
-      <div class="row" style="margin-bottom:16px">
-        <div class="seg"><button class="${!cancelled ? 'active' : ''}" data-hs="closed">${icon('circle-check', 16)} ${t('Yopilgan')}</button><button class="${cancelled ? 'active' : ''}" data-hs="cancelled">${icon('ban', 16)} ${t('Bekor qilingan')}</button></div>
-        <input type="search" id="h-q" placeholder="${esc(t('Chek raqami, xona yoki ofitsant'))}" value="${esc(h.q)}" style="max-width:300px"></div>
-      <div class="kpis">
-        ${kpi(t('Cheklar'), s.count, t('{0} mehmon', s.guests), '', 'receipt')}
-        ${cancelled ? '' : `${kpi(t('Jami'), money(s.total), s.count ? `${t("O'rtacha")}: ${money(Math.round(s.total / s.count))}` : '', 'good', 'coins')}
-        ${kpi(t('Naqd'), money(s.cash), '', '', 'banknote')}${kpi(t('Karta'), money(s.card), '', '', 'credit-card')}${kpi(t("O'tkazma"), money(s.transfer), '', '', 'smartphone')}`}
-      </div>
-      <div class="card">${d.rows.length ? `<div class="table-wrap"><table>
-        <tr><th>#</th><th>${t('Vaqt')}</th><th>${t('Joy')}</th><th>${roleName('waiter')}</th><th class="right">${icon('users', 15)}</th><th class="right">${t('Jami')}</th><th>${cancelled ? t('Sabab') : t("To'lov")}</th></tr>
-        ${d.rows.map((o) => `<tr class="clickable" data-view="${o.id}"><td><b>${o.id}</b></td><td>${fmtDateTime(o.closed_at)}</td>
-          <td>${o.takeaway ? `${icon(isShop() ? 'shopping-cart' : 'shopping-bag', 15)} ${esc(o.label || (isShop() ? t('Sotuv') : t('Olib ketish')))}` : `${esc(o.room_number)} · ${esc(o.room_name)}`}</td>
-          <td>${esc(o.waiter_name)}</td><td class="right">${o.guests}</td><td class="right num"><b>${money(o.total)}</b></td>
-          <td class="small">${cancelled ? esc(o.cancel_reason || '—') : ['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => icon(METHOD_ICONS[m], 16)).join(' ')}</td></tr>`).join('')}
-      </table></div>
-      ${d.rows.length < s.count ? `<div class="row" style="justify-content:center;margin-top:12px"><button class="btn" id="h-more">${t("Yana ko'rsatish")} (${d.rows.length} / ${s.count})</button></div>` : ''}`
-      : emptyState('receipt', h.period === 'today' ? t('Bugun hali chek yopilmagan') : t("Bu davrda chek yo'q"))}</div>`;
+    return `<div class="split">
+      ${checkDetailHtml(d.order)}
+      <section class="split-main">
+        <div class="toolbar">
+          <div class="seg">${HIST_PERIODS().map(([k, n]) => `<button class="${h.period === k ? 'active' : ''}" data-hp="${k}">${n}</button>`).join('')}</div>
+          ${h.period === 'custom' ? `<input type="date" id="h-from" value="${h.from || localDay()}" style="width:auto"> — <input type="date" id="h-to" value="${h.to || localDay()}" style="width:auto">` : ''}
+          <div class="seg"><button class="${!cancelled ? 'active' : ''}" data-hs="closed">${t('Yopilgan')}</button><button class="${cancelled ? 'active' : ''}" data-hs="cancelled">${t('Bekor qilingan')}</button></div>
+          <div class="scan" style="max-width:280px">${icon('search', 18)}<input type="search" id="h-q" placeholder="${esc(t('Chek raqami, xona yoki ofitsant'))}" value="${esc(h.q)}"></div>
+          <span class="grow"></span><span class="muted small">${label}</span>
+          <button class="btn" id="hist-export" ${s.count ? '' : 'disabled'}>${icon('file-spreadsheet', 18)} Excel</button></div>
+        <div class="card flush">${d.rows.length ? `<div class="table-wrap"><table class="list">
+          <tr><th>#</th><th>${t('Ochildi')} / ${t('Yopildi')}</th><th>${t('Joy')}</th><th>${roleName('waiter')}</th><th class="right">${icon('users', 15)}</th><th>${cancelled ? t('Sabab') : t("To'lov")}</th><th class="right">${t('Jami')}</th></tr>
+          ${d.rows.map((o) => `<tr class="clickable ${d.order && d.order.id === o.id ? 'selected' : ''}" data-view="${o.id}"><td><b>${o.id}</b></td>
+            <td class="small">${fmtTime(o.opened_at)} → ${fmtDateTime(o.closed_at)}</td>
+            <td>${o.takeaway ? `${icon(isShop() ? 'shopping-cart' : 'shopping-bag', 15)} ${esc(o.label || (isShop() ? t('Sotuv') : t('Olib ketish')))}` : `${esc(o.room_number)} · ${esc(o.room_name)}`}</td>
+            <td>${esc(o.waiter_name)}</td><td class="right">${o.guests}</td>
+            <td class="small">${cancelled ? esc(o.cancel_reason || '—') : ['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => icon(METHOD_ICONS[m], 16)).join(' ')}</td>
+            <td class="right num"><b>${num(o.total)}</b></td></tr>`).join('')}
+        </table></div>
+        ${d.rows.length < s.count ? `<div class="row" style="justify-content:center;margin:10px 0"><button class="btn" id="h-more">${t("Yana ko'rsatish")} (${d.rows.length} / ${s.count})</button></div>` : ''}`
+        : emptyState('receipt', h.period === 'today' ? t('Bugun hali chek yopilmagan') : t("Bu davrda chek yo'q"))}
+        <div class="list-foot"><span>${t('Cheklar')}: <b>${s.count}</b> · ${t('{0} mehmon', s.guests)}</span><span class="grow"></span>
+          ${cancelled ? '' : `<span>${icon('banknote', 15)} ${num(s.cash)}</span><span>${icon('credit-card', 15)} ${num(s.card)}</span><span>${icon('smartphone', 15)} ${num(s.transfer)}</span>`}
+          <span class="big">${t('Jami')}: ${money(s.total)}</span></div></div>
+      </section></div>`;
   },
   bind(root, d) {
     const h = UI.hist;
     root.querySelectorAll('[data-hp]').forEach((b) => b.onclick = () => { h.period = b.dataset.hp; refreshView(); });
-    root.querySelectorAll('[data-hs]').forEach((b) => b.onclick = () => { h.status = b.dataset.hs; refreshView(); });
+    root.querySelectorAll('[data-hs]').forEach((b) => b.onclick = () => { h.status = b.dataset.hs; h.sel = null; refreshView(); });
     const f = root.querySelector('#h-from'); const to = root.querySelector('#h-to');
     if (f) f.onchange = to.onchange = () => { h.from = f.value; h.to = to.value; refreshView(); };
     const q = root.querySelector('#h-q');
@@ -130,27 +168,18 @@ Views.history = {
       try { const next = await GET(`/api/checks?${histQuery({ limit: 200, offset: d.rows.length })}`); renderView({ ...d, rows: [...d.rows, ...next.rows] }); } catch (e) { toastError(e); more.disabled = false; }
     };
     root.querySelectorAll('[data-view]').forEach((b) => b.onclick = async () => {
-      let o;
-      try { o = await GET(`/api/orders/${b.dataset.view}`); } catch (e) { return toastError(e); }
-      if (o.status === 'closed') LocalBackup.save(o);
-      const share = perPerson(o);
-      openModal({
-        title: `${icon('receipt')} ${t('Chek')} #${o.id} · ${esc(placeName(o))}`, size: 'wide',
-        body: `<p class="small muted">${icon('clock', 13)} ${fmtDateTime(o.opened_at)} → ${fmtDateTime(o.closed_at)} · ${icon('user-round', 13)} ${esc(o.waiter.name)}
-          ${o.cashier ? ` · ${icon('wallet', 13)} ${esc(o.cashier.name)}` : ''} · ${icon('users', 13)} ${o.guests}${o.print_count ? ` · ${icon('printer', 13)} ${o.print_count}` : ''}</p>
-          <div class="receipt" style="background:var(--panel-2);border-radius:14px;padding:8px 14px">${o.items.map((i) => `<div class="line ${i.status === 'cancelled' ? 'cancelled' : ''}"><span class="q">${i.qty}×</span><span class="n">${esc(i.name)}</span><span class="p">${money(i.price * i.qty)}</span></div>`).join('')}</div>
-          <div class="sum-rows num" style="margin-top:12px"><span>${t('Taomlar')}</span><span class="right">${money(o.subtotal)}</span>
-            ${o.service_amount ? `<span>${esc(serviceLabel(o))}</span><span class="right">${money(o.service_amount)}</span>` : ''}
-            ${o.discount ? `<span>${t('Chegirma')}</span><span class="right">−${money(o.discount)}</span>` : ''}
-            <span class="total">${t('Jami')}</span><span class="total right">${money(o.total)}</span>
-            ${share ? `<span class="share">${t('{0} kishi — har biriga', o.guests)}</span><span class="share right">${money(share)}</span>` : ''}
-            ${['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => `<span>${methodName(m)}</span><span class="right">${money(o[`paid_${m}`])}</span>`).join('')}
-            ${o.refunded ? `<span style="color:var(--red)">${t('Qaytarildi')}</span><span class="right" style="color:var(--red)">−${money(o.refunded)}</span>` : ''}</div>`,
-        actions: [{ label: t('Yopish') },
-          ...(o.status === 'closed' && can('owner', 'admin', 'cashier') && o.refunded < o.total ? [{ label: t('Qaytarish'), icon: 'undo-2', onClick: () => { refundDialog(o); return false; } }] : []),
-          ...(o.status === 'closed' && (App.user.perms || {}).print ? [{ label: t('Chop etish'), cls: 'primary', icon: 'printer', onClick: () => { printCheck(o.id); return false; } }] : [])],
-      });
+      h.sel = Number(b.dataset.view);
+      try {
+        const o = await GET(`/api/orders/${h.sel}`);
+        if (o.status === 'closed') LocalBackup.save(o);
+        renderView({ ...d, order: o });
+        if (window.matchMedia('(max-width: 1000px)').matches) window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (e) { toastError(e); }
     });
+    const pr = root.querySelector('#h-print');
+    if (pr) pr.onclick = () => printCheck(d.order.id);
+    const rf = root.querySelector('#h-refund');
+    if (rf) rf.onclick = () => refundDialog(d.order);
     root.querySelector('#hist-export').onclick = async () => {
       try {
         const res = await fetch(`/api/checks/export?${histQuery()}`, { headers: { Authorization: `Bearer ${App.token}` } });
@@ -158,26 +187,6 @@ Views.history = {
         downloadBlob(`cheklar_${h.period}_${localDay()}.csv`, await res.blob());
       } catch (e) { toastError(e); }
     };
-  },
-};
-
-// ---------- Money: one quiet entry that opens reports, the cash book and payroll ----------
-const MONEY_PAGES = () => [
-  ['reports', 'chart-column', t('Hisobot'), t("Kirim, chiqim va foyda — kunlar bo'yicha")],
-  ['finance', 'arrow-right-left', t('Kirim-chiqim'), t('Xarajat va boshqa kirimlarni yozish')],
-  ['payroll', 'hand-coins', t('Ish haqi'), t('Maosh, bonus, jarima va davomat')],
-];
-Views.money = {
-  title: () => t('Moliya'), icon: () => 'eye-off', roles: ['owner', 'admin', 'cashier'],
-  on: () => MONEY_PAGES().some(([k]) => viewOn(k)),
-  render() {
-    return `<div class="page-head"><h1>${t('Moliya')}</h1>${App.settings.finance_lock && App.financeKey ? `<button class="btn sm" id="fin-lock">${icon('lock', 16)} ${t('Qulflash')}</button>` : ''}</div>
-      <div class="money-tiles">${MONEY_PAGES().filter(([k]) => viewOn(k)).map(([k, ic, n, d]) => `<a class="money-tile" href="#/${k}">${icon(ic, 32)}<b>${n}</b><span class="small muted">${d}</span></a>`).join('')}</div>
-      <p class="small muted" style="margin-top:14px">${icon('eye-off', 14)} ${t("Bu bo'lim begona ko'zdan uzoqroq turishi uchun menyuning eng pastida.")}${can('owner') ? ` ${t('Kim ko\'rishi va parol: Sozlamalar → Ruxsatlar.')}` : ''}</p>`;
-  },
-  bind(root) {
-    const l = root.querySelector('#fin-lock');
-    if (l) l.onclick = () => { App.financeKey = null; toast(t('Qulflandi'), 'ok'); refreshView(); };
   },
 };
 
@@ -490,7 +499,7 @@ Views.menuadmin = {
       <input type="search" id="menu-search" placeholder="${esc(shop ? t('Shtrix-kod yoki nomi') : t('Qidirish'))}" value="${esc(UI.menuSearch || '')}" style="max-width:240px">
       <button class="btn" id="add-cat">${icon('plus', 18)} ${t("Bo'lim")}</button><button class="btn primary" id="add-dish">${icon('plus', 18)} ${W('Taom')}</button></div>
       ${shop && low.length ? `<div class="notice">${icon('triangle-alert', 18)} ${t('Kam qolgan: {0}', low.map((d) => `${esc(d.name)}${d.size ? ` ${esc(d.size)}` : ''} (${d.stock})`).join(', '))}</div>` : ''}
-      ${groups.filter((g) => (g.c.id && !q) || g.ds.length).map(({ c, ds }) => `<div class="card"><div class="card-head"><h2>${esc(c.icon)} ${esc(c.name)}</h2>
+      ${groups.filter((g) => (g.c.id && !q) || g.ds.length).map(({ c, ds }) => `<div class="card"><div class="card-head"><h2>${c.id ? `<i class="cat-dot" style="background:${catColor({ categories }, c.id)}"></i>` : ''}${esc(c.icon)} ${esc(c.name)}</h2>
         ${c.id ? `<button class="icon-btn" data-edit-cat="${c.id}">${icon('pencil', 18)}</button><button class="icon-btn danger" data-del-cat="${c.id}">${icon('trash-2', 18)}</button>` : ''}</div>
         ${ds.length ? `<div class="table-wrap"><table>
         ${ds.map((d) => `<tr><td style="width:44px;font-size:24px">${esc(d.icon)}</td><td><b>${esc(d.name)}</b>${d.size || d.color ? ` <span class="chip">${esc([d.size, d.color].filter(Boolean).join(' · '))}</span>` : ''}<br>
@@ -509,7 +518,15 @@ Views.menuadmin = {
       title: `${icon('list')} ${c.id ? t("Bo'limni tahrirlash") : t("Yangi bo'lim")}`,
       body: `<div class="form-grid"><label class="field">${t('Nomi')}<input name="name" value="${esc(c.name || '')}" required></label>
         <label class="field">${t('Belgi (emoji)')}<input name="icon" value="${esc(c.icon || '🍽️')}"></label>
-        <label class="field">${t('Tartib')}<input type="number" name="sort" value="${c.sort ?? categories.length}"></label></div>`,
+        <label class="field">${t('Tartib')}<input type="number" name="sort" value="${c.sort ?? categories.length}"></label></div>
+        <div class="field" style="margin-top:12px">${t('Rangi (buyurtma ekranida taomlar shu rangda chiqadi)')}
+          <div class="row" style="margin-top:6px"><input type="hidden" name="color" value="${esc(c.color || '')}">
+            <button type="button" class="swatch auto ${c.color ? '' : 'on'}" data-col="">${t('Avto')}</button>
+            ${CAT_COLORS.map((x) => `<button type="button" class="swatch ${c.color === x ? 'on' : ''}" data-col="${x}" style="background:${x}"></button>`).join('')}</div></div>`,
+      onMount: (f) => f.querySelectorAll('[data-col]').forEach((b) => b.onclick = () => {
+        f.color.value = b.dataset.col;
+        f.querySelectorAll('[data-col]').forEach((x) => x.classList.toggle('on', x === b));
+      }),
       actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: 'primary', onClick: async (f) => {
         const d = formData(f);
         if (c.id) await PUT(`/api/categories/${c.id}`, d); else await POST('/api/categories', d);
@@ -986,7 +1003,8 @@ Views.settings = {
         <div class="stack">${langSelect('me-lang')}
           <div class="seg">${[['light', 'sun', t("Yorug'")], ['dark', 'moon', t("Qorong'i")]].map(([k, ic, n]) => `<button class="${(store('cp_theme') || 'light') === k ? 'active' : ''}" data-theme="${k}">${icon(ic, 16)} ${n}</button>`).join('')}</div>
           <button class="btn" id="install">${icon('download', 18)} ${t("Ilovani o'rnatish (ish stoli / telefon)")}</button>
-          <button class="btn" id="full">${icon('maximize', 18)} ${t("To'liq ekran")}</button></div></div>
+          <button class="btn" id="full">${icon('maximize', 18)} ${t("To'liq ekran")}</button>
+          ${keyboardSelect()}</div></div>
       ${App.device ? `<div class="card"><div class="card-head"><h2>${icon('printer')} ${t('Buyurtma printeri')}</h2></div>
         <label class="check"><input type="checkbox" id="order-print" ${OrderPrinter.on() ? 'checked' : ''}> ${t('Shu qurilmadan har bir yangi buyurtmani chop etish')}</label>
         <p class="small muted" style="margin-top:8px">${t("Ofitsant yoki kassir yozgan har bir buyurtma (taomlar, soni, izoh) shu kompyuterga ulangan printerdan chiqadi. Xodimlar ro'yxati ochiq turganda ham ishlaydi.")}</p>
@@ -1017,6 +1035,7 @@ Views.settings = {
     bindLang(root, 'me-lang');
     root.querySelectorAll('[data-theme]').forEach((b) => b.onclick = () => { store('cp_theme', b.dataset.theme); applyTheme(); refreshView(); });
     root.querySelector('#install').onclick = installApp;
+    root.querySelector('#kb-mode').onchange = (e) => { Keyboard.setMode(e.target.value); toast(t('Saqlandi'), 'ok'); };
     const op = root.querySelector('#order-print');
     if (op) op.onchange = () => { OrderPrinter.set(op.checked); toast(op.checked ? t('Yangi buyurtmalar shu qurilmada avtomatik chop etiladi') : t("Avtomatik chop etish o'chirildi"), 'ok'); };
     const full = root.querySelector('#full');

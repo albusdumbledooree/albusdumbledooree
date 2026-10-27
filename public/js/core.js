@@ -85,6 +85,26 @@ function placeName(o) {
   return o.room ? o.room.name : o.room_name || '';
 }
 
+// ---------- Menu: a colour per section, dish tiles, the section column ----------
+const CAT_COLORS = ['#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#3b82f6', '#06b6d4', '#10b981', '#84cc16', '#f97316', '#64748b'];
+function catColor(menu, id) {
+  const i = menu.categories.findIndex((c) => c.id === id);
+  if (i < 0) return '#94a3b8';
+  return menu.categories[i].color || CAT_COLORS[i % CAT_COLORS.length];
+}
+// opts.qty: how many are already on the check; opts.sub: small line (time, stock, size).
+function dishTile(menu, x, opts = {}) {
+  return `<button class="dish ${x.available ? '' : 'out'}" style="--cc:${catColor(menu, x.category_id)}" data-dish="${x.id}" ${x.available ? '' : 'disabled'}>
+    ${opts.qty ? `<span class="qty">${opts.qty}</span>` : ''}<span class="nm">${esc(x.name)}</span>
+    ${opts.sub ? `<span class="sub">${opts.sub}</span>` : ''}
+    <span class="pr" data-out="${esc(t('TUGADI'))}">${num(x.price)}</span></button>`;
+}
+function catSide(menu) {
+  const cats = menu.categories.filter((c) => menu.dishes.some((x) => x.category_id === c.id));
+  return `<nav class="cat-side"><button class="cat ${UI.category === 'all' ? 'active' : ''}" data-cat="all">${icon('grid-2x2', 16)} ${t('Hammasi')}</button>
+    ${cats.map((c) => `<button class="cat ${String(UI.category) === String(c.id) ? 'active' : ''}" style="--cc:${catColor(menu, c.id)}" data-cat="${c.id}">${esc(c.name)}</button>`).join('')}</nav>`;
+}
+
 // ---------- Storage ----------
 function store(key, val) {
   try {
@@ -128,6 +148,7 @@ function endSession() {
   App.financeKey = null;
   store('cp_token', null);
   Live.stop();
+  if (typeof Views === 'object' && Views.lock) Views.lock.step = 'clock';
   location.hash = App.device ? '#/lock' : '#/setup';
   if (typeof render === 'function') render();
 }
@@ -467,7 +488,7 @@ function imageToDataUrl(file, max, type = 'image/jpeg') {
 const OrderPrinter = {
   es: null,
   on() { return !!(App.device && store('cp_kprint')); },
-  set(v) { store('cp_kprint', v ? true : null); this.sync(); },
+  set(v) { store('cp_kprint', v ? true : null); this.sync(); if (App.user && typeof updateNav === 'function') updateNav(); },
   sync() {
     if (!this.on()) { if (this.es) this.es.close(); this.es = null; return; }
     if (this.es) return;

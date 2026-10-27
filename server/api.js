@@ -470,7 +470,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
           if (c.status !== 'cancelled') { st[c.status] = c.c; subtotal += c.s; }
         }
         summary = { id: order.id, guests: order.guests, opened_at: order.opened_at, waiter_id: order.waiter_id,
-          waiter_name: order.waiter_name, bill_requested: order.bill_requested, subtotal, items: st };
+          waiter_name: order.waiter_name, bill_requested: order.bill_requested, printed: order.print_count, subtotal, items: st };
       }
       return { ...r, waiters: waiters.filter((w) => w.room_id === r.id).map(({ id, name }) => ({ id, name })),
         order: summary, reservations: resv.filter((x) => x.room_id === r.id) };
@@ -551,11 +551,13 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
     const name = str(body.name, 'Nomi', { required: true, max: 60 });
     const icon = str(body.icon, 'Belgi', { max: 8 });
     const sort = int(body.sort, 'Tartib', { max: 1000 });
+    const color = str(body.color, 'Rang', { max: 7 });
+    if (color && !/^#[0-9a-f]{6}$/i.test(color)) throw new HttpError(400, "Rang noto'g'ri");
     let id = params.id;
     if (id) {
-      if (!q('UPDATE categories SET name = ?, icon = ?, sort = ? WHERE id = ?').run(name, icon, sort, id).changes) throw new HttpError(404, 'Topilmadi');
+      if (!q('UPDATE categories SET name = ?, icon = ?, sort = ?, color = ? WHERE id = ?').run(name, icon, sort, color, id).changes) throw new HttpError(404, 'Topilmadi');
     } else {
-      id = q('INSERT INTO categories (name, icon, sort) VALUES (?, ?, ?)').run(name, icon, sort).lastInsertRowid;
+      id = q('INSERT INTO categories (name, icon, sort, color) VALUES (?, ?, ?, ?)').run(name, icon, sort, color).lastInsertRowid;
     }
     audit(user, 'category_save', name);
     events.publish('menu');

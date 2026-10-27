@@ -7,42 +7,47 @@ const UI = { category: 'all', search: '', drawer: false, section: store('cp_sect
 function emptyState(ic, text) { return `<div class="empty">${icon(ic, 56)}<div>${text}</div></div>`; }
 
 // ---------- Rooms ----------
+// One status per room, shown as the colour of the tile and a label at its bottom.
 function roomState(r) {
-  if (r.order && r.order.bill_requested) return 'bill';
-  if (r.order && r.order.items.ready) return 'ready';
-  if (r.order) return 'busy';
+  const o = r.order;
+  if (o && o.items.ready) return 'ready';
+  if (o && o.bill_requested) return 'bill';
+  if (o && o.printed) return 'printed';
+  if (o) return 'busy';
   if (r.reservations.length) return 'reserved';
   return 'free';
+}
+const STATE_LABELS = () => ({ free: t("Bo'sh"), busy: t('Band'), ready: t('Taom tayyor'), bill: t("Hisob so'raldi"), printed: t('Chek berildi'), reserved: t('Bron') });
+
+function tileFoot(st, extra = '') {
+  return `<span class="t-foot"><span class="pill ${st}">${STATE_LABELS()[st]}${extra}</span></span>`;
 }
 
 function roomTile(r) {
   const o = r.order;
   const st = roomState(r);
-  return `<button class="tile ${st}" data-room="${r.id}">
-    <span class="type-ic">${icon(ROOM_TYPE_ICONS[r.type] || 'door-open', 22)}</span>
-    <span class="no">${esc(r.number)}</span><span class="nm">${esc(r.name)}</span>
+  const cooking = o ? o.items.new + o.items.cooking : 0;
+  const resv = r.reservations[0];
+  return `<button class="tile st-${st}" data-room="${r.id}">
+    <span class="t-top"><span class="no">${esc(r.number)}</span>${o ? `<span class="amt">${num(o.subtotal)}</span>` : `<span class="plus">${icon('plus', 20)}</span>`}</span>
+    <span class="nm">${esc(r.name)}</span>
     <span class="meta">${o
-      ? `<span>${icon('users', 15)} ${o.guests}</span><span>${icon('clock', 15)} <b data-since="${o.opened_at}"></b></span>${App.user.role !== 'waiter' ? `<span>${icon('user-round', 15)} ${esc(o.waiter_name.split(' ').pop())}</span>` : ''}`
-      : `<span>${icon('users', 15)} ${r.capacity}</span>`}</span>
-    <span class="flags">
-      ${o && o.items.ready ? `<span class="chip ready">${icon('bell', 14)} ${o.items.ready}</span>` : ''}
-      ${o && (o.items.new + o.items.cooking) ? `<span class="chip cooking">${icon('flame', 14)} ${o.items.new + o.items.cooking}</span>` : ''}
-      ${o && o.bill_requested ? `<span class="chip violet">${icon('receipt', 14)} ${t('Hisob')}</span>` : ''}
-      ${(o ? r.reservations : r.reservations.slice(1)).map((x) => `<span class="chip new">${icon('calendar', 14)} ${fmtTime(x.starts_at)}</span>`).join('')}
-    </span>
-    <span class="sum">${o ? money(o.subtotal) : r.reservations.length ? `${icon('calendar', 15)} ${t('Band (bron)')} · ${fmtTime(r.reservations[0].starts_at)}` : t("Bo'sh")}</span>
+      ? `${App.user.role !== 'waiter' ? `<span>${icon('user-round', 14)} ${esc(o.waiter_name.split(' ').pop())}</span>` : ''}<span>${icon('clock', 14)} <b data-since="${o.opened_at}"></b></span><span>${icon('users', 14)} ${o.guests}</span>`
+      : `<span>${icon(ROOM_TYPE_ICONS[r.type] || 'door-open', 14)} ${roomTypeName(r.type)}</span><span>${icon('users', 14)} ${r.capacity}</span>`}
+      ${cooking ? `<span class="hot">${icon('flame', 14)} ${cooking}</span>` : ''}</span>
+    ${tileFoot(st, st === 'ready' ? ` · ${o.items.ready}` : st === 'reserved' ? ` · ${fmtTime(resv.starts_at)}` : '')}
   </button>`;
 }
 
 function takeawayTile(o) {
-  const st = o.bill_requested ? 'bill' : o.items.ready ? 'ready' : 'busy';
-  return `<button class="tile ${st}" data-order="${o.id}">
-    <span class="type-ic">${icon('shopping-bag', 22)}</span>
-    <span class="no">#${o.id}</span><span class="nm">${esc(o.label || t('Olib ketish'))}</span>
-    <span class="meta"><span>${icon('clock', 15)} <b data-since="${o.opened_at}"></b></span>${App.user.role !== 'waiter' ? `<span>${icon('user-round', 15)} ${esc(o.waiter_name.split(' ').pop())}</span>` : ''}</span>
-    <span class="flags">${o.items.ready ? `<span class="chip ready">${icon('bell', 14)} ${o.items.ready}</span>` : ''}
-      ${o.items.new + o.items.cooking ? `<span class="chip cooking">${icon('flame', 14)} ${o.items.new + o.items.cooking}</span>` : ''}</span>
-    <span class="sum">${money(o.total)}</span></button>`;
+  const st = o.items.ready ? 'ready' : o.bill_requested ? 'bill' : o.print_count ? 'printed' : 'busy';
+  const cooking = o.items.new + o.items.cooking;
+  return `<button class="tile st-${st}" data-order="${o.id}">
+    <span class="t-top"><span class="no">#${o.id}</span><span class="amt">${num(o.total)}</span></span>
+    <span class="nm">${esc(o.label || t('Olib ketish'))}</span>
+    <span class="meta">${App.user.role !== 'waiter' ? `<span>${icon('user-round', 14)} ${esc(o.waiter_name.split(' ').pop())}</span>` : ''}<span>${icon('clock', 14)} <b data-since="${o.opened_at}"></b></span>
+      ${cooking ? `<span class="hot">${icon('flame', 14)} ${cooking}</span>` : ''}</span>
+    ${tileFoot(st)}</button>`;
 }
 
 // Sections ("1-qavat", "Hovli") in the order the boss numbered their rooms.
@@ -52,6 +57,7 @@ function roomSections(rooms) {
   return out;
 }
 
+UI.roomsMode = store('cp_rooms_mode') || '';
 Views.rooms = {
   title: () => (App.biz === 'fastfood' ? t('Buyurtmalar') : App.user.role === 'cashier' ? t('Kassa') : t('Xonalar')),
   icon: () => (App.biz === 'fastfood' ? 'receipt' : App.user.role === 'cashier' ? 'wallet' : 'house'),
@@ -61,33 +67,48 @@ Views.rooms = {
     const [rooms, takeaway, shift] = await Promise.all([GET('/api/rooms'), GET('/api/takeaway'), money ? GET('/api/shifts/current') : null]);
     return { rooms, takeaway, shift, money };
   },
+  /* Layout: the hall / takeaway switch with counters at the top, the sections (floors) down the left,
+     rooms grouped under their section headers. Everything for a busy evening fits on one screen. */
   render({ rooms, takeaway, shift, money: showShift }) {
     const busy = rooms.filter((r) => r.order).length;
     const sections = roomSections(rooms);
     const sec = sections.includes(UI.section) ? UI.section : '';
-    const shown = sec ? rooms.filter((r) => r.section === sec) : rooms;
     const fast = App.biz === 'fastfood';
-    const takeawayHtml = `<div class="section-title">${icon('shopping-bag', 20)} ${fast ? t('Ochiq buyurtmalar') : t('Olib ketish')}</div>
-      <div class="floor">${takeaway.orders.map(takeawayTile).join('')}
-        <button class="tile add" data-new-takeaway>${icon('circle-plus', 36)}<span>${t('Yangi chek')}</span></button></div>`;
-    const roomsHtml = `${sections.length ? `<div class="sections">
-        <button class="section-chip ${sec ? '' : 'active'}" data-section="">${icon('grid-2x2', 18)} ${t('Hammasi')} <span>${busy}/${rooms.length}</span></button>
-        ${sections.map((x) => { const rs = rooms.filter((r) => r.section === x); return `<button class="section-chip ${sec === x ? 'active' : ''}" data-section="${esc(x)}">${icon('layers', 18)} ${esc(x)} <span>${rs.filter((r) => r.order).length}/${rs.length}</span></button>`; }).join('')}</div>` : ''}
-      ${shown.length ? `<div class="floor">${shown.map(roomTile).join('')}</div>`
-        : fast ? '' : emptyState('door-open', App.user.role === 'waiter' ? t('Sizga hali xona biriktirilmagan') : t("Xonalar yo'q. Sozlamalar → Xonalar bo'limida qo'shing"))}`;
-    return `<div class="page-head"><h1>${esc(this.title())}</h1>
-      ${rooms.length ? `<span class="chip">${icon('door-open', 14)} ${busy} / ${rooms.length}</span>` : ''}
-      ${showShift ? `<button class="btn sm ${shift ? '' : 'primary'}" id="shift">${icon(shift ? 'lock' : 'circle-plus', 16)} ${shift ? t('Smenani yopish') : t('Smenani ochish')}</button>` : ''}</div>
-      ${rooms.length ? `<div class="legend"><span><i class="lg-free"></i>${t("Bo'sh")}</span><span><i class="lg-busy"></i>${t('Band')}</span>
-        <span><i class="lg-ready"></i>${t('Taom tayyor')}</span>
-        <span><i class="lg-bill"></i>${t("Hisob so'raldi")}</span><span><i class="lg-resv"></i>${t('Bron')}</span></div>` : ''}
-      ${fast ? takeawayHtml + (rooms.length ? `<div class="section-title">${icon('utensils', 20)} ${t('Stollar')}</div>${roomsHtml}` : '') : roomsHtml + takeawayHtml}`;
+    const mode = UI.roomsMode === 'takeaway' || (!UI.roomsMode && (fast || !rooms.length)) ? 'takeaway' : 'hall';
+    const modes = `<div class="modes">
+      ${rooms.length ? `<button class="mode ${mode === 'hall' ? 'active' : ''}" data-mode="hall">${icon(fast ? 'utensils' : 'house', 20)} ${fast ? t('Stollar') : t('Zal')}<span class="cnt">${busy}/${rooms.length}</span></button>` : ''}
+      <button class="mode ${mode === 'takeaway' ? 'active' : ''}" data-mode="takeaway">${icon('shopping-bag', 20)} ${fast ? t('Ochiq buyurtmalar') : t('Olib ketish')}<span class="cnt">${takeaway.orders.length}</span></button>
+      ${moduleOn('reservations') && can('owner', 'admin', 'cashier') ? `<a class="mode" href="#/reservations">${icon('calendar', 20)} ${t('Bronlar')}<span class="cnt">${rooms.reduce((n, r) => n + r.reservations.length, 0)}</span></a>` : ''}
+      <span class="grow"></span>
+      ${showShift ? `<button class="btn ${shift ? '' : 'primary'}" id="shift">${icon(shift ? 'lock' : 'circle-plus', 18)} ${shift ? t('Smenani yopish') : t('Smenani ochish')}</button>` : ''}</div>`;
+
+    if (mode === 'takeaway') {
+      return `${modes}<div class="floor">
+        <button class="tile add" data-new-takeaway>${icon('circle-plus', 34)}<span>${t('Yangi chek')}</span></button>
+        ${takeaway.orders.map(takeawayTile).join('')}</div>`;
+    }
+    const group = (title, list) => `${title ? `<div class="group-head"><b># ${esc(title)}</b><span>${list.filter((r) => r.order).length}/${list.length} ${t('band')}</span></div>` : ''}
+      <div class="floor">${list.map(roomTile).join('')}</div>`;
+    let body;
+    if (!rooms.length) body = emptyState('door-open', App.user.role === 'waiter' ? t('Sizga hali xona biriktirilmagan') : t("Xonalar yo'q. Sozlamalar → Xonalar bo'limida qo'shing"));
+    else if (sec) body = group('', rooms.filter((r) => r.section === sec));
+    else if (sections.length) body = [...sections, ''].map((x) => { const l = rooms.filter((r) => (r.section || '') === x); return l.length ? group(x || t("Bo'limsiz"), l) : ''; }).join('');
+    else body = group('', rooms);
+    const legend = `<div class="legend">${['free', 'busy', 'printed', 'ready', 'bill', 'reserved'].map((k) => `<span><i class="lg st-${k}"></i>${STATE_LABELS()[k]}</span>`).join('')}</div>`;
+    return `${modes}<div class="rooms-layout ${sections.length ? '' : 'no-side'}">
+      ${sections.length ? `<aside class="sec-side">
+        <button class="sec ${sec ? '' : 'active'}" data-section="">${t('Hammasi')}<span class="badge">${busy}</span></button>
+        ${sections.map((x) => { const n = rooms.filter((r) => r.section === x && r.order).length; return `<button class="sec ${sec === x ? 'active' : ''}" data-section="${esc(x)}">${esc(x)}<span class="badge ${n ? '' : 'zero'}">${n}</span></button>`; }).join('')}
+      </aside>` : ''}
+      <section class="rooms-main">${body}${legend}</section></div>`;
   },
   bind(root, data) {
     root.querySelectorAll('[data-room]').forEach((b) => b.onclick = () => { location.hash = `#/room/${b.dataset.room}`; });
     root.querySelectorAll('[data-section]').forEach((b) => b.onclick = () => { UI.section = b.dataset.section; store('cp_section', UI.section || null); renderView(data); });
+    root.querySelectorAll('[data-mode]').forEach((b) => b.onclick = () => { UI.roomsMode = b.dataset.mode; store('cp_rooms_mode', UI.roomsMode); renderView(data); });
     root.querySelectorAll('[data-order]').forEach((b) => b.onclick = () => { location.hash = `#/order/${b.dataset.order}`; });
-    root.querySelector('[data-new-takeaway]').onclick = () => { delete Carts.soboy; location.hash = '#/soboy'; };
+    const nt = root.querySelector('[data-new-takeaway]');
+    if (nt) nt.onclick = () => { delete Carts.soboy; location.hash = '#/soboy'; };
     const sh = root.querySelector('#shift');
     if (sh) sh.onclick = () => (data.shift ? closeShiftDialog(data.shift) : openShiftDialog());
   },
@@ -223,7 +244,6 @@ const OrderView = {
   render(d) {
     const { menu, key } = d;
     const cart = cartOf(key);
-    const cats = menu.categories.filter((c) => menu.dishes.some((x) => x.category_id === c.id));
     const q = UI.search.toLowerCase();
     const dishes = menu.dishes.filter((x) => (UI.category === 'all' || x.category_id === Number(UI.category)) && (!q || x.name.toLowerCase().includes(q)));
     const pendingCount = cart.lines.reduce((s, c) => s + c.qty, 0);
@@ -231,19 +251,17 @@ const OrderView = {
     return `<div class="order">
       ${checkPane({ ...d, cart })}
       ${UI.drawer ? '<div class="drawer-back" id="drawer-back"></div>' : ''}
-      <section>
-        <div class="menu-bar"><button class="btn sm" id="back">${icon('arrow-left', 18)} ${t('Orqaga')}</button>
-          <input type="search" id="dish-search" placeholder="${esc(W('Taom qidirish'))}" value="${esc(UI.search)}">
-          ${kitchenOn && menu.load.extra_minutes ? `<span class="chip cooking">${icon('flame', 14)} +${menu.load.extra_minutes} ${t('daq')}</span>` : ''}</div>
-        <div class="cats"><button class="cat ${UI.category === 'all' ? 'active' : ''}" data-cat="all">${t('Hammasi')}</button>
-          ${cats.map((c) => `<button class="cat ${String(UI.category) === String(c.id) ? 'active' : ''}" data-cat="${c.id}">${esc(c.icon)} ${esc(c.name)}</button>`).join('')}</div>
-        <div class="dishes">${dishes.map((x) => {
-          const inCart = cart.lines.filter((c) => c.dish_id === x.id).reduce((s, c) => s + c.qty, 0);
-          return `<button class="dish ${x.available ? '' : 'out'}" data-dish="${x.id}" ${x.available ? '' : 'disabled'}>
-            ${inCart ? `<span class="qty">${inCart}</span>` : ''}<span class="em">${esc(x.icon || '🍽️')}</span><span class="nm">${esc(x.name)}</span>
-            <span class="eta">${x.needs_kitchen && kitchenOn ? `${icon('timer', 13)} ~${x.eta_minutes} ${t('daq')}` : `${icon('check', 13)} ${t('Darhol')}`}${x.stock != null ? ` · ${x.stock}` : ''}</span>
-            <span class="pr" data-out="${esc(t('TUGADI'))}">${money(x.price)}</span></button>`;
-        }).join('') || emptyState('search', t('Taom topilmadi'))}</div>
+      <section class="menu-area">
+        ${catSide(menu)}
+        <div class="dish-area">
+          <div class="menu-bar"><button class="btn" id="back">${icon('arrow-left', 18)} ${t('Orqaga')}</button>
+            <div class="scan">${icon('search', 18)}<input type="search" id="dish-search" placeholder="${esc(W('Taom qidirish'))}" value="${esc(UI.search)}"></div>
+            ${kitchenOn && menu.load.extra_minutes ? `<span class="chip cooking">${icon('flame', 14)} +${menu.load.extra_minutes} ${t('daq')}</span>` : ''}</div>
+          <div class="dishes">${dishes.map((x) => dishTile(menu, x, {
+            qty: cart.lines.filter((c) => c.dish_id === x.id).reduce((s, c) => s + c.qty, 0),
+            sub: `${x.needs_kitchen && kitchenOn ? `${icon('timer', 12)} ${x.eta_minutes} ${t('daq')}` : ''}${x.stock != null ? ` ${icon('package', 12)} ${x.stock}` : ''}`,
+          })).join('') || emptyState('search', t('Taom topilmadi'))}</div>
+        </div>
       </section>
       <button class="fab-check" id="fab">${icon('receipt', 22)}<span class="grow">${t('Chek')}${pendingCount ? ` · ${t('{0} ta yangi', pendingCount)}` : ''}</span><b>${money(d.order ? d.order.total : cart.lines.reduce((s, c) => s + c.price * c.qty, 0))}</b></button>
     </div>`;

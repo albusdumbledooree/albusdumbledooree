@@ -15,16 +15,11 @@ function posAdd(x, qty = 1) {
   if (line) line.qty = want; else PosCart.lines.push({ dish_id: x.id, name: x.name, price: x.price, qty, variant: [x.size, x.color].filter(Boolean).join(' · ') });
 }
 
-function productTile(x) {
-  const inCart = (PosCart.lines.find((c) => c.dish_id === x.id) || {}).qty || 0;
+function productSub(x) {
   const low = x.stock != null && x.stock <= 3;
   const variant = [x.size, x.color].filter(Boolean).join(' · ');
-  return `<button class="dish ${x.available ? '' : 'out'}" data-dish="${x.id}" ${x.available ? '' : 'disabled'}>
-    ${inCart ? `<span class="qty">${inCart}</span>` : ''}<span class="em">${esc(x.icon || (isShop() ? '📦' : '🍽️'))}</span><span class="nm">${esc(x.name)}</span>
-    ${variant ? `<span class="variant">${esc(variant)}</span>` : ''}
-    <span class="eta">${x.stock != null ? `<span class="${low ? 'low' : ''}">${icon('package', 13)} ${x.stock} ${esc(x.unit === 'porsiya' ? t('dona') : x.unit)}</span>`
-      : x.needs_kitchen && App.kitchenMode !== 'off' ? `${icon('timer', 13)} ~${x.eta_minutes} ${t('daq')}` : ''}</span>
-    <span class="pr" data-out="${esc(t('TUGADI'))}">${money(x.price)}</span></button>`;
+  return `${variant ? `<b>${esc(variant)}</b> ` : ''}${x.stock != null ? `<span class="${low ? 'low' : ''}">${icon('package', 12)} ${x.stock}</span>`
+    : x.needs_kitchen && App.kitchenMode !== 'off' ? `${icon('timer', 12)} ${x.eta_minutes} ${t('daq')}` : ''}`;
 }
 
 Views.pos = {
@@ -36,7 +31,6 @@ Views.pos = {
     return { menu, shift, money };
   },
   render({ menu, shift, money: showShift }) {
-    const cats = menu.categories.filter((c) => menu.dishes.some((x) => x.category_id === c.id));
     const q = UI.search.toLowerCase();
     const list = menu.dishes.filter((x) => (UI.category === 'all' || x.category_id === Number(UI.category))
       && (!q || `${x.name} ${x.barcode || ''} ${x.size || ''} ${x.color || ''}`.toLowerCase().includes(q)));
@@ -58,13 +52,14 @@ Views.pos = {
             <button class="btn ok lg" id="pos-pay" ${PosCart.lines.length ? '' : 'disabled'} style="grid-column:span 2">${icon('wallet', 20)} ${t("To'lov")}</button></div>
         </div></aside>
       ${UI.drawer ? '<div class="drawer-back" id="drawer-back"></div>' : ''}
-      <section>
-        <div class="menu-bar">
-          <div class="scan">${icon(isShop() ? 'scan-barcode' : 'search', 20)}<input type="search" id="pos-scan" autocomplete="off" placeholder="${esc(isShop() ? t('Shtrix-kod yoki nomi') : W('Taom qidirish'))}" value="${esc(UI.search)}"></div>
-          ${showShift ? `<button class="btn sm ${shift ? '' : 'primary'}" id="shift">${icon(shift ? 'lock' : 'circle-plus', 16)} ${shift ? t('Smenani yopish') : t('Smenani ochish')}</button>` : ''}</div>
-        <div class="cats"><button class="cat ${UI.category === 'all' ? 'active' : ''}" data-cat="all">${t('Hammasi')}</button>
-          ${cats.map((c) => `<button class="cat ${String(UI.category) === String(c.id) ? 'active' : ''}" data-cat="${c.id}">${esc(c.icon)} ${esc(c.name)}</button>`).join('')}</div>
-        <div class="dishes">${list.map(productTile).join('') || emptyState('search', W('Taom topilmadi'))}</div>
+      <section class="menu-area">
+        ${catSide(menu)}
+        <div class="dish-area">
+          <div class="menu-bar">
+            <div class="scan">${icon(isShop() ? 'scan-barcode' : 'search', 20)}<input type="search" id="pos-scan" autocomplete="off" placeholder="${esc(isShop() ? t('Shtrix-kod yoki nomi') : W('Taom qidirish'))}" value="${esc(UI.search)}"></div>
+            ${showShift ? `<button class="btn ${shift ? '' : 'primary'}" id="shift">${icon(shift ? 'lock' : 'circle-plus', 16)} ${shift ? t('Smenani yopish') : t('Smenani ochish')}</button>` : ''}</div>
+          <div class="dishes">${list.map((x) => dishTile(menu, x, { qty: (PosCart.lines.find((c) => c.dish_id === x.id) || {}).qty, sub: productSub(x) })).join('') || emptyState('search', W('Taom topilmadi'))}</div>
+        </div>
       </section>
       <button class="fab-check" id="fab">${icon('shopping-cart', 22)}<span class="grow">${t('Savat')}${count ? ` · ${count}` : ''}</span><b>${money(posTotal())}</b></button>
     </div>`;

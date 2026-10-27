@@ -451,6 +451,18 @@
     "Chop etish oynasi chiqmasligi uchun Chrome'ni --kiosk-printing bilan oching.": ['Чтобы окно печати не появлялось, запускайте Chrome с --kiosk-printing.', 'To skip the print dialog, start Chrome with --kiosk-printing.'],
     "Login paroli yoki Sozlamalarda qo'yilgan kirish paroli": ['Пароль от логина или пароль входа из настроек', 'Your login password, or the desktop password set in Settings'],
     "Obuna muddati bugun tugaydi. Iltimos, to'lovni amalga oshiring.": ['Подписка заканчивается сегодня. Пожалуйста, оплатите.', 'The subscription ends today. Please pay.'],
+    // ---------- Design refresh, on-screen keyboard ----------
+    'Ekran klaviaturasi': ['Экранная клавиатура', 'On-screen keyboard'],
+    'Avtomatik (sensorli ekranda)': ['Авто (на сенсорном экране)', 'Automatic (on touch screens)'],
+    'Doim yoqiq': ['Всегда включена', 'Always on'],
+    'Probel': ['Пробел', 'Space'],
+    'Zal': ['Зал', 'Hall'],
+    'band': ['занято', 'taken'],
+    'Chek berildi': ['Чек выдан', 'Check printed'],
+    'Chekni tanlang': ['Выберите чек', 'Pick a check'],
+    'Rangi (buyurtma ekranida taomlar shu rangda chiqadi)': ['Цвет (блюда раздела будут этого цвета на экране заказа)', 'Colour (its dishes get this colour on the order screen)'],
+    'Avto': ['Авто', 'Auto'],
+    'Jonli aloqa': ['Связь', 'Live link'],
   };
   for (const [uz, [ru, en]] of Object.entries(T)) {
     I18N.ru[uz] = ru;
