@@ -4,7 +4,7 @@
 function createHub() {
   const clients = new Set();
 
-  function subscribe(req, res, user) {
+  function subscribe(req, res, user, token = null) {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
@@ -12,7 +12,7 @@ function createHub() {
       'X-Accel-Buffering': 'no',
     });
     res.write(`event: hello\ndata: ${JSON.stringify({ user_id: user.id })}\n\n`);
-    const client = { res, user };
+    const client = { res, user, token };
     clients.add(client);
     const ping = setInterval(() => res.write(': ping\n\n'), 25000);
     req.on('close', () => {
@@ -35,7 +35,12 @@ function createHub() {
     for (const c of clients) if (userId === undefined || c.user.id === userId) c.res.end();
   }
 
-  return { subscribe, publish, disconnectUser, size: () => clients.size };
+  // Closes the live streams of these session keys only (other devices of the same person stay connected).
+  function disconnectSessions(tokens) {
+    for (const c of clients) if (c.token && tokens.has(c.token)) c.res.end();
+  }
+
+  return { subscribe, publish, disconnectUser, disconnectSessions, size: () => clients.size };
 }
 
 module.exports = { createHub };

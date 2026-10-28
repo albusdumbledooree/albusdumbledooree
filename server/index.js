@@ -137,7 +137,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
 
       if (pathname === '/api/events' && req.method === 'GET') {
         const user = api.authenticate(token);
-        if (user) return ctx.hub.subscribe(req, res, user);
+        if (user) return ctx.hub.subscribe(req, res, user, token);
         // A shared device listens too (even on the staff list): it prints new orders when chosen as a printer.
         const device = api.authenticateDevice(token);
         if (!device) throw new HttpError(401, 'Tizimga kiring');
@@ -159,7 +159,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
         if (!device) throw new HttpError(401, 'Qurilma ulanmagan');
       } else if (route.roles) {
         user = api.authenticate(token);
-        if (!user) throw new HttpError(401, 'Tizimga kiring');
+        if (!user) throw new HttpError(401, api.wasKicked(token) ? 'Bu hisob boshqa qurilmada ochildi. Qayta kiring' : 'Tizimga kiring');
         if (!route.roles.includes(user.role)) throw new HttpError(403, "Sizda bu amal uchun huquq yo'q");
         api.guard(route, user, req.headers['x-finance']);
       }

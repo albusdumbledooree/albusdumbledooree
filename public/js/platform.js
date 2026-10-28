@@ -87,6 +87,7 @@ function tenantCard(t) {
       <span>${icon('star', 15)}</span><span><span class="chip plan-${esc(t.plan_info.key)}">${esc(t.plan_info.name)}</span>${t.is_branch ? ' <span class="chip">Filial</span>' : ''}
         · <b>${money(t.plan_info.fee)}</b>/oy${t.monthly_fee ? ' <span class="small muted">(maxsus narx)</span>' : ''}
         ${t.plan_info.max_staff > 0 && !t.error ? `<br><span class="small ${t.staff - (t.owners || []).length >= t.plan_info.max_staff ? 'warn' : 'muted'}">Xodimlar: ${t.staff - (t.owners || []).length}/${t.plan_info.max_staff}</span>` : ''}</span>
+      ${t.shared && t.shared.length ? `<span>${icon('triangle-alert', 15)}</span><span class="small warn" title="Oxirgi 7 kunda bu hisoblar band paytida boshqa qurilmadan ochilgan">Hisob almashib ishlatilyapti: ${t.shared.map((x) => `${esc(x.name)} (${x.c} marta)`).join(', ')}</span>` : ''}
       <span>${icon('calendar', 15)}</span><span>${due}${t.plan_info.read_only ? ' <span class="chip red">Faqat ko\'rish</span>' : ''}</span>
       <span>${icon('layers', 15)}</span><span class="small">Bo'limlar: ${t.plan_info.modules.filter((m) => !(t.disabled_modules || []).includes(m)).length}/${mods} · Oshxona: ${esc({ full: "to'liq", notify: 'xabar', off: "o'chiq" }[t.kitchen_mode] || t.kitchen_mode)}</span>
       ${t.support && t.support.text ? `<span>${icon('life-buoy', 15)}</span><span class="small">${esc(t.support.text)}</span>` : ''}
@@ -457,6 +458,7 @@ function plansDialog() {
       <label class="field">Nomi<input name="${k}_name" value="${esc(p.name)}" required maxlength="30"></label>
       <label class="field">Narx (so'm / oy)<input type="number" name="${k}_price" min="0" value="${p.price}" required></label>
       <label class="field">Xodimlar soni (0 = cheksiz)<input type="number" name="${k}_max_staff" min="0" value="${p.max_staff}" required></label>
+      <label class="field">Bir ofitsant bir vaqtda nechta qurilmada (0 = cheksiz)<input type="number" name="${k}_devices_per_staff" min="0" value="${p.devices_per_staff}" required></label>
       <p class="small muted" style="margin:10px 0 6px">Bo'limlar</p>
       <div class="stack" style="gap:6px">${Object.entries(P.modules).map(([m, n]) => `<label class="check"><input type="checkbox" name="${k}_mod_${m}" ${p.modules.includes(m) ? 'checked' : ''}> ${esc(n)}</label>`).join('')}</div>
       <p class="small muted" style="margin-top:10px">Yillik: <b data-year="${k}"></b></p></div>`;
@@ -477,6 +479,7 @@ function plansDialog() {
     actions: [{ label: 'Bekor', onClick: () => {} }, { label: 'Saqlash', cls: 'primary', icon: 'save', onClick: async (f) => {
       const plans = Object.fromEntries(PLAN_KEYS.map((k) => [k, {
         name: f[`${k}_name`].value.trim(), price: Number(f[`${k}_price`].value), max_staff: Number(f[`${k}_max_staff`].value),
+        devices_per_staff: Number(f[`${k}_devices_per_staff`].value),
         modules: Object.keys(P.modules).filter((m) => f[`${k}_mod_${m}`].checked),
       }]));
       const terms = Object.fromEntries(['branch_price', 'yearly_months', 'grace_days', 'trial_days'].map((n) => [n, Number(f[n].value)]));

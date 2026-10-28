@@ -500,6 +500,10 @@
     "Ish stolida sizning ismingizga parol qo'yilmagan — ismingizni bosgan har kim kira oladi.": ['На рабочем столе у вас нет пароля — любой, кто нажмёт ваше имя, войдёт.', 'Your name on the desktop has no password — anyone who taps it gets in.'],
     "Parol qo'yish": ['Поставить пароль', 'Set a password'],
     // Plans
+    'Bir ofitsant': ['Один официант', 'One waiter'], '{0} ta qurilmada': ['на {0} устр.', 'on {0} device(s)'],
+    'bir vaqtda; boshqa qurilmadan kirsa, avvalgisi chiqadi': ['одновременно; вход с другого устройства закрывает прежнее', 'at a time; signing in elsewhere closes the other one'],
+    'Boshqa qurilmadan kirdi (avvalgisi chiqarildi)': ['Вошёл с другого устройства (прежнее закрыто)', 'Signed in on another device (the other was closed)'],
+    'Bu hisob boshqa qurilmada ochildi. Qayta kiring': ['Этот аккаунт открыт на другом устройстве. Войдите снова', 'This account was opened on another device. Sign in again'],
     'Mening tarifim': ['Мой тариф', 'My plan'], 'Tarif': ['Тариф', 'Plan'], 'Filial': ['Филиал', 'Branch'], 'Oylik narx': ['Цена в месяц', 'Monthly price'],
     "To'langan muddat": ['Оплачено до', 'Paid until'], "{0} kun o'tdi": ['{0} дн. назад', '{0} days ago'], '{0} kun qoldi': ['осталось {0} дн.', '{0} days left'],
     'tarif limiti': ['лимит тарифа', 'plan limit'], 'cheksiz': ['без ограничений', 'unlimited'], "Tarifdagi bo'limlar": ['Разделы тарифа', 'Sections in the plan'],

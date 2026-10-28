@@ -129,9 +129,12 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   // ---------- Auth ----------
   function authenticate(token) {
     if (!token) return null;
-    const row = q(`SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ? AND u.active = 1`).get(token);
-    if (row) payroll.markPresent(row.id);
-    return row || null;
+    const row = q(`SELECT u.*, s.last_seen session_seen FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ? AND u.active = 1`).get(token);
+    if (!row) return null;
+    if (!row.session_seen || now() - row.session_seen > MIN) q('UPDATE sessions SET last_seen = ? WHERE token = ?').run(now(), token);
+    delete row.session_seen;
+    payroll.markPresent(row.id);
+    return row;
   }
 
   // Brute-force protection: 8 wrong passwords per login+IP lock it for 10 minutes.
@@ -155,12 +158,39 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return user;
   }
 
-  function startSession(user, how) {
+  function startSession(user, how, device = null) {
     const token = tokenPrefix + newToken();
-    q('INSERT INTO sessions (token, user_id, created_at, via) VALUES (?, ?, ?, ?)').run(token, user.id, now(), how === 'platform_login' ? 'platform' : '');
+    q('INSERT INTO sessions (token, user_id, created_at, via, device_id, last_seen) VALUES (?, ?, ?, ?, ?, ?)').run(
+      token, user.id, now(), how === 'platform_login' ? 'platform' : '', device ? device.id : null, now());
     audit(user, how);
+    limitDevices(user, token, device);
     return { token, user: publicUser(user) };
   }
+
+  /*
+   * On plans with a per-waiter device limit, a new sign-in closes the waiter's oldest sessions on other devices,
+   * so one account cannot be shared by several people at once. Sent orders stay; the closed screen says why.
+   */
+  const kicked = new Map();
+  function limitDevices(user, token, device) {
+    const p = plan();
+    if (user.role !== 'waiter' || !p || !(p.devices_per_staff > 0)) return;
+    const others = q("SELECT token, device_id, last_seen, created_at FROM sessions WHERE user_id = ? AND token != ? AND via != 'platform' ORDER BY created_at DESC")
+      .all(user.id, token);
+    // An older session on this same shared device is simply replaced.
+    const sameDevice = others.filter((s) => device && s.device_id === device.id);
+    const elsewhere = others.filter((s) => !(device && s.device_id === device.id)).slice(p.devices_per_staff - 1);
+    const gone = [...sameDevice, ...elsewhere];
+    if (!gone.length) return;
+    const del = q('DELETE FROM sessions WHERE token = ?');
+    for (const s of gone) { del.run(s.token); kicked.set(s.token, now()); }
+    if (kicked.size > 5000) for (const [k, at] of kicked) if (now() - at > 24 * 60 * MIN) kicked.delete(k);
+    // Counted as sharing only when the other device was really in use in the last half hour.
+    const busy = elsewhere.filter((s) => now() - (s.last_seen || s.created_at) < 30 * MIN).length;
+    if (busy) audit(user, 'session_kicked', `${busy}`);
+    if (events) events.disconnectSessions(new Set(gone.map((s) => s.token)));
+  }
+  const wasKicked = (token) => kicked.has(token);
 
   function login({ body, ip }) {
     return startSession(checkCredentials(body, ip), 'login');
@@ -210,7 +240,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       throw new HttpError(401, "PIN noto'g'ri");
     }
     pinFailures.delete(key);
-    return startSession(user, 'pin_login');
+    return startSession(user, 'pin_login', device);
   }
 
   function listDevices() {
@@ -257,7 +287,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   function planInfo() {
     const p = plan();
     if (!p) return null;
-    return { key: p.key, name: p.name, fee: p.fee, max_staff: p.max_staff, staff_used: staffCount(), modules: p.modules,
+    return { key: p.key, name: p.name, fee: p.fee, max_staff: p.max_staff, devices_per_staff: p.devices_per_staff, staff_used: staffCount(), modules: p.modules,
       paid_until: p.paid_until, grace_until: p.grace_until, read_only: p.read_only, is_branch: p.is_branch };
   }
   const moduleOn = (m) => !disabledModules().includes(m);
@@ -1642,7 +1672,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return null;
   }
 
-  return { match, guard, authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, planInfo, ROLES };
+  return { match, guard, authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, planInfo, wasKicked, ROLES };
 }
 
 module.exports = { createApi, MODULES, BUSINESS_TYPES, SHOP_TYPES };

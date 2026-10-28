@@ -146,7 +146,12 @@ async function api(method, path, body, token = App.token) {
   try { data = await res.json(); } catch { /* empty */ }
   if (res.status === 401 && token && token === App.token) {
     endSession();
-    throw new Error(t('Sessiya tugadi, qayta kiring'));
+    // Signed in on another device (one device per waiter on this plan): say so plainly, once.
+    const other = data && /boshqa qurilmada/.test(data.error || '');
+    if (other) toast(tServer(data.error), 'error', 8000);
+    const err = new Error(other ? tServer(data.error) : t('Sessiya tugadi, qayta kiring'));
+    err.silent = other; // already shown
+    throw err;
   }
   if (!res.ok) {
     const err = new Error(tServer((data && data.error) || `${t('Xatolik')} (${res.status})`));
@@ -167,6 +172,7 @@ function endSession() {
   App.financeKey = null;
   store('cp_token', null);
   Live.stop();
+  closeModal(); // a dialog of the closed session must not stay over the staff list
   if (typeof Views === 'object' && Views.lock) Views.lock.step = 'clock';
   location.hash = App.device ? '#/lock' : '#/setup';
   if (typeof render === 'function') render();
@@ -317,7 +323,7 @@ function toast(msg, kind = 'info', ms = 4000) {
   document.getElementById('toasts').appendChild(el);
   setTimeout(() => el.remove(), ms);
 }
-function toastError(e) { toast(e && e.message ? e.message : String(e), 'error', 6000); }
+function toastError(e) { if (e && e.silent) return; toast(e && e.message ? e.message : String(e), 'error', 6000); }
 
 function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
 

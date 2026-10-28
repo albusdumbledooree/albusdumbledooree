@@ -689,7 +689,7 @@ const AUDIT_NAMES = () => ({
   user_create: t("Xodim qo'shdi"), user_update: t('Xodimni tahrirladi'), expense_add: t("Xarajat qo'shdi"), income_add: t("Kirim qo'shdi"), transaction_delete: t("Yozuvni o'chirdi"),
   shift_open: t('Smena ochdi'), shift_close: t('Smena yopdi'), settings_update: t("Sozlamalarni o'zgartirdi"), room_create: t("Xona qo'shdi"), room_update: t('Xonani tahrirladi'),
   reservation_create: t('Bron qildi'), reservation_update: t('Bronni tahrirladi'), reservation_status: t('Bron holati'), password_change: t("Parolini o'zgartirdi"), pin_change: t("PIN o'zgartirdi"),
-  device_add: t('Qurilma uladi'), device_remove: t('Qurilmani uzdi'), pay_payment: t("Ish haqi to'ladi"), pay_bonus: t('Bonus yozdi'), pay_fine: t('Jarima yozdi'),
+  session_kicked: t('Boshqa qurilmadan kirdi (avvalgisi chiqarildi)'), device_add: t('Qurilma uladi'), device_remove: t('Qurilmani uzdi'), pay_payment: t("Ish haqi to'ladi"), pay_bonus: t('Bonus yozdi'), pay_fine: t('Jarima yozdi'),
 });
 const SETTINGS_TABS = () => [
   ['general', 'store', t('Muassasa'), ['owner', 'admin']],
@@ -1081,6 +1081,8 @@ Views.settings = {
             ${left !== null ? `<div class="sub ${left < 0 ? 'red' : left <= 5 ? 'warn' : ''}">${left < 0 ? t("{0} kun o'tdi", -left) : t('{0} kun qoldi', left)}</div>` : ''}</div></div>
           <div class="kpi"><div class="kpi-ic">${icon('users', 22)}</div><div><div class="label">${t('Xodimlar')}</div>
             <div class="value">${p.staff_used}${p.max_staff > 0 ? ` / ${p.max_staff}` : ''}</div><div class="sub">${p.max_staff > 0 ? t('tarif limiti') : t('cheksiz')}</div></div></div>
+          ${p.devices_per_staff > 0 ? `<div class="kpi"><div class="kpi-ic">${icon('smartphone', 22)}</div><div><div class="label">${t('Bir ofitsant')}</div>
+            <div class="value">${t('{0} ta qurilmada', p.devices_per_staff)}</div><div class="sub">${t('bir vaqtda; boshqa qurilmadan kirsa, avvalgisi chiqadi')}</div></div></div>` : ''}
         </div>
         ${p.read_only ? `<div class="notice red" style="margin-top:14px">${icon('lock', 18)} ${t("Obuna muddati tugagan — faqat ko'rish rejimi. Barcha ma'lumotlar saqlanib turibdi. Yangi buyurtma yozish uchun to'lovni yangilang.")}</div>` : ''}
         <h3 style="margin:18px 0 10px">${icon('layers', 18)} ${t("Tarifdagi bo'limlar")}</h3>

@@ -59,9 +59,9 @@ const CODE_RE = /^[a-z0-9][a-z0-9-]{1,30}$/;
 const PLAN_KEYS = ['start', 'biznes', 'pro'];
 const BIZ_MODULES = ['stoplist', 'reports', 'finance', 'payroll', 'reservations', 'history', 'audit', 'export'];
 const DEFAULT_PLANS = {
-  start: { name: 'Start', price: 199000, max_staff: 5, modules: ['stoplist', 'reports', 'history'] },
-  biznes: { name: 'Biznes', price: 349000, max_staff: 15, modules: BIZ_MODULES },
-  pro: { name: 'Pro', price: 599000, max_staff: 0, modules: BIZ_MODULES },
+  start: { name: 'Start', price: 199000, max_staff: 5, devices_per_staff: 1, modules: ['stoplist', 'reports', 'history'] },
+  biznes: { name: 'Biznes', price: 349000, max_staff: 15, devices_per_staff: 1, modules: BIZ_MODULES },
+  pro: { name: 'Pro', price: 599000, max_staff: 0, devices_per_staff: 0, modules: BIZ_MODULES },
 };
 // branch_price: a second (third…) place of the same owner; yearly_months: a year is paid as this many months;
 // grace_days: days after the paid term ends before the business becomes read-only; trial_days: free start.
@@ -190,7 +190,7 @@ function createPlatform(dataDir) {
     const p = plans[key];
     const fee = row.monthly_fee > 0 ? row.monthly_fee : row.is_branch ? terms.branch_price : p.price;
     const graceUntil = row.paid_until ? row.paid_until + terms.grace_days * DAY : null;
-    return { key, name: p.name, price: p.price, fee, max_staff: p.max_staff, modules: p.modules, is_branch: !!row.is_branch,
+    return { key, name: p.name, price: p.price, fee, max_staff: p.max_staff, devices_per_staff: p.devices_per_staff, modules: p.modules, is_branch: !!row.is_branch,
       paid_until: row.paid_until, grace_until: graceUntil, read_only: !!(graceUntil && now() > graceUntil) };
   }
 
@@ -203,6 +203,7 @@ function createPlatform(dataDir) {
       name: str(o.name, 'Tarif nomi', { required: true, max: 30 }),
       price: int(o.price, 'Tarif narxi', { required: true, min: 0, max: 1e10 }),
       max_staff: int(o.max_staff, 'Xodimlar soni', { required: true, min: 0, max: 100000 }),
+      devices_per_staff: int(o.devices_per_staff, 'Bir ofitsant nechta qurilmada', { required: true, min: 0, max: 100 }),
       modules: [...new Set(mods)],
     };
   }
@@ -284,6 +285,9 @@ function createPlatform(dataDir) {
         orders_30d: one("SELECT COUNT(*) c FROM orders WHERE status = 'closed' AND closed_at >= ?", since).c,
         sales_30d: one("SELECT COALESCE(SUM(total), 0) s FROM orders WHERE status = 'closed' AND closed_at >= ?", since).s,
         last_activity: one('SELECT MAX(created_at) t FROM audit').t,
+        // A waiter account opened on another device while still in use elsewhere: likely shared by several people.
+        shared: db.prepare(`SELECT u.name, COUNT(*) c FROM audit a JOIN users u ON u.id = a.user_id
+          WHERE a.action = 'session_kicked' AND a.created_at >= ? GROUP BY a.user_id HAVING c >= 3 ORDER BY c DESC LIMIT 3`).all(now() - 7 * DAY),
         owners: db.prepare("SELECT username FROM users WHERE role = 'owner' AND active = 1 ORDER BY id").all().map((u) => u.username),
       };
     } catch (e) {

@@ -777,3 +777,51 @@ test('plans: limits, sections, editable prices, view-only after the term — and
   // Put the default plans back for the other tests.
   await call('PUT', '/api/platform/plans', admin, plans);
 });
+
+test('one waiter account cannot be used on two devices at once (cashier and boss can)', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  const c = await call('POST', '/api/platform/tenants', admin, { name: 'Qurilma test', code: 'qurilma', owner_name: 'E', owner_username: 'ega', owner_password: 'ega12345', plan: 'start' });
+  assert.equal(c.status, 200, JSON.stringify(c.data));
+  const boss = await login('ega', 'ega12345', 'qurilma');
+  const aliUser = (await call('POST', '/api/users', boss, { name: 'Ali', username: 'ali', password: 'ali1', role: 'waiter', pin: '1111' })).data;
+  await call('POST', '/api/users', boss, { name: 'Kassir', username: 'kassa', password: 'kas1', role: 'cashier', pin: '2222' });
+  const room = (await call('POST', '/api/rooms', boss, { number: '1', name: 'Xona', waiter_ids: [aliUser.id] })).data;
+
+  // Phone A takes an order; the same account on phone B closes phone A, the order stays.
+  const phoneA = await login('ali', 'ali1', 'qurilma');
+  const o = (await call('POST', '/api/orders', phoneA, { room_id: room.id })).data;
+  const phoneB = await login('ali', 'ali1', 'qurilma');
+  const r = await call('GET', '/api/me', phoneA);
+  assert.equal(r.status, 401);
+  assert.match(r.data.error, /boshqa qurilmada/);
+  assert.equal((await call('GET', `/api/orders/${o.id}`, phoneB)).status, 200);
+
+  // On a shared tablet the same waiter signing in again just replaces the old session (not counted as sharing).
+  const dev = (await call('POST', '/api/device/register', null, { code: 'qurilma', username: 'ega', password: 'ega12345' })).data.device_token;
+  const ali = (await call('GET', '/api/device/staff', dev)).data.find((u) => u.name === 'Ali');
+  const t1 = (await call('POST', '/api/device/pin', dev, { user_id: ali.id, pin: '1111' })).data.token;
+  const t2 = (await call('POST', '/api/device/pin', dev, { user_id: ali.id, pin: '1111' })).data.token;
+  assert.equal((await call('GET', '/api/me', t1)).status, 401);
+  assert.equal((await call('GET', '/api/me', t2)).status, 200);
+  assert.equal((await call('GET', '/api/me', phoneB)).status, 401);
+
+  // Cashier and boss stay signed in everywhere.
+  const k1 = await login('kassa', 'kas1', 'qurilma');
+  const k2 = await login('kassa', 'kas1', 'qurilma');
+  assert.equal((await call('GET', '/api/me', k1)).status, 200);
+  assert.equal((await call('GET', '/api/me', k2)).status, 200);
+  assert.equal((await call('GET', '/api/me', boss)).status, 200);
+
+  // Repeated hand-overs while in use show up on the platform card.
+  for (let i = 0; i < 3; i++) await login('ali', 'ali1', 'qurilma');
+  const card = (await call('GET', '/api/platform/tenants', admin)).data.find((x) => x.code === 'qurilma');
+  assert.equal(card.shared[0].name, 'Ali');
+  assert.ok(card.shared[0].c >= 3);
+
+  // Pro (0 = no limit): both phones stay signed in.
+  await call('PUT', `/api/platform/tenants/${c.data.id}`, admin, { plan: 'pro' });
+  const p1 = await login('ali', 'ali1', 'qurilma');
+  const p2 = await login('ali', 'ali1', 'qurilma');
+  assert.equal((await call('GET', '/api/me', p1)).status, 200);
+  assert.equal((await call('GET', '/api/me', p2)).status, 200);
+});

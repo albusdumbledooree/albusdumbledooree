@@ -389,6 +389,9 @@ function migrate(db) {
   addCol('devices', 'backup', 'INTEGER NOT NULL DEFAULT 0');
   // 'platform' marks a session opened by the site owner from the platform panel.
   addCol('sessions', 'via', "TEXT NOT NULL DEFAULT ''");
+  // Which shared device a PIN session was opened on, and when it was last used (one device per waiter on cheaper plans).
+  addCol('sessions', 'device_id', 'INTEGER');
+  addCol('sessions', 'last_seen', 'INTEGER');
   const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
   if (!orderCols.includes('service_type')) db.exec("ALTER TABLE orders ADD COLUMN service_type TEXT NOT NULL DEFAULT 'percent'");
   if (!orderCols.includes('takeaway')) db.exec('ALTER TABLE orders ADD COLUMN takeaway INTEGER NOT NULL DEFAULT 0');

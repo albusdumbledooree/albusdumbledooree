@@ -2,6 +2,16 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.6.1 — Bitta ofitsant, bitta qurilma
+- Start va Biznes tariflarida bitta ofitsant hisobi bir vaqtda faqat bitta qurilmada ochiq turadi: boshqa telefon yoki
+  planshetdan kirsa, avvalgisi o'zi chiqadi va u yerda "Bu hisob boshqa qurilmada ochildi" deb yoziladi.
+  Yuborilgan buyurtmalar joyida qoladi, yuborilmagan savat o'sha qurilmada saqlanib turadi. Pro'da cheklov yo'q.
+- Kassir, boshliq va admin cheklanmaydi. Umumiy planshetda navbat bilan PIN terib ishlash avvalgidek.
+- Platformada "Tariflar" oynasida har bir tarif uchun "Bir ofitsant bir vaqtda nechta qurilmada" sozlanadi (0 = cheksiz).
+- Hisob almashib ishlatilsa (7 kunda 3 marta va undan ko'p, ishlab turgan qurilmadan), platformadagi biznes kartasida
+  "Hisob almashib ishlatilyapti: Ali (5 marta)" ogohlantirishi chiqadi. Boshliqning "Amallar tarixi"da ham ko'rinadi.
+- Tuzatildi: sessiya tugaganda ochiq qolgan oyna xodimlar ekrani ustida qolib ketmaydi.
+
 ## 1.6.0 — Tariflar
 - Uchta tarif: **Start** (199 000, 5 xodim), **Biznes** (349 000, 15 xodim, moliya, bronlar, Excel, amallar tarixi),
   **Pro** (599 000, cheksiz xodim). Qo'shimcha filial — 149 000. Yillik to'lov — 10 oy narxida. Yangi biznesga 14 kun bepul sinov.
