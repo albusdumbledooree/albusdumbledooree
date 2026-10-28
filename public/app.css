@@ -70,8 +70,8 @@ a { color: var(--primary); }
 .topnav .nav-item.active { background: var(--brand); border-color: var(--brand); color: #fff; }
 :root[data-theme="dark"] .topnav .nav-item.active { color: #0b1f33; }
 .topnav .nav-item .badge { position: absolute; top: -7px; right: -7px; box-shadow: 0 0 0 2px var(--panel); }
-.topnav .nav-quiet { margin-left: auto; background: transparent; border-color: transparent; opacity: .45; padding: 0 10px; }
-.topnav .nav-quiet span { display: none; }
+.topnav .nav-quiet { margin-left: auto; background: transparent; border-color: transparent; opacity: .7; padding: 0 12px; }
+.topnav .nav-quiet span { font-size: 13px; }
 .topnav .nav-quiet:hover, .topnav .nav-quiet.active { opacity: 1; }
 .tright { display: flex; align-items: center; gap: 8px; flex: none; }
 .lockbtn { background: var(--red); border-color: var(--red); color: #fff; }

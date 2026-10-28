@@ -2,6 +2,10 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.5.3
+- Qaytarildi: "Moliya" bo'limi (Hisobot, Kirim-chiqim, Ish haqi) dizayn yangilanishida tasodifan yo'qolib qolgan edi.
+  Endi u yuqori menyuning o'ng chetida "Moliya" yozuvi bilan turadi; telefonda — Sozlamalar sahifasining tepasida.
+
 ## 1.5.2
 To'liq tekshiruv (noldan o'rnatish, 96 ta API tekshiruvi, yuklama testi, brauzerda 4 xil biznes turi):
 - Juda katta so'rov endi aniq "So'rov juda katta" javobini oladi (oldin ulanish uzilib qolardi).

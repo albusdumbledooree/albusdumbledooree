@@ -190,6 +190,26 @@ Views.history = {
   },
 };
 
+// ---------- Money: one quiet entry that opens reports, the cash book and payroll ----------
+const MONEY_PAGES = () => [
+  ['reports', 'chart-column', t('Hisobot'), t("Kirim, chiqim va foyda — kunlar bo'yicha")],
+  ['finance', 'arrow-right-left', t('Kirim-chiqim'), t('Xarajat va boshqa kirimlarni yozish')],
+  ['payroll', 'hand-coins', t('Ish haqi'), t('Maosh, bonus, jarima va davomat')],
+];
+Views.money = {
+  title: () => t('Moliya'), icon: () => 'chart-column', roles: ['owner', 'admin', 'cashier'],
+  on: () => MONEY_PAGES().some(([k]) => viewOn(k)),
+  render() {
+    return `<div class="page-head"><h1>${t('Moliya')}</h1>${App.settings.finance_lock && App.financeKey ? `<button class="btn sm" id="fin-lock">${icon('lock', 16)} ${t('Qulflash')}</button>` : ''}</div>
+      <div class="money-tiles">${MONEY_PAGES().filter(([k]) => viewOn(k)).map(([k, ic, n, d]) => `<a class="money-tile" href="#/${k}">${icon(ic, 32)}<b>${n}</b><span class="small muted">${d}</span></a>`).join('')}</div>
+      <p class="small muted" style="margin-top:14px">${icon('eye-off', 14)} ${t("Bu bo'lim begona ko'zdan uzoqroq turishi uchun menyuning eng chetida.")}${can('owner') ? ` ${t('Kim ko\'rishi va parol: Sozlamalar → Ruxsatlar.')}` : ''}</p>`;
+  },
+  bind(root) {
+    const l = root.querySelector('#fin-lock');
+    if (l) l.onclick = () => { App.financeKey = null; toast(t('Qulflandi'), 'ok'); refreshView(); };
+  },
+};
+
 // Goods (or dishes) brought back: chosen lines and amounts, money paid back, stock returned.
 function refundDialog(o) {
   const lines = o.items.filter((i) => i.status !== 'cancelled' && i.qty > (i.refunded_qty || 0));

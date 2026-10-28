@@ -354,7 +354,7 @@
     'Moliya': ['Финансы', 'Finance'],
     "Moliya bo'limi": ['Раздел финансов', 'Finance'],
     "Moliya bo'limlari": ['Разделы финансов', 'Finance pages'],
-    "Bu bo'lim begona ko'zdan uzoqroq turishi uchun menyuning eng pastida.": ['Этот раздел внизу меню, чтобы не попадаться посторонним на глаза.', 'This section sits at the bottom of the menu, away from curious eyes.'],
+    "Bu bo'lim begona ko'zdan uzoqroq turishi uchun menyuning eng chetida.": ['Этот раздел с краю меню, чтобы не попадаться посторонним на глаза.', 'This section sits at the edge of the menu, away from curious eyes.'],
     "Kim ko'rishi va parol: Sozlamalar → Ruxsatlar.": ['Кто видит и пароль: Настройки → Права.', 'Who sees it and the password: Settings → Permissions.'],
     "Kirim, chiqim va foyda — kunlar bo'yicha": ['Приход, расход и прибыль — по дням', 'Income, expenses and profit by day'],
     'Xarajat va boshqa kirimlarni yozish': ['Запись расходов и прочих поступлений', 'Record expenses and other income'],
