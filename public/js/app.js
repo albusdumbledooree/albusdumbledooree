@@ -338,8 +338,8 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && Ap
   const m = /^\/c\/([a-z0-9-]+)\/?$/i.exec(location.pathname);
   if (m) store('cp_code', m[1].toLowerCase());
   App.device = store('cp_device');
-  // /app (the installed icon) on a device that was never connected: the program is opened only from a business link.
-  if (!m && !App.device && !store('cp_code') && !store('cp_token')) { location.replace('/'); return; }
+  // /app (an installed icon) on a device that was never connected: the device setup asks for the business code.
+  // (An iPhone home-screen app does not share Safari's storage, so it can start here knowing nothing.)
   if (App.device && m && App.device.code !== m[1].toLowerCase()) { App.device = null; store('cp_device', null); }
   App.token = store('cp_token');
   // Opened from the platform panel ("Boshliq sifatida kirish"): the session key comes in the link.

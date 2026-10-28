@@ -2,6 +2,11 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.8.3
+- Telefonga o'rnatilgan FLOWI belgisi qaysi biznesniki ekanini bilmasa (iPhone'da bo'lishi mumkin), endi bosh sahifaga
+  o'tib ketmaydi — qurilmani ulash oynasi biznes kodi bilan ochiladi; kod bir marta kiritiladi.
+- Yangilash skripti (deploy/update.sh) git buyruqlarini dastur foydalanuvchisi nomidan ishlatadi.
+
 ## 1.8.2
 - iPhone: biznes sahifasini "Bosh ekranga qo'shish" endi o'sha biznesni ochadi (oldin flowi.uz bosh sahifasi ochilardi).
   Har bir biznes havolasi o'z ilova belgisiga ega — nomi biznes nomi bilan.
