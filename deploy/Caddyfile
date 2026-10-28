@@ -1,8 +1,13 @@
 # Caddy avtomatik ravishda bepul HTTPS sertifikat oladi (Let's Encrypt).
-# choyxona.uz o'rniga o'z domeningizni yozing: /etc/caddy/Caddyfile
-choyxona.uz {
+# Boshqa domen bo'lsa, flowi.uz o'rniga o'shani yozing: /etc/caddy/Caddyfile
+flowi.uz {
 	encode gzip
 	reverse_proxy 127.0.0.1:3000 {
 		flush_interval -1
 	}
+}
+
+# www.flowi.uz ham ochilsin — asosiy manzilga o'tkaziladi.
+www.flowi.uz {
+	redir https://flowi.uz{uri} permanent
 }
