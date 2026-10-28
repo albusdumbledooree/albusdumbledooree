@@ -2,6 +2,10 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.8.2
+- iPhone: biznes sahifasini "Bosh ekranga qo'shish" endi o'sha biznesni ochadi (oldin flowi.uz bosh sahifasi ochilardi).
+  Har bir biznes havolasi o'z ilova belgisiga ega — nomi biznes nomi bilan.
+
 ## 1.8.1
 - Platforma paneli endi `/planeta` manzilida (masalan, flowi.uz/planeta). Eski `/platform` manzili bosh sahifani ochadi.
   Serverda `PLATFORM_PATH` o'rnatilsa, o'sha manzil ishlatiladi.

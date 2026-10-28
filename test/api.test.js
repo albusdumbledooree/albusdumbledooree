@@ -926,3 +926,15 @@ test('the platform panel lives at /planeta; the old /platform address shows the 
   assert.match(await (await fetch(`${base}/planeta`)).text(), /js\/platform\.js/);
   assert.doesNotMatch(await (await fetch(`${base}/platform`)).text(), /js\/platform\.js/);
 });
+
+test('a business page installs as its own app (iPhone home screen opens the business, not the front page)', async () => {
+  const html = await (await fetch(`${base}/c/demo`)).text();
+  assert.match(html, /href="\/manifest\.webmanifest\?code=demo"/);
+  const m = await (await fetch(`${base}/manifest.webmanifest?code=demo`)).json();
+  assert.equal(m.start_url, '/c/demo');
+  assert.equal(m.id, '/c/demo');
+  assert.match(m.name, /FLOWI/);
+  // Unknown code or none: the general manifest.
+  assert.equal((await (await fetch(`${base}/manifest.webmanifest?code=yoq-biznes`)).json()).start_url, '/app');
+  assert.equal((await (await fetch(`${base}/manifest.webmanifest`)).json()).start_url, '/app');
+});

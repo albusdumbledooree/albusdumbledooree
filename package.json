@@ -1,6 +1,6 @@
 {
   "name": "flowi",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "description": "Restoran va choyxonalar uchun boshqaruv tizimi: buyurtmalar, oshxona, kassa, hisobotlar",
   "main": "server/index.js",
   "private": true,

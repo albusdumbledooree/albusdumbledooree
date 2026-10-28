@@ -60,7 +60,23 @@ function serveStatic(req, res, pathname) {
     'Cache-Control': media ? 'public, max-age=86400' : 'no-cache',
     ETag: etag,
   });
+  // A business page points to its own app manifest, so an icon added to a phone's home screen opens this business.
+  // (iPhone keeps a home-screen app's storage apart from Safari: the link itself has to carry the code.)
+  const biz = /^\/c\/([a-z0-9-]+)\/?$/i.exec(pathname);
+  if (biz) {
+    const html = fs.readFileSync(file, 'utf8').replace('href="/manifest.webmanifest"', `href="/manifest.webmanifest?code=${biz[1].toLowerCase()}"`);
+    return res.end(html);
+  }
   fs.createReadStream(file).pipe(res);
+}
+
+// The installable app of one business: opens at /c/<code>, named after the business.
+function businessManifest(code, name) {
+  const m = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'manifest.webmanifest'), 'utf8'));
+  m.id = `/c/${code}`;
+  m.start_url = `/c/${code}`;
+  if (name) { m.name = `${name} — FLOWI`; m.short_name = name.slice(0, 20); }
+  return m;
 }
 
 // Signing in and out still work when the term is over, so the boss can see and export the data.
@@ -85,6 +101,14 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       }
       if (!pathname.startsWith('/api/')) {
         if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Ruxsat yo\'q');
+        const code = String(url.searchParams.get('code') || '').toLowerCase();
+        if (pathname === '/manifest.webmanifest' && /^[a-z0-9-]{1,31}$/.test(code)) {
+          const ctx = platform.byCode(code);
+          if (ctx) {
+            res.writeHead(200, { 'Content-Type': TYPES['.webmanifest'], 'Cache-Control': 'no-cache' });
+            return res.end(JSON.stringify(businessManifest(code, ctx.api.settings().name)));
+          }
+        }
         return serveStatic(req, res, pathname);
       }
       const auth = req.headers.authorization || '';
