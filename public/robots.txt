@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /c/
+Disallow: /app
+Disallow: /api/
+Disallow: /media/

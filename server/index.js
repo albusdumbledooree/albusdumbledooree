@@ -17,7 +17,7 @@ const PLATFORM_PATH = '/' + String(process.env.PLATFORM_PATH || 'platform').repl
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
-  '.webmanifest': 'application/manifest+json', '.jpg': 'image/jpeg', '.webp': 'image/webp',
+  '.webmanifest': 'application/manifest+json', '.txt': 'text/plain; charset=utf-8', '.jpg': 'image/jpeg', '.webp': 'image/webp',
 };
 
 // Version of the screens: a hash of everything in public/. Open devices compare it and reload after an update.
@@ -45,9 +45,11 @@ function send(res, status, data) {
 function serveStatic(req, res, pathname) {
   let file = path.normalize(path.join(PUBLIC, decodeURIComponent(pathname)));
   if (!file.startsWith(PUBLIC)) return send(res, 403, { error: 'Taqiqlangan' });
+  // The site's front page tells about FLOWI; the program itself opens only from a business's own link /c/<code>
+  // (or /app on a device that is already connected), so no login form is shown to visitors.
   if (pathname === PLATFORM_PATH || pathname.startsWith(PLATFORM_PATH + '/')) file = path.join(PUBLIC, 'platform.html');
-  else if (pathname === '/platform.html') file = path.join(PUBLIC, 'index.html');
-  else if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(PUBLIC, 'index.html');
+  else if (/^\/c\/[a-z0-9-]+\/?$/i.test(pathname) || pathname === '/app') file = path.join(PUBLIC, 'index.html');
+  else if (['/platform.html', '/index.html', '/'].includes(pathname) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(PUBLIC, 'landing.html');
   // Code and styles are re-checked on every load (cheap 304), so an update reaches every device at once.
   const st = fs.statSync(file);
   const etag = `"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}-${VERSION}"`;
@@ -115,6 +117,9 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       // Site owner's panel: choyxonas, subscriptions, boss accounts.
       if (pathname === '/api/platform/release') return reply({ release: RELEASE });
       if (pathname.startsWith('/api/platform/')) return reply(platform.handle(req.method, pathname, { body, query, token, ip }));
+
+      // Front page: current plans and prices, and how to reach the platform owner.
+      if (pathname === '/api/public/info' && req.method === 'GET') return reply(platform.publicInfo());
 
       // Login screen: which choyxona does this code belong to?
       if (pathname === '/api/info' && req.method === 'GET') {

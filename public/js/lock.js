@@ -58,7 +58,8 @@ Views.setup = {
         <span class="muted small">${App.info && App.info.name ? esc(App.info.name) : t('Boshqaruv tizimi')}</span></div>${venueLogo('setup-logo')}${keyboardToggle()}${langSelect()}</div>
       <p class="small muted">${icon('monitor-smartphone', 16)} ${t("Kassa kompyuteri, planshet yoki telefonni boshliq bir marta ulaydi. Keyin xodimlar ismini bosib PIN kod bilan kiradi.")}</p>
       <div class="stack">
-        <label class="field">${t('Kod')}<input name="code" autocapitalize="none" value="${esc(code)}" placeholder="navruz" required></label>
+        ${/^\/c\//.test(location.pathname) && code ? `<input type="hidden" name="code" value="${esc(code)}">`
+          : `<label class="field">${t('Kod')}<input name="code" autocapitalize="none" value="${esc(code)}" placeholder="navruz" required></label>`}
         ${App.info && App.info.blocked ? `<div class="notice red">${icon('ban', 18)} ${t('Bu choyxona vaqtincha bloklangan')}</div>` : ''}
         <label class="field">${t('Boshliq logini')}<input name="username" autocomplete="username" autocapitalize="none" required></label>
         <label class="field">${t('Parol')}<input name="password" type="password" autocomplete="current-password" required></label>
@@ -74,7 +75,7 @@ Views.setup = {
     const form = root.querySelector('#setup-form');
     bindLang(root);
     bindKeyboardToggle(root);
-    form.code.onchange = async () => {
+    if (form.code.type !== 'hidden') form.code.onchange = async () => {
       const code = form.code.value.trim().toLowerCase();
       if (!code) return;
       if (await loadInfo(code)) store('cp_code', code);

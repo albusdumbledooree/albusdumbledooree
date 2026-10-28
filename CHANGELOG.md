@@ -2,6 +2,15 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.7.0 — flowi.uz bosh sahifasi
+- Saytning bosh sahifasi (flowi.uz) endi FLOWI haqida: nima qiladi, qanday ishlaydi (dasturning haqiqiy rasmlari bilan),
+  imkoniyatlar, xavfsizlik, kimlar uchun, narxlar, savollar va bog'lanish. O'zbek va rus tilida, telefonga moslashgan.
+- Narxlar platformadagi "Tariflar"dan avtomatik olinadi: narxni o'zgartirsangiz, saytda ham o'zi o'zgaradi.
+  "Bog'lanish" tugmalari platformadagi yordam kontaktiga (Telegram yoki telefon) olib boradi.
+- Dasturning kirish oynasi saytda ko'rinmaydi: biznes faqat o'z havolasi orqali ochiladi — flowi.uz/c/<kod>.
+  Bu havolada "Kod" maydoni yo'q, faqat boshliq logini va paroli. Ulangan kassa va planshetlar saytni ochsa, o'z dasturiga o'tadi.
+- Telefon/planshetga o'rnatilgan ilova belgisi ham o'z biznesini ochadi.
+
 ## 1.6.1 — Bitta ofitsant, bitta qurilma
 - Start va Biznes tariflarida bitta ofitsant hisobi bir vaqtda faqat bitta qurilmada ochiq turadi: boshqa telefon yoki
   planshetdan kirsa, avvalgisi o'zi chiqadi va u yerda "Bu hisob boshqa qurilmada ochildi" deb yoziladi.

@@ -226,6 +226,17 @@ function createPlatform(dataDir) {
     return v;
   }
 
+  // What the public front page may show: plans with prices and sections, terms, the contact. Nothing about businesses.
+  function publicInfo() {
+    const plans = getPlans();
+    return {
+      plans: PLAN_KEYS.map((k) => ({ key: k, name: plans[k].name, price: plans[k].price, max_staff: plans[k].max_staff,
+        devices_per_staff: plans[k].devices_per_staff, modules: plans[k].modules.map((m) => MODULES[m]).filter(Boolean) })),
+      terms: getTerms(),
+      support: supportFor(null),
+    };
+  }
+
   function getPlatformSettings() {
     return { support_text: pget('support_text'), support_link: pget('support_link') };
   }
@@ -521,7 +532,7 @@ function createPlatform(dataDir) {
     pdb.close();
   }
 
-  return { handle, byCode, byToken, assertActive, close, supportFor, restoreTenant, planFor };
+  return { handle, byCode, byToken, assertActive, close, supportFor, restoreTenant, planFor, publicInfo };
 }
 
 module.exports = { createPlatform };

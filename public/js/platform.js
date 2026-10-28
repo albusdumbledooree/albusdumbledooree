@@ -68,7 +68,7 @@ function loginHtml() {
       <label class="field">Parol<input name="password" type="password" autocomplete="current-password" required></label>
       <button class="btn primary lg block">${icon('log-in', 20)} Kirish</button>
     </div>
-    <p class="small muted" style="margin-top:14px">Bu sahifa faqat sayt egasi uchun. Xodimlar <a href="/">bosh sahifadan</a> kiradi.</p>
+    <p class="small muted" style="margin-top:14px">Bu sahifa faqat sayt egasi uchun. Bizneslar o'z havolasi orqali kiradi: <b>/c/&lt;kod&gt;</b>.</p>
   </form></div>`;
 }
 

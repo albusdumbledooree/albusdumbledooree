@@ -825,3 +825,17 @@ test('one waiter account cannot be used on two devices at once (cashier and boss
   assert.equal((await call('GET', '/api/me', p1)).status, 200);
   assert.equal((await call('GET', '/api/me', p2)).status, 200);
 });
+
+test('front page tells about FLOWI; the program opens only from a business link', async () => {
+  const home = await fetch(`${base}/`);
+  const html = await home.text();
+  assert.match(html, /section class="hero"/);
+  assert.doesNotMatch(html, /setup-form/);
+  assert.match(await (await fetch(`${base}/c/demo`)).text(), /js\/app\.js/);
+  assert.match(await (await fetch(`${base}/app`)).text(), /js\/app\.js/);
+  assert.match(await (await fetch(`${base}/index.html`)).text(), /section class="hero"/);
+  const info = await (await fetch(`${base}/api/public/info`)).json();
+  assert.equal(info.plans.length, 3);
+  assert.ok(info.plans[0].price > 0 && Array.isArray(info.plans[0].modules));
+  assert.equal(info.tenants, undefined);
+});

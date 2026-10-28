@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#071726">
+  <title>FLOWI — choyxona, restoran va do'kon uchun boshqaruv tizimi</title>
+  <meta name="description" content="FLOWI: ofitsant buyurtmani telefondan yuboradi, oshxona darhol ko'radi, kassa chekni bir bosishda yopadi. Foyda, xarajat va ish haqi — bitta dasturda. 14 kun bepul.">
+  <meta property="og:title" content="FLOWI — choyxona, restoran va do'kon uchun boshqaruv tizimi">
+  <meta property="og:description" content="Buyurtma, oshxona, kassa, hisobot va ish haqi — bitta dasturda. 14 kun bepul sinab ko'ring.">
+  <meta property="og:image" content="/landing/rooms.jpg">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <script>
+    // A connected cash desk or tablet that opens the site address goes straight into its program.
+    (function () {
+      try {
+        var dev = JSON.parse(localStorage.getItem('cp_device') || 'null');
+        var code = (dev && dev.code) || JSON.parse(localStorage.getItem('cp_code') || 'null');
+        if (code && /^[a-z0-9-]+$/.test(code) && !/[?&]site\b/.test(location.search)) location.replace('/c/' + code + location.hash);
+      } catch (e) { /* stay on the page */ }
+    }());
+  </script>
+  <style>
+    :root {
+      --navy: #071726; --navy-2: #0d2238; --blue: #2156e8; --blue-2: #1a46c4; --blue-soft: #e8eefd;
+      --text: #0f172a; --muted: #5b6474; --line: #e3e6ec; --bg: #ffffff; --bg-2: #f4f6f9;
+      --green: #16a34a; --amber: #f59e0b; --radius: 20px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.55 Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif; }
+    img { max-width: 100%; height: auto; display: block; }
+    a { color: inherit; }
+    .wrap { width: min(1180px, 100% - 32px); margin: 0 auto; }
+    h1, h2, h3 { line-height: 1.15; letter-spacing: -0.02em; margin: 0; }
+    h2 { font-size: clamp(28px, 4vw, 42px); }
+    .eyebrow { display: inline-block; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--blue); margin-bottom: 12px; }
+    .lead { font-size: clamp(17px, 2vw, 20px); color: var(--muted); max-width: 680px; }
+    section { padding: clamp(64px, 9vw, 110px) 0; }
+    .center { text-align: center; } .center .lead { margin: 14px auto 0; }
+
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 22px; border-radius: 14px; font-weight: 700; text-decoration: none; border: 1px solid transparent; cursor: pointer; font-size: 16px; transition: transform .15s, background .15s; }
+    .btn:hover { transform: translateY(-1px); }
+    .btn.primary { background: var(--blue); color: #fff; box-shadow: 0 10px 24px -10px rgba(33, 86, 232, .7); }
+    .btn.primary:hover { background: var(--blue-2); }
+    .btn.ghost { background: rgba(255,255,255,.08); color: #fff; border-color: rgba(255,255,255,.22); }
+    .btn.light { background: #fff; color: var(--navy); border-color: var(--line); }
+
+    /* Header */
+    header.top { position: sticky; top: 0; z-index: 20; background: rgba(7, 23, 38, .92); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,.08); }
+    header.top .wrap { display: flex; align-items: center; gap: 24px; height: 68px; }
+    header.top nav { display: flex; gap: 22px; margin-left: 12px; }
+    header.top nav a { color: rgba(255,255,255,.78); text-decoration: none; font-weight: 600; font-size: 15px; }
+    header.top nav a:hover { color: #fff; }
+    .grow { flex: 1; }
+    .lang { display: flex; border: 1px solid rgba(255,255,255,.22); border-radius: 10px; overflow: hidden; }
+    .lang button { background: transparent; color: rgba(255,255,255,.75); border: 0; padding: 7px 10px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+    .lang button.on { background: #fff; color: var(--navy); }
+    header.top .btn { padding: 10px 16px; font-size: 15px; }
+
+    /* Hero */
+    .hero { background: radial-gradient(1200px 500px at 80% -10%, rgba(33,86,232,.45), transparent 60%), radial-gradient(800px 400px at 0% 100%, rgba(22,163,74,.18), transparent 60%), var(--navy); color: #fff; padding: clamp(56px, 8vw, 96px) 0 0; overflow: hidden; }
+    .hero h1 { font-size: clamp(36px, 6vw, 64px); max-width: 860px; }
+    .hero h1 em { font-style: normal; background: linear-gradient(90deg, #7aa2ff, #5eead4); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .hero .lead { color: rgba(255,255,255,.75); margin-top: 20px; }
+    .hero .ctas { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 30px; }
+    .hero .note { margin-top: 14px; font-size: 14px; color: rgba(255,255,255,.6); }
+    .shots { position: relative; margin-top: 56px; }
+    .frame { border-radius: 16px 16px 0 0; overflow: hidden; background: #fff; box-shadow: 0 -10px 60px -10px rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.12); border-bottom: 0; }
+    .frame .bar { height: 30px; background: #eef0f4; display: flex; align-items: center; gap: 6px; padding: 0 12px; }
+    .frame .bar i { width: 10px; height: 10px; border-radius: 50%; background: #d3d7de; }
+    .phone { position: absolute; right: 2%; bottom: -40px; width: clamp(150px, 21%, 250px); border-radius: 32px; overflow: hidden; border: 8px solid #0b0f14; box-shadow: 0 30px 60px -20px rgba(0,0,0,.7); background: #0b0f14; }
+
+    /* Trust strip */
+    .strip { background: var(--bg-2); border-bottom: 1px solid var(--line); padding: 26px 0; }
+    .strip .wrap { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+    .strip div { display: flex; align-items: center; gap: 12px; font-weight: 650; font-size: 15px; }
+    .strip svg { flex: none; color: var(--blue); }
+
+    /* Problems */
+    .pain { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 44px; }
+    .pain .card { padding: 24px; border-radius: var(--radius); border: 1px solid var(--line); background: #fff; }
+    .pain .card b { display: block; font-size: 18px; margin-bottom: 6px; }
+    .pain .card .no { color: #b91c1c; font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; gap: 6px; align-items: center; }
+    .pain .card .yes { color: var(--green); font-size: 15px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); font-weight: 600; }
+    .pain .card p { margin: 0; color: var(--muted); font-size: 15px; }
+
+    /* Flow tabs */
+    .flow { background: var(--bg-2); }
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 36px 0 26px; }
+    .tabs button { border: 1px solid var(--line); background: #fff; padding: 11px 18px; border-radius: 999px; font: inherit; font-weight: 700; font-size: 15px; cursor: pointer; color: var(--muted); display: inline-flex; gap: 8px; align-items: center; }
+    .tabs button .n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--bg-2); font-size: 12px; }
+    .tabs button.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+    .tabs button.on .n { background: var(--blue); color: #fff; }
+    .stage[hidden] { display: none; }
+    .stage { display: grid; grid-template-columns: 1.65fr 1fr; gap: 36px; align-items: center; }
+    .stage .frame { border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 30px 60px -30px rgba(15, 23, 42, .35); }
+    .stage h3 { font-size: 28px; margin-bottom: 12px; }
+    .stage p { color: var(--muted); margin: 0 0 16px; }
+    .stage ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+    .stage li { display: flex; gap: 10px; font-weight: 550; }
+    .stage li::before { content: ""; flex: none; width: 20px; height: 20px; margin-top: 2px; border-radius: 50%; background: var(--blue-soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232156e8' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center/12px no-repeat; }
+    .stage .media.phone-pair { display: flex; gap: 18px; justify-content: center; }
+    .stage .media.phone-pair img { width: 46%; max-width: 280px; border-radius: 28px; border: 7px solid #0b0f14; box-shadow: 0 30px 60px -30px rgba(15, 23, 42, .5); }
+
+    /* Features */
+    .feats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 44px; }
+    .feat { padding: 24px; border-radius: var(--radius); border: 1px solid var(--line); background: #fff; }
+    .feat .ic { width: 46px; height: 46px; border-radius: 14px; background: var(--blue-soft); color: var(--blue); display: grid; place-items: center; margin-bottom: 14px; }
+    .feat b { display: block; font-size: 18px; margin-bottom: 6px; }
+    .feat p { margin: 0; color: var(--muted); font-size: 15px; }
+
+    /* Safety */
+    .safe { background: var(--navy); color: #fff; }
+    .safe .lead { color: rgba(255,255,255,.72); }
+    .safe-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 40px; }
+    .safe-grid div { padding: 24px; border-radius: var(--radius); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); }
+    .safe-grid b { display: block; font-size: 18px; margin: 12px 0 6px; }
+    .safe-grid p { margin: 0; color: rgba(255,255,255,.7); font-size: 15px; }
+    .safe-grid svg { color: #5eead4; }
+
+    /* Who */
+    .who { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-top: 40px; }
+    .who div { padding: 22px 18px; border-radius: var(--radius); border: 1px solid var(--line); text-align: center; background: #fff; }
+    .who .ic { width: 56px; height: 56px; margin: 0 auto 12px; border-radius: 18px; display: grid; place-items: center; background: var(--bg-2); color: var(--navy); }
+    .who b { display: block; } .who span { font-size: 14px; color: var(--muted); }
+    .shop-shot { margin-top: 36px; }
+    .shop-shot .frame { border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 30px 60px -30px rgba(15,23,42,.35); max-width: 980px; margin: 0 auto; }
+    .caption { text-align: center; color: var(--muted); font-size: 14px; margin-top: 12px; }
+
+    /* Pricing */
+    .pricing { background: var(--bg-2); }
+    .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 44px; align-items: stretch; }
+    .plan { background: #fff; border: 1px solid var(--line); border-radius: 24px; padding: 28px; display: flex; flex-direction: column; position: relative; }
+    .plan.hot { border: 2px solid var(--blue); box-shadow: 0 30px 60px -30px rgba(33,86,232,.45); }
+    .plan .badge { position: absolute; top: -13px; left: 28px; background: var(--blue); color: #fff; font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 5px 10px; border-radius: 999px; }
+    .plan h3 { font-size: 22px; }
+    .plan .price { font-size: 38px; font-weight: 800; letter-spacing: -0.02em; margin-top: 12px; }
+    .plan .price small { font-size: 16px; color: var(--muted); font-weight: 600; }
+    .plan .year { font-size: 14px; color: var(--muted); }
+    .plan ul { list-style: none; padding: 0; margin: 22px 0 26px; display: grid; gap: 10px; font-size: 15px; }
+    .plan li { display: flex; gap: 10px; }
+    .plan li svg { flex: none; margin-top: 2px; color: var(--green); }
+    .plan li.off { color: #9aa3b2; } .plan li.off svg { color: #c4cad4; }
+    .plan .btn { margin-top: auto; }
+    .terms { display: flex; flex-wrap: wrap; gap: 10px 26px; justify-content: center; margin-top: 26px; color: var(--muted); font-size: 15px; }
+    .terms span { display: inline-flex; align-items: center; gap: 8px; }
+    .terms svg { color: var(--blue); }
+
+    /* FAQ */
+    .faq { max-width: 820px; margin: 40px auto 0; }
+    details { border-bottom: 1px solid var(--line); padding: 18px 0; }
+    summary { cursor: pointer; font-weight: 700; font-size: 18px; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+    summary::-webkit-details-marker { display: none; }
+    summary::after { content: "+"; font-size: 24px; line-height: 1; color: var(--blue); }
+    details[open] summary::after { content: "−"; }
+    details p { color: var(--muted); margin: 10px 0 0; }
+
+    /* Final CTA */
+    .final { background: linear-gradient(135deg, var(--blue), #0f3bb5); color: #fff; border-radius: 28px; padding: clamp(36px, 6vw, 64px); display: grid; grid-template-columns: 1.4fr 1fr; gap: 30px; align-items: center; }
+    .final h2 { color: #fff; }
+    .final p { color: rgba(255,255,255,.82); margin: 14px 0 0; font-size: 18px; }
+    .final .acts { display: grid; gap: 12px; }
+    .final .btn.light { color: var(--blue-2); }
+    .contact-text { font-size: 15px; color: rgba(255,255,255,.85); text-align: center; }
+
+    footer { padding: 36px 0 46px; color: var(--muted); font-size: 14px; }
+    footer .wrap { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+
+    @media (max-width: 960px) {
+      header.top nav { display: none; }
+      .strip .wrap, .pain { grid-template-columns: 1fr 1fr; }
+      .stage { grid-template-columns: 1fr; }
+      .feats, .safe-grid, .plans { grid-template-columns: 1fr 1fr; }
+      .who { grid-template-columns: repeat(3, 1fr); }
+      .final { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 620px) {
+      body { font-size: 16px; }
+      header.top .wrap { gap: 12px; }
+      header.top .btn { display: none; }
+      .strip .wrap, .pain, .feats, .safe-grid, .plans { grid-template-columns: 1fr; }
+      .who { grid-template-columns: 1fr 1fr; }
+      .phone { width: 34%; right: 0; bottom: -20px; border-width: 5px; border-radius: 20px; }
+      .hero .ctas .btn { width: 100%; }
+      .plan .price { font-size: 32px; }
+    }
+  </style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a href="/" aria-label="FLOWI"><img src="/brand/flowi-white.svg" alt="FLOWI" style="height:22px"></a>
+    <nav>
+      <a href="#ishlash" data-t="nav_how">Qanday ishlaydi</a>
+      <a href="#imkoniyatlar" data-t="nav_feat">Imkoniyatlar</a>
+      <a href="#narxlar" data-t="nav_price">Narxlar</a>
+      <a href="#savollar" data-t="nav_faq">Savollar</a>
+    </nav>
+    <span class="grow"></span>
+    <div class="lang"><button data-lang="uz">UZ</button><button data-lang="ru">RU</button></div>
+    <a class="btn primary contact-link" href="#boglanish" data-t="cta_try">Bepul sinab ko'rish</a>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <span class="eyebrow" style="color:#7aa2ff" data-t="hero_eyebrow">Choyxona · Restoran · Fast food · Do'kon</span>
+    <h1 data-t="hero_title" data-html>Buyurtmadan foydagacha — <em>hammasi bitta dasturda</em></h1>
+    <p class="lead" data-t="hero_lead">Ofitsant buyurtmani telefondan yuboradi, oshxona uni darhol ko'radi, kassa chekni bir bosishda yopadi. Siz esa savdo, xarajat va foydani istalgan joydan ko'rib turasiz.</p>
+    <div class="ctas">
+      <a class="btn primary contact-link" href="#boglanish" data-t="hero_cta">14 kun bepul sinab ko'ring</a>
+      <a class="btn ghost" href="#narxlar" data-t="hero_cta2">Narxlarni ko'rish</a>
+    </div>
+    <p class="note" data-t="hero_note">O'rnatish shart emas · Kompyuter, planshet va telefonda ishlaydi · O'zbek va rus tilida</p>
+    <div class="shots">
+      <div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/rooms.jpg" alt="FLOWI: zal va xonalar holati" width="1600" height="960"></div>
+      <img class="phone" src="/landing/phone-order.jpg" alt="Ofitsant telefoni" width="780" height="1688">
+    </div>
+  </div>
+</section>
+
+<div class="strip">
+  <div class="wrap">
+    <div><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></svg><span data-t="s1">Ofitsant — o'z telefonida</span></div>
+    <div><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg><span data-t="s2">Chek va oshxona printeri</span></div>
+    <div><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg><span data-t="s3">Har kuni avtomatik zaxira</span></div>
+    <div><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg><span data-t="s4">Har bir amal tarixda</span></div>
+  </div>
+</div>
+
+<section>
+  <div class="wrap center">
+    <span class="eyebrow" data-t="pain_eyebrow">Tanish holatmi?</span>
+    <h2 data-t="pain_title">Qog'oz va daftar bilan ishlash qimmatga tushadi</h2>
+  </div>
+  <div class="wrap pain">
+    <div class="card"><div class="no">✕ <span data-t="p1_no">Qog'ozdagi buyurtma</span></div><b data-t="p1_t">Taom unutiladi yoki adashadi</b><p data-t="p1_p">Ofitsant oshxonaga yugurib boradi, yozuvni o'qib bo'lmaydi.</p><div class="yes" data-t="p1_y">✓ Buyurtma soniyada oshxona ekraniga va printerga tushadi</div></div>
+    <div class="card"><div class="no">✕ <span data-t="p2_no">Kassada kamomad</span></div><b data-t="p2_t">Pul qayerga ketgani noma'lum</b><p data-t="p2_p">Taom "bekor qilingan", chegirma "berilgan" — kim, qachon?</p><div class="yes" data-t="p2_y">✓ Bekor qilish faqat ruxsat bilan, hammasi tarixga yoziladi</div></div>
+    <div class="card"><div class="no">✕ <span data-t="p3_no">Oy oxiri</span></div><b data-t="p3_t">Foyda qancha — hech kim bilmaydi</b><p data-t="p3_p">Xarajat bir daftarda, savdo boshqasida, ish haqi uchinchisida.</p><div class="yes" data-t="p3_y">✓ Kirim, chiqim va foyda — bitta hisobotda, har kuni</div></div>
+    <div class="card"><div class="no">✕ <span data-t="p4_no">Ish haqi</span></div><b data-t="p4_t">Hisob-kitob janjal bilan tugaydi</b><p data-t="p4_p">Kim necha kun ishladi, savdodan foizi qancha?</p><div class="yes" data-t="p4_y">✓ Davomat, foiz, bonus va jarima avtomatik hisoblanadi</div></div>
+  </div>
+</section>
+
+<section class="flow" id="ishlash">
+  <div class="wrap center">
+    <span class="eyebrow" data-t="flow_eyebrow">Qanday ishlaydi</span>
+    <h2 data-t="flow_title">Bir buyurtmaning yo'li — 4 qadam</h2>
+    <p class="lead" data-t="flow_lead">Hamma bir xil ma'lumotni ko'radi: ofitsant, oshpaz, kassir va siz. Hech narsa yo'qolmaydi.</p>
+  </div>
+  <div class="wrap">
+    <div class="tabs" role="tablist">
+      <button class="on" data-step="0"><span class="n">1</span><span data-t="st1">Ofitsant</span></button>
+      <button data-step="1"><span class="n">2</span><span data-t="st2">Oshxona</span></button>
+      <button data-step="2"><span class="n">3</span><span data-t="st3">Kassa</span></button>
+      <button data-step="3"><span class="n">4</span><span data-t="st4">Hisobot</span></button>
+    </div>
+    <div class="stage" data-pane="0">
+      <div class="media phone-pair"><img src="/landing/phone-rooms.jpg" alt="" loading="lazy"><img src="/landing/phone-order.jpg" alt="" loading="lazy"></div>
+      <div><h3 data-t="f1_t">Buyurtma — telefondan</h3><p data-t="f1_p">Ofitsant o'z xonalarini ko'radi, taomni rangli tugmalardan tanlaydi va bir bosishda yuboradi.</p>
+        <ul><li data-t="f1_1">Xona holati rangda: bo'sh, band, taom tayyor, hisob so'raldi, bron</li><li data-t="f1_2">"Taom tayyor" — ovozli xabar va telefonga bildirishnoma</li><li data-t="f1_3">Mehmonlar soni, izoh, olib ketish</li></ul></div>
+    </div>
+    <div class="stage" data-pane="1" hidden>
+      <div class="media"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/kitchen.jpg" alt="" loading="lazy"></div></div>
+      <div><h3 data-t="f2_t">Oshxona darhol ko'radi</h3><p data-t="f2_p">Yangi buyurtma oshxona ekraniga va printerga o'zi tushadi. Oshpaz "Qabul qilish" va "Tayyor" ni bosadi.</p>
+        <ul><li data-t="f2_1">Har bir taomning tayyorlanish vaqti va kechikish ogohlantirishi</li><li data-t="f2_2">Stop-list: tugagan taom ofitsantda ko'rinmaydi</li><li data-t="f2_3">Uch rejim: to'liq, faqat xabar yoki o'chiq</li></ul></div>
+    </div>
+    <div class="stage" data-pane="2" hidden>
+      <div class="media"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/order.jpg" alt="" loading="lazy"></div></div>
+      <div><h3 data-t="f3_t">Kassa — bir bosishda</h3><p data-t="f3_p">Kassir chekni ko'radi, to'lov turini tanlaydi va chop etadi. Qaytim o'zi hisoblanadi.</p>
+        <ul><li data-t="f3_1">Naqd, karta, o'tkazma yoki aralash to'lov</li><li data-t="f3_2">Xizmat haqi (foiz yoki kishi boshiga) va chegirma</li><li data-t="f3_3">Chekda sizning logotipingiz, qalin va aniq shrift</li></ul></div>
+    </div>
+    <div class="stage" data-pane="3" hidden>
+      <div class="media"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/reports.jpg" alt="" loading="lazy"></div></div>
+      <div><h3 data-t="f4_t">Siz — foydani ko'rasiz</h3><p data-t="f4_p">Bugun, hafta yoki oy bo'yicha kirim, chiqim, foyda, mehmonlar va to'lov turlari.</p>
+        <ul><li data-t="f4_1">Har bir chek tarixi va Excelga yuklab olish</li><li data-t="f4_2">Xarajatlar va kassa smenasi</li><li data-t="f4_3">Moliya bo'limini parol bilan yopish mumkin</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<section id="imkoniyatlar">
+  <div class="wrap center">
+    <span class="eyebrow" data-t="feat_eyebrow">Imkoniyatlar</span>
+    <h2 data-t="feat_title">Kundalik ish uchun kerak bo'lgan hamma narsa</h2>
+  </div>
+  <div class="wrap feats">
+    <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-7h6v7"/></svg></div><b data-t="x1_t">Zal va xonalar</b><p data-t="x1_p">Qavatlar, supa, VIP, banket — har birining holati va summasi bir qarashda.</p></div>
+    <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></div><b data-t="x2_t">Bronlar</b><p data-t="x2_p">To'y, banket va oddiy bron — vaqt to'qnashsa, dastur ogohlantiradi.</p></div>
+    <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><b data-t="x3_t">Xodimlar va huquqlar</b><p data-t="x3_p">Ega, admin, kassir, ofitsant, oshpaz — har biri faqat o'ziga kerakli narsani ko'radi.</p></div>
+    <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 15h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 17"/><path d="m7 21 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9"/><path d="m2 16 6 6"/><circle cx="16" cy="9" r="2.9"/><circle cx="6" cy="5" r="3"/></svg></div><b data-t="x4_t">Ish haqi</b><p data-t="x4_p">Oylik, kunlik, savdodan foiz, bonus va jarima. Kim qancha olishi kerak — tayyor.</p></div>
+    <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14"/></svg></div><b data-t="x5_t">Ombor va shtrix-kod</b><p data-t="x5_p">Do'konlar uchun: qoldiq, kam qolgan mahsulot, kirim va qaytarish.</p></div>
+    <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg></div><b data-t="x6_t">Sensorli kassa</b><p data-t="x6_p">Klaviaturasiz terminal uchun ekran klaviaturasi: raqamlar, lotin va kirill harflari.</p></div>
+  </div>
+</section>
+
+<section class="safe">
+  <div class="wrap center">
+    <span class="eyebrow" style="color:#5eead4" data-t="safe_eyebrow">Ishonch</span>
+    <h2 data-t="safe_title">Ma'lumotlaringiz hech qachon yo'qolmaydi</h2>
+    <p class="lead" data-t="safe_lead">Har bir biznesning ma'lumoti alohida saqlanadi va har kuni zaxiralanadi.</p>
+  </div>
+  <div class="wrap safe-grid">
+    <div><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg><b data-t="z1_t">Kunlik zaxira</b><p data-t="z1_p">Serverda har kuni nusxa olinadi. Xohlasangiz, kompyuteringizdagi papkaga ham yoziladi.</p></div>
+    <div><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><b data-t="z2_t">Har kimga — o'z huquqi</b><p data-t="z2_p">Xodim PIN kod bilan kiradi. Moliyani faqat siz ruxsat berganlar ko'radi.</p></div>
+    <div><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg><b data-t="z3_t">Amallar tarixi</b><p data-t="z3_p">Kim taomni bekor qildi, kim chegirma berdi, kim kassani yopdi — hammasi yozib boriladi.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap center">
+    <span class="eyebrow" data-t="who_eyebrow">Kimlar uchun</span>
+    <h2 data-t="who_title">Biznesingiz turiga moslashadi</h2>
+    <p class="lead" data-t="who_lead">Turini tanlasangiz, dastur keraksiz bo'limlarni o'zi yashiradi: do'konda xona yo'q, choyxonada shtrix-kod shart emas.</p>
+  </div>
+  <div class="wrap who">
+    <div><div class="ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg></div><b data-t="w1">Choyxona</b><span data-t="w1s">Supa, xona, banket</span></div>
+    <div><div class="ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg></div><b data-t="w2">Restoran / kafe</b><span data-t="w2s">Zal, stollar, oshxona</span></div>
+    <div><div class="ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v3a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3"/><path d="M12 19H4a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-3.83"/><path d="m3 11 7.77-6.04a2 2 0 0 1 2.46 0L21 11z"/></svg></div><b data-t="w3">Fast food</b><span data-t="w3s">Tez sotuv, olib ketish</span></div>
+    <div><div class="ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg></div><b data-t="w4">Oziq-ovqat do'koni</b><span data-t="w4s">Shtrix-kod, ombor</span></div>
+    <div><div class="ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg></div><b data-t="w5">Kiyim do'koni</b><span data-t="w5s">O'lcham, rang, qaytarish</span></div>
+  </div>
+  <div class="wrap shop-shot"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/shop-pos.jpg" alt="" loading="lazy"></div><p class="caption" data-t="shop_cap">Do'kon kassasi: mahsulotni bosing yoki shtrix-kodni skanerlang</p></div>
+</section>
+
+<section class="pricing" id="narxlar">
+  <div class="wrap center">
+    <span class="eyebrow" data-t="price_eyebrow">Narxlar</span>
+    <h2 data-t="price_title">Oddiy va tushunarli tariflar</h2>
+    <p class="lead" data-t="price_lead">Qurilmalar soni cheklanmaydi. Tarifni istalgan vaqtda o'zgartirish mumkin — ma'lumotlar joyida qoladi.</p>
+  </div>
+  <div class="wrap plans" id="plans"></div>
+  <div class="wrap terms" id="terms"></div>
+</section>
+
+<section id="savollar">
+  <div class="wrap center">
+    <span class="eyebrow" data-t="faq_eyebrow">Savollar</span>
+    <h2 data-t="faq_title">Ko'p beriladigan savollar</h2>
+  </div>
+  <div class="wrap faq">
+    <details><summary data-t="q1">Qanday qurilma kerak?</summary><p data-t="a1">Bor qurilmangiz yetadi: kassa uchun Windows kompyuter yoki noutbuk, ofitsantlar uchun oddiy Android yoki iPhone telefon, oshxona uchun planshet. Dastur brauzerda ochiladi, o'rnatish shart emas.</p></details>
+    <details><summary data-t="q2">Printer bilan ishlaydimi?</summary><p data-t="a2">Ha. 80 mm yoki 58 mm termoprinter kassa kompyuteriga ulanadi. Chek va oshxona uchun buyurtma qog'ozi oynasiz, to'g'ridan-to'g'ri chiqadi.</p></details>
+    <details><summary data-t="q3">Internet kerakmi?</summary><p data-t="a3">Ha, dastur internet orqali ishlaydi — shuning uchun egasi uyda ham, safarda ham hamma narsani ko'radi. Ma'lumotlar serverda saqlanadi va har kuni zaxiralanadi.</p></details>
+    <details><summary data-t="q4">Ma'lumotlarim boshqalarga ko'rinmaydimi?</summary><p data-t="a4">Yo'q. Har bir biznes alohida faylda saqlanadi va faqat o'z havolasi orqali ochiladi. Xodimlar PIN kod bilan kiradi, moliyani faqat siz ruxsat berganlar ko'radi.</p></details>
+    <details><summary data-t="q5">Xodimlarni o'rgatish qiyinmi?</summary><p data-t="a5">Yo'q. Ofitsant uchun 10 daqiqa yetadi: xonani bosadi, taomni tanlaydi, "Yuborish". Biz ulab beramiz va birinchi kunlarda yordam beramiz.</p></details>
+    <details><summary data-t="q6">To'lov muddati o'tib ketsa nima bo'ladi?</summary><p data-t="a6">Bir necha kun ogohlantirish bilan ishlayveradi, keyin faqat ko'rish rejimiga o'tadi. Hech narsa o'chmaydi — to'lovdan keyin ish to'xtagan joyidan davom etadi.</p></details>
+  </div>
+</section>
+
+<section id="boglanish" style="padding-top:0">
+  <div class="wrap final">
+    <div><h2 data-t="final_title">14 kun bepul sinab ko'ring</h2><p data-t="final_p">Biz biznesingizni ulab beramiz, menyuni kiritishga yordam beramiz. Yoqmasa — hech narsa to'lamaysiz.</p></div>
+    <div class="acts" id="contact"></div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap"><img src="/brand/flowi-navy.svg" alt="FLOWI" style="height:16px"><span>© <span id="year"></span> FLOWI</span><span class="grow"></span><span id="foot-contact"></span></div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+  var RU = {
+    nav_how: 'Как работает', nav_feat: 'Возможности', nav_price: 'Цены', nav_faq: 'Вопросы', cta_try: 'Попробовать бесплатно',
+    hero_eyebrow: 'Чайхана · Ресторан · Фастфуд · Магазин',
+    hero_title: 'От заказа до прибыли — <em>всё в одной программе</em>',
+    hero_lead: 'Официант отправляет заказ с телефона, кухня видит его сразу, касса закрывает чек одним нажатием. А вы видите продажи, расходы и прибыль из любого места.',
+    hero_cta: '14 дней бесплатно', hero_cta2: 'Смотреть цены',
+    hero_note: 'Без установки · Работает на компьютере, планшете и телефоне · На узбекском и русском',
+    s1: 'Официант — на своём телефоне', s2: 'Принтер чеков и кухни', s3: 'Ежедневная резервная копия', s4: 'Каждое действие в истории',
+    pain_eyebrow: 'Знакомо?', pain_title: 'Работа с бумагой и тетрадью обходится дорого',
+    p1_no: 'Заказ на бумаге', p1_t: 'Блюдо забывают или путают', p1_p: 'Официант бегает на кухню, запись невозможно прочитать.', p1_y: '✓ Заказ за секунду попадает на экран кухни и в принтер',
+    p2_no: 'Недостача в кассе', p2_t: 'Непонятно, куда ушли деньги', p2_p: 'Блюдо «отменили», скидку «дали» — кто и когда?', p2_y: '✓ Отмена только с разрешения, всё пишется в историю',
+    p3_no: 'Конец месяца', p3_t: 'Сколько прибыли — никто не знает', p3_p: 'Расходы в одной тетради, продажи в другой, зарплата в третьей.', p3_y: '✓ Приход, расход и прибыль — в одном отчёте, каждый день',
+    p4_no: 'Зарплата', p4_t: 'Расчёт заканчивается спором', p4_p: 'Кто сколько дней работал, какой процент с продаж?', p4_y: '✓ Посещаемость, процент, бонусы и штрафы считаются сами',
+    flow_eyebrow: 'Как работает', flow_title: 'Путь одного заказа — 4 шага', flow_lead: 'Все видят одно и то же: официант, повар, кассир и вы. Ничего не теряется.',
+    st1: 'Официант', st2: 'Кухня', st3: 'Касса', st4: 'Отчёт',
+    f1_t: 'Заказ — с телефона', f1_p: 'Официант видит свои комнаты, выбирает блюда цветными кнопками и отправляет одним нажатием.',
+    f1_1: 'Состояние комнаты цветом: свободно, занято, блюдо готово, просят счёт, бронь', f1_2: '«Блюдо готово» — голосом и уведомлением на телефон', f1_3: 'Число гостей, комментарий, с собой',
+    f2_t: 'Кухня видит сразу', f2_p: 'Новый заказ сам появляется на экране кухни и в принтере. Повар нажимает «Принять» и «Готово».',
+    f2_1: 'Время приготовления каждого блюда и предупреждение об опоздании', f2_2: 'Стоп-лист: закончившееся блюдо официант не видит', f2_3: 'Три режима: полный, только уведомление или выключен',
+    f3_t: 'Касса — одним нажатием', f3_p: 'Кассир видит чек, выбирает способ оплаты и печатает. Сдача считается сама.',
+    f3_1: 'Наличные, карта, перевод или смешанная оплата', f3_2: 'Обслуживание (процент или с человека) и скидка', f3_3: 'Ваш логотип на чеке, жирный чёткий шрифт',
+    f4_t: 'Вы — видите прибыль', f4_p: 'Приход, расход, прибыль, гости и способы оплаты за день, неделю или месяц.',
+    f4_1: 'История каждого чека и выгрузка в Excel', f4_2: 'Расходы и кассовая смена', f4_3: 'Раздел финансов можно закрыть паролем',
+    feat_eyebrow: 'Возможности', feat_title: 'Всё, что нужно для ежедневной работы',
+    x1_t: 'Зал и комнаты', x1_p: 'Этажи, сури, VIP, банкет — состояние и сумма каждой с первого взгляда.',
+    x2_t: 'Брони', x2_p: 'Свадьба, банкет или обычная бронь — программа предупредит о пересечении.',
+    x3_t: 'Сотрудники и права', x3_p: 'Владелец, админ, кассир, официант, повар — каждый видит только своё.',
+    x4_t: 'Зарплата', x4_p: 'Оклад, посуточно, процент с продаж, бонусы и штрафы. Кому сколько — уже посчитано.',
+    x5_t: 'Склад и штрих-код', x5_p: 'Для магазинов: остатки, заканчивающиеся товары, приход и возврат.',
+    x6_t: 'Сенсорная касса', x6_p: 'Экранная клавиатура для терминала без клавиатуры: цифры, латиница и кириллица.',
+    safe_eyebrow: 'Надёжность', safe_title: 'Ваши данные никогда не потеряются', safe_lead: 'Данные каждого бизнеса хранятся отдельно и копируются каждый день.',
+    z1_t: 'Ежедневная копия', z1_p: 'Каждый день копия на сервере. По желанию — ещё и в папку на вашем компьютере.',
+    z2_t: 'Каждому — свои права', z2_p: 'Сотрудник входит по PIN-коду. Финансы видят только те, кому вы разрешили.',
+    z3_t: 'История действий', z3_p: 'Кто отменил блюдо, кто дал скидку, кто закрыл кассу — всё записывается.',
+    who_eyebrow: 'Для кого', who_title: 'Подстраивается под ваш бизнес', who_lead: 'Выберите тип — лишние разделы скроются сами: в магазине нет комнат, в чайхане не нужен штрих-код.',
+    w1: 'Чайхана', w1s: 'Сури, комнаты, банкет', w2: 'Ресторан / кафе', w2s: 'Зал, столы, кухня', w3: 'Фастфуд', w3s: 'Быстрая продажа, с собой',
+    w4: 'Продуктовый магазин', w4s: 'Штрих-код, склад', w5: 'Магазин одежды', w5s: 'Размер, цвет, возврат',
+    shop_cap: 'Касса магазина: нажмите на товар или отсканируйте штрих-код',
+    price_eyebrow: 'Цены', price_title: 'Простые и понятные тарифы', price_lead: 'Число устройств не ограничено. Тариф можно сменить в любой момент — данные останутся.',
+    faq_eyebrow: 'Вопросы', faq_title: 'Частые вопросы',
+    q1: 'Какое оборудование нужно?', a1: 'Хватит того, что есть: для кассы компьютер или ноутбук на Windows, для официантов обычный телефон Android или iPhone, для кухни планшет. Программа открывается в браузере, устанавливать не нужно.',
+    q2: 'Работает с принтером?', a2: 'Да. Термопринтер 80 или 58 мм подключается к кассовому компьютеру. Чек и заказ для кухни печатаются сразу, без окна печати.',
+    q3: 'Нужен ли интернет?', a3: 'Да, программа работает через интернет — поэтому владелец видит всё и дома, и в поездке. Данные хранятся на сервере и копируются каждый день.',
+    q4: 'Мои данные не увидят другие?', a4: 'Нет. Каждый бизнес хранится в отдельном файле и открывается только по своей ссылке. Сотрудники входят по PIN-коду, финансы видят только те, кому вы разрешили.',
+    q5: 'Сложно ли обучить сотрудников?', a5: 'Нет. Официанту хватит 10 минут: нажал комнату, выбрал блюдо, «Отправить». Мы подключим и поможем в первые дни.',
+    q6: 'Что будет, если оплата просрочена?', a6: 'Несколько дней программа работает с предупреждением, затем переходит в режим просмотра. Ничего не удаляется — после оплаты работа продолжается с того же места.',
+    final_title: '14 дней бесплатно', final_p: 'Мы подключим ваш бизнес и поможем внести меню. Не понравится — ничего не платите.',
+    // dynamic
+    per_month: 'сум / мес', popular: 'Популярный', staff_upto: 'До {0} сотрудников', staff_any: 'Без ограничения сотрудников', devices_any: 'Устройства без ограничений',
+    base_all: 'Зал, заказы, кухня, касса, чеки', year: 'При оплате за год: {0} сум ({1} мес.)', choose: 'Подключить',
+    t_trial: '{0} дней бесплатно', t_branch: 'Доп. филиал: {0} сум / мес', t_year: 'Год = {0} месяцев', t_nodel: 'Данные не удаляются',
+    write_us: 'Написать нам', contact_soon: 'Оставьте заявку — свяжемся с вами', currency: 'сум',
+    mod: { 'Stop-list': 'Стоп-лист', 'Hisobotlar va boshqaruv paneli': 'Отчёты и панель', 'Kirim-chiqim va kassa smenasi': 'Приход-расход и смена', 'Ish haqi': 'Зарплата', 'Bronlar': 'Брони', 'Cheklar tarixi': 'История чеков', 'Amallar tarixi': 'Журнал действий', 'Excelga yuklab olish': 'Выгрузка в Excel' },
+  };
+  var UZ_DYN = {
+    per_month: "so'm / oy", popular: 'Eng ommabop', staff_upto: '{0} tagacha xodim', staff_any: 'Xodimlar soni cheksiz', devices_any: 'Qurilmalar soni cheksiz',
+    base_all: 'Zal, buyurtma, oshxona, kassa, cheklar', year: "Yillik to'lovda: {0} so'm ({1} oy narxi)", choose: 'Ulanish',
+    t_trial: '{0} kun bepul', t_branch: "Qo'shimcha filial: {0} so'm / oy", t_year: '1 yil = {0} oy narxi', t_nodel: "Ma'lumot hech qachon o'chmaydi",
+    write_us: 'Bizga yozing', contact_soon: "Ariza qoldiring — o'zimiz bog'lanamiz", currency: "so'm", mod: {},
+  };
+  var ALL_MODS = ['Stop-list', 'Hisobotlar va boshqaruv paneli', 'Cheklar tarixi', 'Kirim-chiqim va kassa smenasi', 'Ish haqi', 'Bronlar', 'Amallar tarixi', 'Excelga yuklab olish'];
+  var FALLBACK = { plans: [
+    { key: 'start', name: 'Start', price: 199000, max_staff: 5, modules: ['Stop-list', 'Hisobotlar va boshqaruv paneli', 'Cheklar tarixi'] },
+    { key: 'biznes', name: 'Biznes', price: 349000, max_staff: 15, modules: ALL_MODS },
+    { key: 'pro', name: 'Pro', price: 599000, max_staff: 0, modules: ALL_MODS }],
+    terms: { branch_price: 149000, yearly_months: 10, grace_days: 3, trial_days: 14 }, support: null };
+
+  var uzText = {};
+  document.querySelectorAll('[data-t]').forEach(function (el) { uzText[el.dataset.t] = el.innerHTML; });
+  var lang = (function () { try { return JSON.parse(localStorage.getItem('cp_lang')) === 'ru' ? 'ru' : 'uz'; } catch (e) { return 'uz'; } }());
+  var info = FALLBACK;
+
+  function d(k) { return lang === 'ru' ? RU[k] : UZ_DYN[k]; }
+  function f(s) { var a = arguments; return s.replace(/\{(\d+)\}/g, function (_, i) { return a[+i + 1]; }); }
+  function money(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  var CHECK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+  var DASH = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M5 12h14"/></svg>';
+
+  function contactHref() { var s = info.support; return s && s.link ? s.link : null; }
+
+  function renderPlans() {
+    var href = contactHref() || '#boglanish';
+    document.getElementById('plans').innerHTML = info.plans.map(function (p) {
+      var hot = p.key === 'biznes';
+      var mods = ALL_MODS.map(function (m) {
+        var on = p.modules.indexOf(m) >= 0;
+        var name = lang === 'ru' ? (RU.mod[m] || m) : m;
+        return '<li class="' + (on ? '' : 'off') + '">' + (on ? CHECK : DASH) + '<span>' + esc(name) + '</span></li>';
+      }).join('');
+      return '<div class="plan' + (hot ? ' hot' : '') + '">' + (hot ? '<span class="badge">' + d('popular') + '</span>' : '') +
+        '<h3>' + esc(p.name) + '</h3><div class="price">' + money(p.price) + ' <small>' + d('per_month') + '</small></div>' +
+        '<div class="year">' + f(d('year'), money(p.price * info.terms.yearly_months), info.terms.yearly_months) + '</div>' +
+        '<ul><li>' + CHECK + '<b>' + (p.max_staff > 0 ? f(d('staff_upto'), p.max_staff) : d('staff_any')) + '</b></li>' +
+        '<li>' + CHECK + '<span>' + d('devices_any') + '</span></li><li>' + CHECK + '<span>' + d('base_all') + '</span></li>' + mods + '</ul>' +
+        '<a class="btn ' + (hot ? 'primary' : 'light') + '" href="' + esc(href) + '"' + (contactHref() ? ' target="_blank" rel="noopener"' : '') + '>' + d('choose') + '</a></div>';
+    }).join('');
+    var tm = info.terms;
+    var ico = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+    document.getElementById('terms').innerHTML = [f(d('t_trial'), tm.trial_days), f(d('t_year'), tm.yearly_months), f(d('t_branch'), money(tm.branch_price)), d('t_nodel')]
+      .map(function (x) { return '<span>' + ico + x + '</span>'; }).join('');
+  }
+
+  function renderContact() {
+    var s = info.support; var box = document.getElementById('contact');
+    if (s && s.text) {
+      box.innerHTML = (s.link ? '<a class="btn light" href="' + esc(s.link) + '" target="_blank" rel="noopener">' + d('write_us') + '</a>' : '') +
+        '<div class="contact-text">' + esc(s.text) + '</div>';
+      document.getElementById('foot-contact').textContent = s.text;
+    } else {
+      box.innerHTML = '<div class="contact-text">' + d('contact_soon') + '</div>';
+    }
+    document.querySelectorAll('.contact-link').forEach(function (a) {
+      if (s && s.link) { a.href = s.link; a.target = '_blank'; a.rel = 'noopener'; }
+    });
+  }
+
+  function apply() {
+    document.documentElement.lang = lang;
+    document.querySelectorAll('[data-t]').forEach(function (el) {
+      var v = lang === 'ru' ? RU[el.dataset.t] : uzText[el.dataset.t];
+      if (v !== undefined) el.innerHTML = v;
+    });
+    document.querySelectorAll('.lang button').forEach(function (b) { b.classList.toggle('on', b.dataset.lang === lang); });
+    renderPlans(); renderContact();
+  }
+
+  document.querySelectorAll('.lang button').forEach(function (b) {
+    b.onclick = function () { lang = b.dataset.lang; try { localStorage.setItem('cp_lang', JSON.stringify(lang)); } catch (e) {} apply(); };
+  });
+  document.querySelectorAll('.tabs button').forEach(function (b) {
+    b.onclick = function () {
+      document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
+      document.querySelectorAll('[data-pane]').forEach(function (p) { p.hidden = p.dataset.pane !== b.dataset.step; });
+    };
+  });
+  document.getElementById('year').textContent = new Date().getFullYear();
+  apply();
+  fetch('/api/public/info').then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { if (j && j.plans) { info = j; apply(); } }).catch(function () {});
+}());
+</script>
+</body>
+</html>
