@@ -52,6 +52,21 @@ CREATE TABLE IF NOT EXISTS platform_settings (
 const DAY = 24 * 3600 * 1000;
 const CODE_RE = /^[a-z0-9][a-z0-9-]{1,30}$/;
 
+/*
+ * Plans: what each business pays and gets. The platform owner edits names, prices, staff limits and sections;
+ * the three keys stay. max_staff 0 = no limit. A lower plan never deletes anything: it only stops adding more.
+ */
+const PLAN_KEYS = ['start', 'biznes', 'pro'];
+const BIZ_MODULES = ['stoplist', 'reports', 'finance', 'payroll', 'reservations', 'history', 'audit', 'export'];
+const DEFAULT_PLANS = {
+  start: { name: 'Start', price: 199000, max_staff: 5, modules: ['stoplist', 'reports', 'history'] },
+  biznes: { name: 'Biznes', price: 349000, max_staff: 15, modules: BIZ_MODULES },
+  pro: { name: 'Pro', price: 599000, max_staff: 0, modules: BIZ_MODULES },
+};
+// branch_price: a second (third…) place of the same owner; yearly_months: a year is paid as this many months;
+// grace_days: days after the paid term ends before the business becomes read-only; trial_days: free start.
+const DEFAULT_TERMS = { branch_price: 149000, yearly_months: 10, grace_days: 3, trial_days: 14 };
+
 function createPlatform(dataDir) {
   fs.mkdirSync(path.join(dataDir, 'tenants'), { recursive: true });
   const pdb = new DatabaseSync(path.join(dataDir, 'platform.db'));
@@ -70,6 +85,9 @@ function createPlatform(dataDir) {
   // Business type picked at creation; support contact shown on that business's desktop (empty = the platform default).
   if (!tcols.includes('business_type')) pdb.exec("ALTER TABLE tenants ADD COLUMN business_type TEXT NOT NULL DEFAULT 'choyxona'");
   if (!tcols.includes('support')) pdb.exec("ALTER TABLE tenants ADD COLUMN support TEXT NOT NULL DEFAULT ''");
+  // Businesses that existed before plans keep everything they had: they start on "Biznes".
+  if (!tcols.includes('plan')) pdb.exec("ALTER TABLE tenants ADD COLUMN plan TEXT NOT NULL DEFAULT 'biznes'");
+  if (!tcols.includes('is_branch')) pdb.exec('ALTER TABLE tenants ADD COLUMN is_branch INTEGER NOT NULL DEFAULT 0');
   const q = (sql) => pdb.prepare(sql);
   const now = () => Date.now();
 
@@ -104,7 +122,7 @@ function createPlatform(dataDir) {
     const db = open(file);
     const hub = createHub();
     ctx = { id, db, hub, row, file };
-    ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row, file });
+    ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row, plan: () => planFor(ctx.row), file });
     contexts.set(id, ctx);
     return ctx;
   }
@@ -152,6 +170,59 @@ function createPlatform(dataDir) {
     const text = own.text || pget('support_text');
     const link = own.text ? own.link : pget('support_link');
     return text ? { text, link: supportLink(text, link) } : null;
+  }
+
+  // ---------- Plans ----------
+  function readJson(key, def) {
+    try { const v = JSON.parse(pget(key, '')); return v && typeof v === 'object' ? v : def; } catch { return def; }
+  }
+  function getPlans() {
+    const saved = readJson('plans', {});
+    return Object.fromEntries(PLAN_KEYS.map((k) => [k, { ...DEFAULT_PLANS[k], ...(saved[k] || {}) }]));
+  }
+  function getTerms() { return { ...DEFAULT_TERMS, ...readJson('plan_terms', {}) }; }
+
+  // What a business has right now: its plan, what it pays, and whether its term has run out.
+  function planFor(row) {
+    const plans = getPlans();
+    const terms = getTerms();
+    const key = plans[row.plan] ? row.plan : 'biznes';
+    const p = plans[key];
+    const fee = row.monthly_fee > 0 ? row.monthly_fee : row.is_branch ? terms.branch_price : p.price;
+    const graceUntil = row.paid_until ? row.paid_until + terms.grace_days * DAY : null;
+    return { key, name: p.name, price: p.price, fee, max_staff: p.max_staff, modules: p.modules, is_branch: !!row.is_branch,
+      paid_until: row.paid_until, grace_until: graceUntil, read_only: !!(graceUntil && now() > graceUntil) };
+  }
+
+  function planInput(key, v) {
+    const o = v && typeof v === 'object' ? v : {};
+    const mods = Array.isArray(o.modules) ? o.modules : DEFAULT_PLANS[key].modules;
+    const bad = mods.find((m) => !MODULES[m]);
+    if (bad) throw new HttpError(400, `Noma'lum bo'lim: ${bad}`);
+    return {
+      name: str(o.name, 'Tarif nomi', { required: true, max: 30 }),
+      price: int(o.price, 'Tarif narxi', { required: true, min: 0, max: 1e10 }),
+      max_staff: int(o.max_staff, 'Xodimlar soni', { required: true, min: 0, max: 100000 }),
+      modules: [...new Set(mods)],
+    };
+  }
+  function savePlans({ body }) {
+    const plans = Object.fromEntries(PLAN_KEYS.map((k) => [k, planInput(k, (body.plans || {})[k])]));
+    const t = body.terms || {};
+    const terms = {
+      branch_price: int(t.branch_price, 'Filial narxi', { required: true, min: 0, max: 1e10 }),
+      yearly_months: int(t.yearly_months, 'Yillik to\'lov (oy)', { required: true, min: 1, max: 12 }),
+      grace_days: int(t.grace_days, 'Kechikish kunlari', { required: true, min: 0, max: 60 }),
+      trial_days: int(t.trial_days, 'Sinov kunlari', { required: true, min: 0, max: 365 }),
+    };
+    pset('plans', JSON.stringify(plans));
+    pset('plan_terms', JSON.stringify(terms));
+    for (const c of contexts.values()) c.hub.publish('settings');
+    return { plans: getPlans(), terms: getTerms() };
+  }
+  function planKeyInput(v) {
+    if (!PLAN_KEYS.includes(v)) throw new HttpError(400, "Tarif noto'g'ri");
+    return v;
   }
 
   function getPlatformSettings() {
@@ -252,7 +323,7 @@ function createPlatform(dataDir) {
   }
 
   function listTenants() {
-    return q('SELECT * FROM tenants ORDER BY id DESC').all().map((t) => ({ ...t, disabled_modules: parseModules(t), support: parseSupport(t), ...stats(t) }));
+    return q('SELECT * FROM tenants ORDER BY id DESC').all().map((t) => ({ ...t, disabled_modules: parseModules(t), support: parseSupport(t), plan_info: planFor(t), ...stats(t) }));
   }
 
   function createTenant({ body }) {
@@ -273,12 +344,14 @@ function createPlatform(dataDir) {
     const disabled = body.disabled_modules !== undefined ? modulesInput(body.disabled_modules) : JSON.stringify(defs.disabled);
     const kitchenMode = body.kitchen_mode !== undefined ? kitchenModeInput(body.kitchen_mode) : defs.kitchen_mode;
     const support = JSON.stringify(supportInput(body.support));
+    const plan = body.plan !== undefined ? planKeyInput(body.plan) : 'biznes';
     open(path.join(dataDir, file), { name, owner, sample: !!body.sample, type }).close();
-    const id = q(`INSERT INTO tenants (code, name, contact_name, phone, file, paid_until, monthly_fee, notes, created_at, disabled_modules, kitchen_mode, business_type, support)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    const id = q(`INSERT INTO tenants (code, name, contact_name, phone, file, paid_until, monthly_fee, notes, created_at, disabled_modules, kitchen_mode, business_type, support,
+      plan, is_branch) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       code, name, owner.name, str(body.phone, 'Telefon', { max: 30 }), file,
       body.paid_until ? int(body.paid_until, "To'lov muddati", { min: 1, max: 8.64e15 }) : null,
-      int(body.monthly_fee, 'Oylik narx'), str(body.notes, 'Izoh', { max: 500 }), now(), disabled, kitchenMode, type, support
+      int(body.monthly_fee, 'Oylik narx'), str(body.notes, 'Izoh', { max: 500 }), now(), disabled, kitchenMode, type, support,
+      plan, body.is_branch ? 1 : 0
     ).lastInsertRowid;
     return tenantRow(id);
   }
@@ -289,7 +362,7 @@ function createPlatform(dataDir) {
     const status = body.status !== undefined ? str(body.status, 'Holat') : t.status;
     if (!['active', 'blocked'].includes(status)) throw new HttpError(400, "Holat noto'g'ri");
     q(`UPDATE tenants SET name = ?, contact_name = ?, phone = ?, status = ?, paid_until = ?, monthly_fee = ?, notes = ?, disabled_modules = ?, kitchen_mode = ?,
-      business_type = ?, support = ? WHERE id = ?`).run(
+      business_type = ?, support = ?, plan = ?, is_branch = ? WHERE id = ?`).run(
       body.name !== undefined ? str(body.name, 'Nomi', { required: true, max: 80 }) : t.name,
       body.contact_name !== undefined ? str(body.contact_name, 'Boshliq', { max: 80 }) : t.contact_name,
       body.phone !== undefined ? str(body.phone, 'Telefon', { max: 30 }) : t.phone,
@@ -301,6 +374,8 @@ function createPlatform(dataDir) {
       body.kitchen_mode !== undefined ? kitchenModeInput(body.kitchen_mode) : t.kitchen_mode,
       body.business_type !== undefined ? typeInput(body.business_type) : t.business_type,
       body.support !== undefined ? JSON.stringify(supportInput(body.support)) : t.support,
+      body.plan !== undefined ? planKeyInput(body.plan) : t.plan,
+      body.is_branch !== undefined ? (body.is_branch ? 1 : 0) : t.is_branch,
       t.id
     );
     refresh(t.id);
@@ -418,6 +493,8 @@ function createPlatform(dataDir) {
     ['GET', '/api/platform/settings', true, getPlatformSettings],
     ['PUT', '/api/platform/settings', true, savePlatformSettings],
     ['GET', '/api/platform/types', true, () => BUSINESS_TYPES],
+    ['GET', '/api/platform/plans', true, () => ({ plans: getPlans(), terms: getTerms() })],
+    ['PUT', '/api/platform/plans', true, savePlans],
   ].map(([method, pattern, auth, handler]) => ({
     method, auth, handler, re: new RegExp('^' + pattern.replace(':id', '(\\d+)') + '$'),
   }));
@@ -440,7 +517,7 @@ function createPlatform(dataDir) {
     pdb.close();
   }
 
-  return { handle, byCode, byToken, assertActive, close, supportFor, restoreTenant };
+  return { handle, byCode, byToken, assertActive, close, supportFor, restoreTenant, planFor };
 }
 
 module.exports = { createPlatform };

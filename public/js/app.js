@@ -88,6 +88,12 @@ function statusBarHtml() {
 
 // Reminds the boss when the subscription set on the platform is about to run out.
 function subscriptionBanner() {
+  const p = App.plan;
+  // Term over: everyone sees why nothing new can be written; the data is all still there.
+  if (p && p.read_only) return `<div class="notice slim red">${icon('lock', 18)} ${t("Obuna muddati tugagan — faqat ko'rish rejimi. Barcha ma'lumotlar saqlanib turibdi. Yangi buyurtma yozish uchun to'lovni yangilang.")}</div>`;
+  if (p && p.paid_until && p.paid_until < Date.now() && can('owner', 'admin')) {
+    return `<div class="notice slim red">${icon('triangle-alert', 18)} ${t("Obuna muddati {0} da tugagan. {1} dan keyin dastur faqat ko'rish rejimiga o'tadi.", fmtDate(p.paid_until), fmtDateTime(p.grace_until))}</div>`;
+  }
   const n = can('owner', 'admin') && subscriptionNotice(App.tenant && App.tenant.paid_until);
   return n ? `<div class="notice slim ${n.cls}">${icon('triangle-alert', 18)} ${n.text}</div>` : '';
 }
@@ -223,6 +229,8 @@ async function afterLogin() {
   App.kitchenMode = me.kitchen_mode || 'full';
   App.biz = me.business_type || 'choyxona';
   App.money = me.money || {};
+  App.plan = me.plan || null;
+  App.modulesAll = me.modules || {};
   App.platformSession = !!me.platform_session;
   if (!App.info || App.info.code !== me.tenant.code) await loadInfo(me.tenant.code);
   document.getElementById('app').innerHTML = '';
@@ -257,8 +265,8 @@ Live.on('settings', async () => {
     const changed = JSON.stringify([me.disabled, me.kitchen_mode, me.business_type, me.money]) !== JSON.stringify([App.disabled, App.kitchenMode, App.biz, App.money]);
     App.settings = me.settings; App.disabled = me.disabled || []; App.kitchenMode = me.kitchen_mode; App.user = me.user;
     App.biz = me.business_type || 'choyxona'; App.money = me.money || {};
-    const termChanged = JSON.stringify(me.tenant) !== JSON.stringify(App.tenant);
-    App.tenant = me.tenant;
+    const termChanged = JSON.stringify([me.tenant, me.plan && { ...me.plan, staff_used: 0 }]) !== JSON.stringify([App.tenant, App.plan && { ...App.plan, staff_used: 0 }]);
+    App.tenant = me.tenant; App.plan = me.plan || null;
     await loadInfo(me.tenant.code);
     if (changed || termChanged) { document.getElementById('app').innerHTML = ''; render(); } else updateNav();
   } catch { /* ignore */ }

@@ -29,6 +29,7 @@ const MODULES = {
   reservations: 'Bronlar',
   history: 'Cheklar tarixi',
   audit: 'Amallar tarixi',
+  export: 'Excelga yuklab olish',
 };
 function routeModule(pattern) {
   if (/^\/api\/(kitchen|items\/:id\/(accept|ready))$/.test(pattern)) return 'kitchen';
@@ -38,13 +39,15 @@ function routeModule(pattern) {
   if (/^\/api\/(payroll|my\/payroll)/.test(pattern)) return 'payroll';
   if (/^\/api\/reservations/.test(pattern)) return 'reservations';
   if (pattern === '/api/audit') return 'audit';
+  if (pattern === '/api/checks/export') return 'export';
   if (/^\/api\/checks/.test(pattern)) return 'history';
   return null;
 }
 
 // opts.hub: live-event hub of this choyxona; opts.tokenPrefix marks which choyxona a session token belongs to;
-// opts.tenant(): the choyxona's platform record (code, name, paid_until); opts.file: its database file.
-function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null } = {}) {
+// opts.tenant(): the choyxona's platform record (code, name, paid_until); opts.plan(): its plan (sections, staff limit);
+// opts.file: its database file.
+function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () => null, file = null } = {}) {
   const events = hub;
   // Shared devices (the staff-list screen) get tokens of their own: "d<choyxona>_…".
   const devicePrefix = tokenPrefix.replace(/^t/, 'd');
@@ -233,9 +236,29 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
     return { ok: true };
   }
 
+  // Off = switched off for this business by the platform, or not in its plan.
   function disabledModules() {
     const t = tenant();
-    try { return t && t.disabled_modules ? JSON.parse(t.disabled_modules) : []; } catch { return []; }
+    let off = [];
+    try { off = t && t.disabled_modules ? JSON.parse(t.disabled_modules) : []; } catch { off = []; }
+    const p = plan();
+    if (p) off = [...new Set([...off, ...Object.keys(MODULES).filter((m) => !p.modules.includes(m))])];
+    return off;
+  }
+
+  const staffCount = () => q("SELECT COUNT(*) c FROM users WHERE active = 1 AND role != 'owner'").get().c;
+  // Adding (or switching back on) one more worker must fit the plan; the people already there are never touched.
+  function assertStaffRoom() {
+    const p = plan();
+    if (p && p.max_staff > 0 && staffCount() >= p.max_staff) {
+      throw new HttpError(403, `"${p.name}" tarifida ${p.max_staff} tagacha xodim. Ko'proq xodim uchun tarifni yangilang`);
+    }
+  }
+  function planInfo() {
+    const p = plan();
+    if (!p) return null;
+    return { key: p.key, name: p.name, fee: p.fee, max_staff: p.max_staff, staff_used: staffCount(), modules: p.modules,
+      paid_until: p.paid_until, grace_until: p.grace_until, read_only: p.read_only, is_branch: p.is_branch };
   }
   const moduleOn = (m) => !disabledModules().includes(m);
   // off: dishes are served at once; notify: kitchen sees them but needn't accept; full: accept → ready → waiter.
@@ -264,7 +287,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
     const session = q('SELECT via FROM sessions WHERE token = ?').get(token);
     return { user: publicUser(user), settings: s, modules: MODULES, disabled: disabledModules(), kitchen_mode: kitchenMode(),
       business_type: businessType(), money: moneyAccess(user, s), platform_session: !!(session && session.via === 'platform'),
-      tenant: t && { code: t.code, name: t.name, paid_until: t.paid_until } };
+      tenant: t && { code: t.code, name: t.name, paid_until: t.paid_until }, plan: planInfo() };
   }
 
   function changeOwnPassword({ user, body }) {
@@ -412,6 +435,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
     const role = str(body.role, 'Lavozim', { required: true });
     if (!ROLES.includes(role)) throw new HttpError(400, "Lavozim noto'g'ri");
     if (!canManageRole(user, role)) throw new HttpError(403, `Sizda ${ROLE_NAMES[role]} tayinlash huquqi yo'q`);
+    if (role !== 'owner') assertStaffRoom();
     const name = str(body.name, 'Ism', { required: true, max: 80 });
     // Login and password are only needed for a worker's own phone; on shared devices the PIN is enough.
     let username = str(body.username, 'Login', { max: 40 });
@@ -451,6 +475,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
       throw new HttpError(409, 'Bu login band');
     }
     const active = body.active === undefined ? target.active : body.active ? 1 : 0;
+    if (active && role !== 'owner' && !(target.active && target.role !== 'owner')) assertStaffRoom();
     // left_at stops monthly pay from accruing after the worker is switched off.
     const leftAt = active ? null : target.active ? now() : target.left_at;
     q('UPDATE users SET name = ?, username = ?, role = ?, phone = ?, active = ?, left_at = ? WHERE id = ?').run(
@@ -1617,7 +1642,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, file = null
     return null;
   }
 
-  return { match, guard, authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, ROLES };
+  return { match, guard, authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, planInfo, ROLES };
 }
 
 module.exports = { createApi, MODULES, BUSINESS_TYPES, SHOP_TYPES };

@@ -2,7 +2,7 @@
 /* Platform panel for the site owner: create businesses, give each boss a login, track subscriptions,
    open any business as its boss, restore it from a backup, set the support contact. */
 
-const P = { admin: null, tenants: [], search: '', filter: 'all', modules: {}, types: {} };
+const P = { admin: null, tenants: [], search: '', filter: 'all', modules: {}, types: {}, plans: {}, terms: {} };
 const DAY_MS = 24 * 60 * MIN;
 const TOKEN_KEY = 'cp_ptoken';
 const TYPE_ICONS = { choyxona: 'house', restoran: 'utensils', fastfood: 'sandwich', market: 'shopping-cart', clothing: 'shirt' };
@@ -36,6 +36,9 @@ function isoDate(ts) {
 function dateEndTs(v) { return v ? new Date(`${v}T23:59`).getTime() : null; }
 function daysLeft(t) { return t.paid_until ? Math.floor((t.paid_until - Date.now()) / DAY_MS) : null; }
 function typeName(k) { return P.types[k] || k; }
+const PLAN_KEYS = ['start', 'biznes', 'pro'];
+function planName(k) { return (P.plans[k] || {}).name || k; }
+function staffLimit(n) { return n > 0 ? `${n} tagacha` : 'cheksiz'; }
 
 function credentialsText(t, username, password) {
   return `FLOWI — ${t.name}\n\nKirish manzili: ${siteUrl(t.code)}\nKod: ${t.code}\nLogin: ${username}\nParol: ${password}\n\nBirinchi kirgandan keyin Sozlamalar bo'limida parolni o'zgartiring. Xodimlarni "Xodimlar" bo'limida o'zingiz qo'shasiz.`;
@@ -81,8 +84,11 @@ function tenantCard(t) {
     <div class="tc-rows">
       <span>${icon('link', 15)}</span><span><span class="chip">${esc(t.code)}</span> <a href="${esc(siteUrl(t.code))}" target="_blank" rel="noopener">ochish ${icon('external-link', 13)}</a></span>
       <span>${icon('user-round', 15)}</span><span>${esc(t.contact_name || '—')} ${t.phone ? `· ${esc(t.phone)}` : ''}<br><span class="small muted">Login: ${(t.owners || []).map(esc).join(', ') || '—'}</span></span>
-      <span>${icon('calendar', 15)}</span><span>${due}${t.monthly_fee ? ` · ${money(t.monthly_fee)}/oy` : ''}</span>
-      <span>${icon('layers', 15)}</span><span class="small">Bo'limlar: ${mods - (t.disabled_modules || []).length}/${mods} · Oshxona: ${esc({ full: "to'liq", notify: 'xabar', off: "o'chiq" }[t.kitchen_mode] || t.kitchen_mode)}</span>
+      <span>${icon('star', 15)}</span><span><span class="chip plan-${esc(t.plan_info.key)}">${esc(t.plan_info.name)}</span>${t.is_branch ? ' <span class="chip">Filial</span>' : ''}
+        · <b>${money(t.plan_info.fee)}</b>/oy${t.monthly_fee ? ' <span class="small muted">(maxsus narx)</span>' : ''}
+        ${t.plan_info.max_staff > 0 && !t.error ? `<br><span class="small ${t.staff - (t.owners || []).length >= t.plan_info.max_staff ? 'warn' : 'muted'}">Xodimlar: ${t.staff - (t.owners || []).length}/${t.plan_info.max_staff}</span>` : ''}</span>
+      <span>${icon('calendar', 15)}</span><span>${due}${t.plan_info.read_only ? ' <span class="chip red">Faqat ko\'rish</span>' : ''}</span>
+      <span>${icon('layers', 15)}</span><span class="small">Bo'limlar: ${t.plan_info.modules.filter((m) => !(t.disabled_modules || []).includes(m)).length}/${mods} · Oshxona: ${esc({ full: "to'liq", notify: 'xabar', off: "o'chiq" }[t.kitchen_mode] || t.kitchen_mode)}</span>
       ${t.support && t.support.text ? `<span>${icon('life-buoy', 15)}</span><span class="small">${esc(t.support.text)}</span>` : ''}
     </div>
     ${t.error ? `<p class="small red">${esc(t.error)}</p>` : `<div class="tc-stats">
@@ -106,6 +112,7 @@ function mainHtml() {
   const types = [...new Set(P.tenants.map((t) => t.business_type))];
   return `<header class="ptop">${flowiLogo(22)}<b class="hide-xs">Platforma</b>${P.release ? `<span class="chip">v${esc(P.release)}</span>` : ''}<span class="grow"></span>
       <span class="muted small hide-xs">${esc(P.admin.name)}</span>
+      <button class="btn sm" id="pplans" title="Tariflar va narxlar">${icon('star', 16)} <span class="hide-xs">Tariflar</span></button>
       <button class="icon-btn" id="psettings" title="Yordam kontakti">${icon('life-buoy')}</button>
       <button class="icon-btn" id="pw" title="Parol">${icon('key-round')}</button>
       <button class="icon-btn" id="logout" title="Chiqish">${icon('log-out')}</button></header>
@@ -113,7 +120,7 @@ function mainHtml() {
     ${P.admin.default_password ? `<div class="notice red">${icon('triangle-alert', 18)} Siz standart parol bilan kirdingiz. <a href="#" id="pw2">Hoziroq parolni o'zgartiring</a>.</div>` : ''}
     <div class="kpis">
       ${kpiP('Bizneslar', P.tenants.length, `${active.length} faol`, 'store')}
-      ${kpiP('Oylik tushum (reja)', money(active.reduce((s, t) => s + (t.monthly_fee || 0), 0)), '', 'coins', 'good')}
+      ${kpiP('Oylik tushum (reja)', money(active.reduce((s, t) => s + t.plan_info.fee, 0)), PLAN_KEYS.map((k) => `${planName(k)}: ${active.filter((t) => t.plan_info.key === k).length}`).join(' · '), 'coins', 'good')}
       ${kpiP("To'lov yaqin / o'tgan", due.length, due.map((t) => esc(t.name)).join(', '), 'calendar', due.length ? 'bad' : '')}
       ${kpiP('Bloklangan', P.tenants.length - active.length, '', 'ban')}
     </div>
@@ -134,7 +141,8 @@ function kpiP(label, value, sub, ic, cls = '') {
 function emptyState(ic, text) { return `<div class="empty">${icon(ic, 56)}<div>${text}</div></div>`; }
 
 async function load() {
-  [P.tenants, P.modules, P.types, { release: P.release }] = await Promise.all([GET('/api/platform/tenants'), GET('/api/platform/modules'), GET('/api/platform/types'), GET('/api/platform/release')]);
+  [P.tenants, P.modules, P.types, { release: P.release }, { plans: P.plans, terms: P.terms }] = await Promise.all([GET('/api/platform/tenants'),
+    GET('/api/platform/modules'), GET('/api/platform/types'), GET('/api/platform/release'), GET('/api/platform/plans')]);
 }
 
 // ---------- Forms ----------
@@ -148,9 +156,26 @@ function kitchenModeHtml(mode = 'full') {
   return `<label class="field">Oshxona rejimi<select name="kitchen_mode">${Object.entries(KITCHEN_MODES)
     .map(([k, v]) => `<option value="${k}" ${mode === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>`;
 }
+function planFields(t = {}) {
+  const cur = t.plan || 'biznes';
+  return `<label class="field">Tarif<select name="plan">${PLAN_KEYS.map((k) => `<option value="${k}" ${cur === k ? 'selected' : ''}>${esc(planName(k))} — ${money(P.plans[k].price)}/oy · xodim ${staffLimit(P.plans[k].max_staff)}</option>`).join('')}</select></label>
+    <label class="field">Maxsus oylik narx (0 = tarif narxi)<input type="number" name="monthly_fee" min="0" value="${t.monthly_fee || 0}"></label>
+    <label class="check" style="align-self:end"><input type="checkbox" name="is_branch" ${t.is_branch ? 'checked' : ''}> Qo'shimcha filial (${money(P.terms.branch_price)}/oy)</label>`;
+}
+// Sections outside the chosen plan are shown greyed out: they are closed by the plan itself.
+function syncPlanModules(form) {
+  if (!form.plan) return;
+  const inPlan = (P.plans[form.plan.value] || {}).modules || [];
+  form.querySelectorAll('input[name^="mod_"]').forEach((c) => {
+    const on = inPlan.includes(c.name.slice(4));
+    c.disabled = !on;
+    c.closest('label').classList.toggle('muted', !on);
+    c.closest('label').title = on ? '' : 'Bu tarifga kirmaydi';
+  });
+}
 function modulesHtml(disabled = []) {
-  return `<h3 class="ph3">${icon('layers', 18)} Bo'limlar (paket)</h3>
-    <p class="small muted" style="margin:0 0 8px">Belgini olib tashlasangiz, shu biznesda o'sha bo'lim yopiladi. Sotuv, menyu, kassa va xodimlar doim ishlaydi.</p>
+  return `<h3 class="ph3">${icon('layers', 18)} Bo'limlar</h3>
+    <p class="small muted" style="margin:0 0 8px">Xira bo'limlar tanlangan tarifga kirmaydi. Belgini olib tashlab, tarifdagi bo'limni ham yopish mumkin. Sotuv, menyu, kassa va xodimlar doim ishlaydi.</p>
     <div class="row" style="margin-bottom:8px"><button type="button" class="btn sm" data-mods="all">Hammasi</button><button type="button" class="btn sm" data-mods="none">Faqat asosiy</button></div>
     <div class="form-grid">${Object.entries(P.modules).map(([k, n]) => `<label class="check"><input type="checkbox" name="mod_${k}" ${disabled.includes(k) ? '' : 'checked'}> ${esc(n)}</label>`).join('')}</div>`;
 }
@@ -164,6 +189,7 @@ function bindModules(form) {
   form.querySelectorAll('[data-mods]').forEach((b) => b.onclick = () => {
     form.querySelectorAll('input[name^="mod_"]').forEach((c) => { c.checked = b.dataset.mods === 'all'; });
   });
+  if (form.plan) { form.plan.addEventListener('change', () => syncPlanModules(form)); syncPlanModules(form); }
 }
 function bindTypeDefaults(form) {
   form.business_type.addEventListener('change', () => {
@@ -172,13 +198,15 @@ function bindTypeDefaults(form) {
     form.querySelectorAll('input[name^="mod_"]').forEach((c) => { c.checked = !off.includes(c.name.slice(4)); });
   });
 }
-function readForm(d) {
-  d.disabled_modules = Object.keys(P.modules).filter((k) => !d[`mod_${k}`]);
+function readForm(d, form) {
+  // A greyed-out (not in plan) section keeps the tick it had, so moving to a bigger plan opens it again.
+  d.disabled_modules = Object.keys(P.modules).filter((k) => (form ? !form[`mod_${k}`].checked : !d[`mod_${k}`]));
   for (const k of Object.keys(P.modules)) delete d[`mod_${k}`];
   d.support = { text: d.support_text || '', link: d.support_link || '' };
   delete d.support_text; delete d.support_link;
   d.paid_until = dateEndTs(d.paid_until);
   d.monthly_fee = Number(d.monthly_fee) || 0;
+  d.is_branch = !!d.is_branch;
   return d;
 }
 
@@ -231,6 +259,7 @@ function bind(root) {
   const pw2 = root.querySelector('#pw2');
   if (pw2) pw2.onclick = (e) => { e.preventDefault(); pw(); };
   root.querySelector('#psettings').onclick = platformSettings;
+  root.querySelector('#pplans').onclick = plansDialog;
   const s = root.querySelector('#psearch');
   s.oninput = () => { P.search = s.value; render(); };
   root.querySelectorAll('[data-filter]').forEach((b) => b.onclick = () => { P.filter = b.dataset.filter; render(); });
@@ -250,10 +279,12 @@ function termDialog(t) {
     body: `<p class="lead" id="term-now"></p>
       <div class="term-steps">${TERM_STEPS.map(([k, n]) => `<button type="button" class="btn ${k[0] === '-' ? 'red-text' : ''}" data-step="${k}">${n}</button>`).join('')}</div>
       <label class="field" style="margin-top:12px">Yoki sanani tanlang<input type="date" name="date"></label>
-      <label class="field" style="margin-top:12px">Oylik narx (so'm)<input type="number" name="monthly_fee" min="0" value="${t.monthly_fee || 0}"></label>
-      <p class="small muted" style="margin-top:8px">Qo'shish bugundan yoki joriy muddatdan (qaysi biri keyin bo'lsa) hisoblanadi. Masalan, bonus uchun "+1 hafta".</p>`,
+      <p style="margin-top:12px">Tarif: <b>${esc(t.plan_info.name)}</b> · <b>${money(t.plan_info.fee)}</b>/oy
+        <span class="muted">· 1 yil = ${P.terms.yearly_months} oy narxi: <b>${money(t.plan_info.fee * P.terms.yearly_months)}</b></span></p>
+      <p class="small muted" style="margin-top:8px">Qo'shish bugundan yoki joriy muddatdan (qaysi biri keyin bo'lsa) hisoblanadi. Masalan, bonus uchun "+1 hafta".
+        Muddat tugagach ${P.terms.grace_days} kun ishlayveradi, keyin faqat ko'rish rejimiga o'tadi (ma'lumot o'chmaydi).</p>`,
     actions: [{ label: 'Bekor', onClick: () => {} }, { label: 'Saqlash', cls: 'primary', onClick: async (f) => {
-      await PUT(`/api/platform/tenants/${t.id}`, { paid_until: until, monthly_fee: Number(f.monthly_fee.value) || 0 });
+      await PUT(`/api/platform/tenants/${t.id}`, { paid_until: until });
       toast(until ? `${t.name}: ${fmtDate(until)} gacha` : `${t.name}: muddatsiz`, 'ok'); reload();
     } }],
   });
@@ -326,8 +357,8 @@ function addTenant() {
       <label class="field">Telefon<input name="phone" type="tel" value="+998 "></label>
       <label class="field">Boshliq logini<input name="owner_username" required autocapitalize="none" value="boshliq"></label>
       <label class="field">Boshliq paroli<input name="owner_password" required value="${randomPassword()}"></label>
-      <label class="field">To'langan muddat (gacha)<input type="date" name="paid_until" value="${isoDate(Date.now() + 30 * DAY_MS)}"></label>
-      <label class="field">Oylik narx (so'm)<input type="number" name="monthly_fee" min="0" value="300000"></label>
+      <label class="field">To'langan muddat (gacha) — ${P.terms.trial_days} kun bepul sinov<input type="date" name="paid_until" value="${isoDate(Date.now() + P.terms.trial_days * DAY_MS)}"></label>
+      ${planFields()}
     </div>
     <p class="small muted" id="code-url" style="margin:8px 0 0"></p>
     <label class="check" style="margin-top:12px"><input type="checkbox" name="sample" checked> Namuna ma'lumotlar qo'shilsin (menyu yoki mahsulotlar; boshliq keyin o'zgartiradi)</label>
@@ -336,7 +367,7 @@ function addTenant() {
     ${supportHtml()}
     <label class="field" style="margin-top:12px">Izoh (faqat sizga ko'rinadi)<textarea name="notes" rows="2"></textarea></label>`,
     actions: [{ label: 'Bekor', onClick: () => {} }, { label: 'Yaratish', cls: 'primary', onClick: async (f) => {
-      const d = readForm(formData(f));
+      const d = readForm(formData(f), f);
       d.code = d.code.trim().toLowerCase();
       if (d.phone.trim() === '+998') d.phone = '';
       const t = await POST('/api/platform/tenants', d);
@@ -362,7 +393,7 @@ function editTenant(t) {
       <label class="field">Boshliq ismi<input name="contact_name" value="${esc(t.contact_name || '')}"></label>
       <label class="field">Telefon<input name="phone" value="${esc(t.phone || '')}"></label>
       <label class="field">To'langan muddat (gacha)<input type="date" name="paid_until" value="${t.paid_until ? isoDate(t.paid_until) : ''}"></label>
-      <label class="field">Oylik narx<input type="number" name="monthly_fee" min="0" value="${t.monthly_fee || 0}"></label>
+      ${planFields(t)}
     </div>
     <div style="margin-top:12px">${kitchenModeHtml(t.kitchen_mode)}</div>
     ${modulesHtml(t.disabled_modules)}
@@ -372,7 +403,7 @@ function editTenant(t) {
       Menyu, xodimlar, xonalar va sozlamalarni o'zgartirish uchun kartadagi <b>Kirish</b> tugmasini bosing — biznes boshlig'i ko'radigan ekran ochiladi.</p>`,
     onMount: bindModules,
     actions: [{ label: 'Bekor', onClick: () => {} }, { label: 'Saqlash', cls: 'primary', onClick: async (f) => {
-      await PUT(`/api/platform/tenants/${t.id}`, readForm(formData(f)));
+      await PUT(`/api/platform/tenants/${t.id}`, readForm(formData(f), f));
       toast('Saqlandi', 'ok'); reload();
     } }],
   });
@@ -416,6 +447,49 @@ async function backups(t) {
     if (!(await confirmModal('Zaxiradan tiklash', `"${esc(t.name)}" ${when(x.stamp)} holatiga qaytarilsinmi? Shu vaqtdan keyingi o'zgarishlar alohida faylda saqlanib qoladi.`, 'Tiklash'))) return;
     try { await POST(`/api/platform/tenants/${t.id}/restore`, { stamp: x.stamp, kind: x.kind }); toast('Tiklandi', 'ok'); reload(); } catch (e) { toastError(e); }
   });
+}
+
+// Plans: the platform owner sets names, prices, staff limits and sections; every business follows its plan at once.
+function plansDialog() {
+  const col = (k) => {
+    const p = P.plans[k];
+    return `<div class="plan-col card"><h3 class="ph3">${icon('star', 18)} <span class="chip plan-${k}">${esc(p.name)}</span></h3>
+      <label class="field">Nomi<input name="${k}_name" value="${esc(p.name)}" required maxlength="30"></label>
+      <label class="field">Narx (so'm / oy)<input type="number" name="${k}_price" min="0" value="${p.price}" required></label>
+      <label class="field">Xodimlar soni (0 = cheksiz)<input type="number" name="${k}_max_staff" min="0" value="${p.max_staff}" required></label>
+      <p class="small muted" style="margin:10px 0 6px">Bo'limlar</p>
+      <div class="stack" style="gap:6px">${Object.entries(P.modules).map(([m, n]) => `<label class="check"><input type="checkbox" name="${k}_mod_${m}" ${p.modules.includes(m) ? 'checked' : ''}> ${esc(n)}</label>`).join('')}</div>
+      <p class="small muted" style="margin-top:10px">Yillik: <b data-year="${k}"></b></p></div>`;
+  };
+  const tm = P.terms;
+  const form = openModal({
+    title: `${icon('star')} Tariflar va narxlar`, size: 'wide',
+    body: `<p class="muted" style="margin-top:0">O'zgarishlar barcha bizneslarga darhol qo'llanadi. Maxsus narx qo'yilgan bizneslar o'z narxida qoladi.
+        Tarif pasaysa hech narsa o'chmaydi — faqat yangi xodim qo'shish yoki yopilgan bo'limga kirish to'xtaydi.</p>
+      <div class="plan-cols">${PLAN_KEYS.map(col).join('')}</div>
+      <h3 class="ph3">${icon('sliders-horizontal', 18)} Umumiy shartlar</h3>
+      <div class="form-grid">
+        <label class="field">Qo'shimcha filial narxi (so'm / oy)<input type="number" name="branch_price" min="0" value="${tm.branch_price}" required></label>
+        <label class="field">Yillik to'lov necha oy narxida<input type="number" name="yearly_months" min="1" max="12" value="${tm.yearly_months}" required></label>
+        <label class="field">Muddat tugagach ishlash (kun)<input type="number" name="grace_days" min="0" max="60" value="${tm.grace_days}" required></label>
+        <label class="field">Yangi biznesga bepul sinov (kun)<input type="number" name="trial_days" min="0" max="365" value="${tm.trial_days}" required></label>
+      </div>`,
+    actions: [{ label: 'Bekor', onClick: () => {} }, { label: 'Saqlash', cls: 'primary', icon: 'save', onClick: async (f) => {
+      const plans = Object.fromEntries(PLAN_KEYS.map((k) => [k, {
+        name: f[`${k}_name`].value.trim(), price: Number(f[`${k}_price`].value), max_staff: Number(f[`${k}_max_staff`].value),
+        modules: Object.keys(P.modules).filter((m) => f[`${k}_mod_${m}`].checked),
+      }]));
+      const terms = Object.fromEntries(['branch_price', 'yearly_months', 'grace_days', 'trial_days'].map((n) => [n, Number(f[n].value)]));
+      const r = await PUT('/api/platform/plans', { plans, terms });
+      P.plans = r.plans; P.terms = r.terms;
+      toast('Tariflar saqlandi', 'ok'); reload();
+    } }],
+  });
+  const years = () => PLAN_KEYS.forEach((k) => {
+    form.querySelector(`[data-year="${k}"]`).innerHTML = money((Number(form[`${k}_price`].value) || 0) * (Number(form.yearly_months.value) || 0));
+  });
+  form.addEventListener('input', years);
+  years();
 }
 
 async function platformSettings() {

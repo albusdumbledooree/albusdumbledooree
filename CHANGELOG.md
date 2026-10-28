@@ -2,6 +2,19 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.6.0 — Tariflar
+- Uchta tarif: **Start** (199 000, 5 xodim), **Biznes** (349 000, 15 xodim, moliya, bronlar, Excel, amallar tarixi),
+  **Pro** (599 000, cheksiz xodim). Qo'shimcha filial — 149 000. Yillik to'lov — 10 oy narxida. Yangi biznesga 14 kun bepul sinov.
+- Platformada "Tariflar" oynasi: har bir tarifning nomi, narxi, xodim limiti va bo'limlarini, filial narxini,
+  yillik to'lov oylarini, kechikish va sinov kunlarini o'zingiz o'zgartirasiz — barcha bizneslarga darhol qo'llanadi.
+- Har bir biznesga tarif tanlanadi; kerak bo'lsa maxsus narx yoki "filial" belgisi. Kartada tarif, oylik narx
+  va xodimlar soni (masalan, 4/5); yuqorida oylik tushum tariflar bo'yicha.
+- Boshliqda: Sozlamalar → "Mening tarifim" (tarif, muddat, xodimlar, tarifdagi bo'limlar). Tarifga kirmagan bo'lim
+  bosilsa — tarifni yangilash uchun bog'lanish oynasi.
+- Ma'lumot hech qachon o'chmaydi: tarif pasaysa faqat yangi xodim qo'shish to'xtaydi. Muddat tugagach 3 kun ishlayveradi,
+  keyin "faqat ko'rish" rejimi (hamma narsani ko'rish va Excelga yuklash mumkin); to'lov bo'lishi bilan davom etadi.
+- Avvaldan bor bizneslar "Biznes" tarifiga o'tkazildi (hech narsa yopilmadi).
+
 ## 1.5.3
 - Qaytarildi: "Moliya" bo'limi (Hisobot, Kirim-chiqim, Ish haqi) dizayn yangilanishida tasodifan yo'qolib qolgan edi.
   Endi u yuqori menyuning o'ng chetida "Moliya" yozuvi bilan turadi; telefonda — Sozlamalar sahifasining tepasida.

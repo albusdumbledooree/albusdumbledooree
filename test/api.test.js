@@ -688,3 +688,92 @@ test('a too large request gets a clear 413 answer instead of a dropped connectio
   assert.equal(res.status, 413);
   assert.ok((await res.json()).error);
 });
+
+test('plans: limits, sections, editable prices, view-only after the term — and nothing is ever deleted', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  const plans = (await call('GET', '/api/platform/plans', admin)).data;
+  assert.equal(plans.plans.start.price, 199000);
+  assert.equal(plans.plans.biznes.max_staff, 15);
+  assert.equal(plans.terms.trial_days, 14);
+
+  // A business on Start: 5 workers at most, no cash book, no payroll, no Excel.
+  const c = await call('POST', '/api/platform/tenants', admin, { name: 'Tarif test', code: 'tarif', owner_name: 'E', owner_username: 'ega', owner_password: 'ega12345',
+    plan: 'start', paid_until: Date.now() + 864e5 });
+  assert.equal(c.status, 200, JSON.stringify(c.data));
+  const boss = await login('ega', 'ega12345', 'tarif');
+  const me = (await call('GET', '/api/me', boss)).data;
+  assert.equal(me.plan.key, 'start');
+  assert.equal(me.plan.fee, 199000);
+  assert.ok(me.disabled.includes('finance') && me.disabled.includes('payroll') && me.disabled.includes('export'));
+  assert.equal((await call('GET', '/api/transactions', boss)).status, 403);
+  assert.equal((await call('GET', `/api/reports?from=${Date.now() - 864e5}&to=${Date.now()}`, boss)).status, 200);
+  const ids = [];
+  for (let i = 0; i < 5; i++) {
+    const r = await call('POST', '/api/users', boss, { name: `X${i}`, role: 'waiter', pin: String(1000 + i) });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    ids.push(r.data.id);
+  }
+  const sixth = await call('POST', '/api/users', boss, { name: 'X6', role: 'waiter' });
+  assert.equal(sixth.status, 403);
+  assert.match(sixth.data.error, /5 tagacha/);
+  // Switching one off frees a place; switching it back on is checked the same way.
+  assert.equal((await call('PUT', `/api/users/${ids[0]}`, boss, { active: false })).status, 200);
+  assert.equal((await call('POST', '/api/users', boss, { name: 'X6', role: 'waiter' })).status, 200);
+  assert.equal((await call('PUT', `/api/users/${ids[0]}`, boss, { active: true })).status, 403);
+
+  // The platform owner changes prices and limits; every business follows at once.
+  const edited = JSON.parse(JSON.stringify(plans));
+  edited.plans.start.price = 249000;
+  edited.plans.start.max_staff = 10;
+  edited.plans.start.modules.push('finance');
+  assert.equal((await call('PUT', '/api/platform/plans', admin, edited)).status, 200);
+  const me2 = (await call('GET', '/api/me', boss)).data;
+  assert.equal(me2.plan.fee, 249000);
+  assert.ok(!me2.disabled.includes('finance'));
+  assert.equal((await call('PUT', `/api/users/${ids[0]}`, boss, { active: true })).status, 200);
+  assert.equal((await call('PUT', '/api/platform/plans', admin, { ...edited, terms: { ...edited.terms, yearly_months: 0 } })).status, 400);
+  const bad = JSON.parse(JSON.stringify(edited)); bad.plans.pro.modules = ['nope'];
+  assert.equal((await call('PUT', '/api/platform/plans', admin, bad)).status, 400);
+  assert.equal((await call('PUT', `/api/platform/tenants/${c.data.id}`, admin, { plan: 'gold' })).status, 400);
+
+  // A sale before the term ends.
+  const room = (await call('POST', '/api/rooms', boss, { number: '1', name: 'Xona' })).data;
+  const dish = (await call('POST', '/api/dishes', boss, { name: 'Choy', price: 5000, needs_kitchen: false })).data;
+  const o = (await call('POST', '/api/orders', boss, { room_id: room.id })).data;
+  assert.equal((await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: dish.id, qty: 2 }] })).status, 200);
+
+  // Term over but inside the grace days: still works.
+  const t = (await call('GET', '/api/platform/tenants', admin)).data.find((x) => x.code === 'tarif');
+  assert.equal((await call('PUT', `/api/platform/tenants/${t.id}`, admin, { paid_until: Date.now() - 864e5 })).status, 200);
+  assert.equal((await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: dish.id, qty: 1 }] })).status, 200);
+
+  // After the grace days: view-only. Everything can be read and signed into; nothing new is written; nothing is lost.
+  await call('PUT', `/api/platform/tenants/${t.id}`, admin, { paid_until: Date.now() - 10 * 864e5 });
+  const me3 = (await call('GET', '/api/me', boss)).data;
+  assert.equal(me3.plan.read_only, true);
+  const blocked = await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: dish.id, qty: 1 }] });
+  assert.equal(blocked.status, 402);
+  assert.equal((await call('POST', '/api/orders', boss, { room_id: room.id })).status, 402);
+  const kept = (await call('GET', `/api/orders/${o.id}`, boss)).data;
+  assert.equal(kept.items.reduce((s, i) => s + i.qty, 0), 3);
+  assert.equal((await call('GET', '/api/users', boss)).data.length, 7);
+  await login('ega', 'ega12345', 'tarif');
+
+  // Paid again: everything goes on where it stopped.
+  await call('PUT', `/api/platform/tenants/${t.id}`, admin, { paid_until: Date.now() + 30 * 864e5 });
+  assert.equal((await call('POST', `/api/orders/${o.id}/close`, boss, { paid_cash: kept.total })).status, 200);
+
+  // A lower plan never deletes: down to 3 workers allowed, all 6 stay active, only adding is stopped.
+  edited.plans.start.max_staff = 3;
+  await call('PUT', '/api/platform/plans', admin, edited);
+  assert.equal((await call('GET', '/api/users', boss)).data.filter((u) => u.active).length, 7);
+  assert.equal((await call('POST', '/api/users', boss, { name: 'X7', role: 'waiter' })).status, 403);
+
+  // Branch and own price.
+  await call('PUT', `/api/platform/tenants/${t.id}`, admin, { is_branch: true });
+  assert.equal((await call('GET', '/api/me', boss)).data.plan.fee, plans.terms.branch_price);
+  await call('PUT', `/api/platform/tenants/${t.id}`, admin, { monthly_fee: 99000 });
+  assert.equal((await call('GET', '/api/me', boss)).data.plan.fee, 99000);
+  // Put the default plans back for the other tests.
+  await call('PUT', '/api/platform/plans', admin, plans);
+});

@@ -136,7 +136,7 @@ Views.history = {
           <div class="seg"><button class="${!cancelled ? 'active' : ''}" data-hs="closed">${t('Yopilgan')}</button><button class="${cancelled ? 'active' : ''}" data-hs="cancelled">${t('Bekor qilingan')}</button></div>
           <div class="scan" style="max-width:280px">${icon('search', 18)}<input type="search" id="h-q" placeholder="${esc(t('Chek raqami, xona yoki ofitsant'))}" value="${esc(h.q)}"></div>
           <span class="grow"></span><span class="muted small">${label}</span>
-          <button class="btn" id="hist-export" ${s.count ? '' : 'disabled'}>${icon('file-spreadsheet', 18)} Excel</button></div>
+          ${moduleOn('export') ? `<button class="btn" id="hist-export" ${s.count ? '' : 'disabled'}>${icon('file-spreadsheet', 18)} Excel</button>` : ''}</div>
         <div class="card flush">${d.rows.length ? `<div class="table-wrap"><table class="list">
           <tr><th>#</th><th>${t('Ochildi')} / ${t('Yopildi')}</th><th>${t('Joy')}</th><th>${roleName('waiter')}</th><th class="right">${icon('users', 15)}</th><th>${cancelled ? t('Sabab') : t("To'lov")}</th><th class="right">${t('Jami')}</th></tr>
           ${d.rows.map((o) => `<tr class="clickable ${d.order && d.order.id === o.id ? 'selected' : ''}" data-view="${o.id}"><td><b>${o.id}</b></td>
@@ -180,7 +180,7 @@ Views.history = {
     if (pr) pr.onclick = () => printCheck(d.order.id);
     const rf = root.querySelector('#h-refund');
     if (rf) rf.onclick = () => refundDialog(d.order);
-    root.querySelector('#hist-export').onclick = async () => {
+    (root.querySelector('#hist-export') || {}).onclick = async () => {
       try {
         const res = await fetch(`/api/checks/export?${histQuery()}`, { headers: { Authorization: `Bearer ${App.token}` } });
         if (!res.ok) throw new Error(tServer((await res.json()).error));
@@ -201,12 +201,14 @@ Views.money = {
   on: () => MONEY_PAGES().some(([k]) => viewOn(k)),
   render() {
     return `<div class="page-head"><h1>${t('Moliya')}</h1>${App.settings.finance_lock && App.financeKey ? `<button class="btn sm" id="fin-lock">${icon('lock', 16)} ${t('Qulflash')}</button>` : ''}</div>
-      <div class="money-tiles">${MONEY_PAGES().filter(([k]) => viewOn(k)).map(([k, ic, n, d]) => `<a class="money-tile" href="#/${k}">${icon(ic, 32)}<b>${n}</b><span class="small muted">${d}</span></a>`).join('')}</div>
+      <div class="money-tiles">${MONEY_PAGES().filter(([k]) => viewOn(k)).map(([k, ic, n, d]) => `<a class="money-tile" href="#/${k}">${icon(ic, 32)}<b>${n}</b><span class="small muted">${d}</span></a>`).join('')}
+        ${can('owner') ? MONEY_PAGES().filter(([k]) => planLocked(k)).map(([k, ic, n, d]) => `<button type="button" class="money-tile locked" data-upgrade="${esc(n)}">${icon(ic, 32)}<b>${n} ${icon('lock', 16)}</b><span class="small muted">${d}</span></button>`).join('') : ''}</div>
       <p class="small muted" style="margin-top:14px">${icon('eye-off', 14)} ${t("Bu bo'lim begona ko'zdan uzoqroq turishi uchun menyuning eng chetida.")}${can('owner') ? ` ${t('Kim ko\'rishi va parol: Sozlamalar → Ruxsatlar.')}` : ''}</p>`;
   },
   bind(root) {
     const l = root.querySelector('#fin-lock');
     if (l) l.onclick = () => { App.financeKey = null; toast(t('Qulflandi'), 'ok'); refreshView(); };
+    root.querySelectorAll('[data-upgrade]').forEach((b) => b.onclick = () => upgradeDialog(b.dataset.upgrade));
   },
 };
 
@@ -243,7 +245,7 @@ Views.reports = {
   async load() { const r = periodRange(); return { rep: await GET(`/api/reports?from=${r.from}&to=${r.to}`) }; },
   render({ rep: r }) {
     const s = r.sales;
-    return `<div class="page-head"><a class="btn sm" href="#/money">${icon('arrow-left', 16)}</a><h1>${t('Hisobot')}</h1><button class="btn" id="csv">${icon('file-spreadsheet', 18)} Excel</button></div>
+    return `<div class="page-head"><a class="btn sm" href="#/money">${icon('arrow-left', 16)}</a><h1>${t('Hisobot')}</h1>${moduleOn('export') ? `<button class="btn" id="csv">${icon('file-spreadsheet', 18)} Excel</button>` : ''}</div>
       ${periodPicker()}
       <div class="kpis">
         ${kpi(t('Kirim'), money(r.gross_income), t('{0} chek · o\'rtacha {1}', s.orders, moneyText(s.avg_check)), 'good', 'trending-up')}
@@ -262,7 +264,7 @@ Views.reports = {
   },
   bind(root, { rep: r }) {
     bindPeriod(root);
-    root.querySelector('#csv').onclick = async () => {
+    (root.querySelector('#csv') || {}).onclick = async () => {
       const txs = moduleOn('finance') ? await GET(`/api/transactions?from=${r.from}&to=${r.to}`) : [];
       downloadCsv(`hisobot_${localDay(r.from)}_${localDay(r.to - 1)}.csv`, [
         [t('Hisobot'), `${fmtDate(r.from)} — ${fmtDate(r.to - 1)}`], [],
@@ -623,7 +625,8 @@ Views.staff = {
   async load() { return { users: await GET('/api/users') }; },
   render({ users }) {
     const order = ['owner', 'admin', 'cashier', 'waiter', 'chef'];
-    return `<div class="page-head"><h1>${t('Xodimlar')}</h1><button class="btn primary" id="add">${icon('plus', 18)} ${t('Xodim')}</button></div>
+    const pl = App.plan;
+    return `<div class="page-head"><h1>${t('Xodimlar')}</h1>${pl && pl.max_staff > 0 ? `<span class="chip ${pl.staff_used >= pl.max_staff ? 'red' : ''}" title="${esc(t('Tarif'))}: ${esc(pl.name)}">${icon('users', 14)} ${pl.staff_used}/${pl.max_staff}</span>` : ''}<button class="btn primary" id="add">${icon('plus', 18)} ${t('Xodim')}</button></div>
       <div class="card"><div class="table-wrap"><table>
       ${order.flatMap((role) => users.filter((u) => u.role === role)).map((u) => `<tr style="${u.active ? '' : 'opacity:.5'}" class="${canEditRole(u.role) ? 'clickable' : ''}" data-edit="${u.id}">
         <td><div class="row" style="flex-wrap:nowrap"><span class="avatar ${u.role}">${esc(initials(u.name))}</span><div><b>${esc(u.name)}</b><br><span class="small muted">${icon(ROLE_ICONS[u.role], 13)} ${roleName(u.role)}</span></div></div></td>
@@ -697,6 +700,7 @@ const SETTINGS_TABS = () => [
   ['audit', 'history', t('Amallar tarixi'), ['owner', 'admin'], 'audit'],
   ['backup', 'database', t('Zaxira'), ['owner', 'admin', 'cashier']],
   ['me', 'user', t('Mening sozlamalarim'), ['owner', 'admin', 'cashier', 'waiter', 'chef']],
+  ...(App.plan ? [['plan', 'star', t('Mening tarifim'), ['owner']]] : []),
 ];
 
 Views.settings = {
@@ -1060,6 +1064,36 @@ Views.settings = {
         refreshView();
       } catch (err) { toastError(err); e.target.disabled = false; }
     };
+  },
+
+  // The boss sees the plan, the term and how much of the plan is used; closed parts lead to the support contact.
+  tab_plan() {
+    const p = App.plan;
+    const left = p.paid_until ? Math.floor((p.paid_until - Date.now()) / (24 * 60 * MIN)) : null;
+    const mods = Object.entries(App.modulesAll || {});
+    return `<div class="card plan-card">
+        <div class="row" style="gap:12px;align-items:center"><span class="plan-badge plan-${esc(p.key)}">${icon('star', 26)}</span>
+          <div class="grow"><div class="muted small">${t('Tarif')}</div><h2 style="margin:0">${esc(p.name)}${p.is_branch ? ` <span class="chip">${t('Filial')}</span>` : ''}</h2></div>
+          <div class="right"><div class="muted small">${t('Oylik narx')}</div><b style="font-size:20px">${money(p.fee)}</b></div></div>
+        <div class="kpis" style="margin-top:16px">
+          <div class="kpi"><div class="kpi-ic">${icon('calendar', 22)}</div><div><div class="label">${t("To'langan muddat")}</div>
+            <div class="value">${p.paid_until ? fmtDate(p.paid_until) : '—'}</div>
+            ${left !== null ? `<div class="sub ${left < 0 ? 'red' : left <= 5 ? 'warn' : ''}">${left < 0 ? t("{0} kun o'tdi", -left) : t('{0} kun qoldi', left)}</div>` : ''}</div></div>
+          <div class="kpi"><div class="kpi-ic">${icon('users', 22)}</div><div><div class="label">${t('Xodimlar')}</div>
+            <div class="value">${p.staff_used}${p.max_staff > 0 ? ` / ${p.max_staff}` : ''}</div><div class="sub">${p.max_staff > 0 ? t('tarif limiti') : t('cheksiz')}</div></div></div>
+        </div>
+        ${p.read_only ? `<div class="notice red" style="margin-top:14px">${icon('lock', 18)} ${t("Obuna muddati tugagan — faqat ko'rish rejimi. Barcha ma'lumotlar saqlanib turibdi. Yangi buyurtma yozish uchun to'lovni yangilang.")}</div>` : ''}
+        <h3 style="margin:18px 0 10px">${icon('layers', 18)} ${t("Tarifdagi bo'limlar")}</h3>
+        <div class="plan-mods">${mods.map(([k, n]) => {
+          const on = p.modules.includes(k);
+          return `<${on ? 'div' : 'button type="button"'} class="plan-mod ${on ? 'on' : 'off'}" ${on ? '' : `data-upgrade="${esc(t(n))}"`}>${icon(on ? 'circle-check' : 'lock', 18)} ${esc(t(n))}</${on ? 'div' : 'button'}>`;
+        }).join('')}</div>
+        <p class="small muted" style="margin-top:14px">${icon('info', 14)} ${t("Sotuv, buyurtmalar, oshxona, kassa, menyu va xodimlar barcha tariflarda bor. Tarifni o'zgartirish yoki to'lov uchun:")}</p>
+        ${supportHtml()}
+      </div>`;
+  },
+  bind_plan(root) {
+    root.querySelectorAll('[data-upgrade]').forEach((b) => b.onclick = () => upgradeDialog(b.dataset.upgrade));
   },
 
   tab_me({ pay }) {

@@ -499,6 +499,17 @@
     "Sozlamalarda qo'yilgan kirish paroli": ['Пароль входа из настроек', 'The desktop password set in Settings'],
     "Ish stolida sizning ismingizga parol qo'yilmagan — ismingizni bosgan har kim kira oladi.": ['На рабочем столе у вас нет пароля — любой, кто нажмёт ваше имя, войдёт.', 'Your name on the desktop has no password — anyone who taps it gets in.'],
     "Parol qo'yish": ['Поставить пароль', 'Set a password'],
+    // Plans
+    'Mening tarifim': ['Мой тариф', 'My plan'], 'Tarif': ['Тариф', 'Plan'], 'Filial': ['Филиал', 'Branch'], 'Oylik narx': ['Цена в месяц', 'Monthly price'],
+    "To'langan muddat": ['Оплачено до', 'Paid until'], "{0} kun o'tdi": ['{0} дн. назад', '{0} days ago'], '{0} kun qoldi': ['осталось {0} дн.', '{0} days left'],
+    'tarif limiti': ['лимит тарифа', 'plan limit'], 'cheksiz': ['без ограничений', 'unlimited'], "Tarifdagi bo'limlar": ['Разделы тарифа', 'Sections in the plan'],
+    'Hisobotlar va boshqaruv paneli': ['Отчёты и панель', 'Reports and dashboard'], 'Kirim-chiqim va kassa smenasi': ['Приход-расход и кассовая смена', 'Cash book and shifts'],
+    'Excelga yuklab olish': ['Выгрузка в Excel', 'Excel export'],
+    "Sotuv, buyurtmalar, oshxona, kassa, menyu va xodimlar barcha tariflarda bor. Tarifni o'zgartirish yoki to'lov uchun:": ['Продажи, заказы, кухня, касса, меню и сотрудники есть во всех тарифах. Сменить тариф или оплатить:', 'Sales, orders, kitchen, till, menu and staff are in every plan. To change the plan or pay:'],
+    'Bu imkoniyat sizning "{0}" tarifingizga kirmaydi.': ['Эта возможность не входит в ваш тариф «{0}».', 'This is not part of your "{0}" plan.'],
+    "Tarifni yangilash uchun biz bilan bog'laning. Ma'lumotlaringiz joyida qoladi.": ['Чтобы сменить тариф, свяжитесь с нами. Ваши данные сохранятся.', 'Contact us to upgrade. Your data stays where it is.'],
+    "Obuna muddati tugagan — faqat ko'rish rejimi. Barcha ma'lumotlar saqlanib turibdi. Yangi buyurtma yozish uchun to'lovni yangilang.": ['Подписка закончилась — режим только просмотра. Все данные сохранены. Чтобы принимать заказы, продлите оплату.', 'Subscription ended — view-only mode. All data is kept. Renew the payment to take orders again.'],
+    "Obuna muddati {0} da tugagan. {1} dan keyin dastur faqat ko'rish rejimiga o'tadi.": ['Подписка закончилась {0}. После {1} программа перейдёт в режим только просмотра.', 'The subscription ended on {0}. After {1} the app switches to view-only mode.'],
   };
   for (const [uz, [ru, en]] of Object.entries(T)) {
     I18N.ru[uz] = ru;

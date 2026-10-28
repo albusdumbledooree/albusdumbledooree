@@ -611,6 +611,13 @@ table.att .today { background: var(--primary-soft); }
 .tcard footer .btn { flex: 1 1 0; min-width: 0; padding-left: 8px; padding-right: 8px; overflow: hidden; }
 .term-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .ph3 { display: flex; align-items: center; gap: 6px; margin: 18px 0 6px; }
+.plan-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.plan-cols > .plan-col { padding: 14px; margin: 0; }
+.plan-cols { align-items: start; }
+.plan-col .ph3 { margin-top: 0; }
+.chip.plan-start { background: color-mix(in srgb, #64748b 16%, transparent); color: #475569; }
+.chip.plan-biznes { background: color-mix(in srgb, #2563eb 16%, transparent); color: #1d4ed8; }
+.chip.plan-pro { background: color-mix(in srgb, #9333ea 16%, transparent); color: #7e22ce; }
 @media (max-width: 600px) {
   .ptop { padding: 0 12px; }
   .pmain { padding: 14px 12px; }
@@ -664,3 +671,17 @@ body.kb-open .statusbar, body.kb-open .tabbar { display: none; }
 .kb-toggle.on { background: var(--primary); border-color: var(--primary); color: #fff; }
 .setup .brand select { width: auto; }
 .lock-brand { display: inline-flex; align-items: center; gap: 6px; } .lock-brand small { font-size: 12px; font-weight: 600; }
+
+/* ---------- Plan (tarif) ---------- */
+.plan-card .support { margin-top: 10px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
+.plan-badge { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; color: #fff; background: #2563eb; }
+.plan-badge.plan-start { background: #64748b; }
+.plan-badge.plan-pro { background: #9333ea; }
+.plan-mods { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.plan-mod { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; text-align: left; }
+.plan-mod.on .ic { color: var(--green, #16a34a); }
+.plan-mod.off { color: var(--muted); cursor: pointer; border-style: dashed; }
+.plan-mod.off:hover { border-color: var(--primary); color: var(--text); }
+.money-tile.locked { opacity: .6; cursor: pointer; font: inherit; text-align: left; border-style: dashed; }
+.money-tile.locked:hover { opacity: 1; }
+.check.muted { opacity: .5; }

@@ -80,6 +80,18 @@ const SHOP_WORDS = { 'Menyu': 'Mahsulotlar', 'Taom': 'Mahsulot', 'Yangi taom': '
 function W(s, ...args) { return t(isShop() && SHOP_WORDS[s] ? SHOP_WORDS[s] : s, ...args); }
 
 function moduleOn(m) { return !m || !(App.disabled || []).includes(m); }
+// Closed because the plan does not include it (not switched off by hand): offer the upgrade instead of hiding.
+function planLocked(m) { return !!(App.plan && m && !App.plan.modules.includes(m)); }
+function upgradeDialog(feature) {
+  const s = App.info && App.info.support;
+  openModal({
+    title: `${icon('star')} ${esc(feature)}`,
+    body: `<p class="lead">${t('Bu imkoniyat sizning "{0}" tarifingizga kirmaydi.', esc(App.plan ? App.plan.name : ''))}</p>
+      <p class="muted">${t("Tarifni yangilash uchun biz bilan bog'laning. Ma'lumotlaringiz joyida qoladi.")}</p>
+      ${s && s.text ? `<p style="margin-top:12px">${s.link ? `<a class="btn primary" href="${esc(s.link)}" target="_blank" rel="noopener">${icon('life-buoy', 18)} ${esc(s.text)}</a>` : `<b>${icon('life-buoy', 18)} ${esc(s.text)}</b>`}</p>` : ''}`,
+    actions: [{ label: t('Yopish') }],
+  });
+}
 function can(...roles) { return !!App.user && roles.includes(App.user.role); }
 function initials(name) { return String(name).split(/\s+/).filter(Boolean).slice(-2).map((w) => w[0]).join('').toUpperCase(); }
 // FLOWI wordmark, inline so it takes the text colour (white on the lock screen, navy on cards).

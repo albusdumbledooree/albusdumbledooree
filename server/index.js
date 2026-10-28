@@ -61,6 +61,10 @@ function serveStatic(req, res, pathname) {
   fs.createReadStream(file).pipe(res);
 }
 
+// Signing in and out still work when the term is over, so the boss can see and export the data.
+const READ_ONLY_OK = new Set(['/api/login', '/api/device/register', '/api/device/pin', '/api/logout', '/api/finance/unlock',
+  '/api/me/pin', '/api/me/password', '/api/devices/backup']);
+
 function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '..', 'data') } = {}) {
   const platform = createPlatform(dataDir);
 
@@ -143,6 +147,10 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       const found = api.match(req.method, pathname);
       if (!found) throw new HttpError(404, 'Topilmadi');
       const { route, params } = found;
+      // Term over (after the grace days): everything can still be seen and exported, nothing new is written.
+      if (req.method !== 'GET' && !READ_ONLY_OK.has(route.pattern) && platform.planFor(ctx.row).read_only) {
+        throw new HttpError(402, "Obuna muddati tugagan. Ma'lumotlar saqlanib turibdi — ko'rish mumkin, yangi yozish uchun to'lovni yangilang");
+      }
       let user = null;
       let device = null;
       if (route.roles === 'device') {
