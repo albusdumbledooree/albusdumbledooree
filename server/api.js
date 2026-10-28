@@ -36,7 +36,7 @@ function routeModule(pattern) {
   if (pattern === '/api/dishes/:id/availability') return 'stoplist';
   if (pattern === '/api/reports' || pattern === '/api/dashboard') return 'reports';
   if (/^\/api\/(transactions|shifts)/.test(pattern)) return 'finance';
-  if (/^\/api\/(payroll|my\/payroll)/.test(pattern)) return 'payroll';
+  if (/^\/api\/(payroll|my\/payroll|attendance)/.test(pattern)) return 'payroll';
   if (/^\/api\/reservations/.test(pattern)) return 'reservations';
   if (pattern === '/api/audit') return 'audit';
   if (pattern === '/api/checks/export') return 'export';
@@ -92,6 +92,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     delete out.finance_code_hash;
     out.receipt_logo = out.receipt_logo !== '0';
     out.receipt_logo_id = out.receipt_logo_id ? Number(out.receipt_logo_id) : null;
+    out.staff_meal_price = out.staff_meal_price === 'cost' ? 'cost' : 'menu';
     out.pin_lock_attempts = Number(out.pin_lock_attempts ?? 5);
     out.pin_lock_minutes = Number(out.pin_lock_minutes) || 5;
     try { out.room_types = JSON.parse(out.room_types || '[]'); } catch { out.room_types = []; }
@@ -334,7 +335,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   function updateSettings({ user, body }) {
     const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width',
       'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo',
-      'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', ...OWNER_SETTINGS];
+      'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', ...OWNER_SETTINGS];
     if (user.role !== 'owner' && OWNER_SETTINGS.some((k) => body[k] !== undefined)) throw new HttpError(403, "Moliya huquqlarini faqat boshliq o'zgartiradi");
     const set = q('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     for (const k of allowed) {
@@ -353,6 +354,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       if (k === 'pin_lock_attempts') v = int(v, 'Urinishlar soni', { max: 50 });
       if (k === 'pin_lock_minutes') v = int(v, 'Daqiqalar', { min: 1, max: 1440 });
       if (k === 'room_types') v = JSON.stringify(roomTypesInput(v));
+      if (k === 'staff_meal_price') v = v === 'cost' ? 'cost' : 'menu';
       if (k === 'lock_bg') v = JSON.stringify(lockBgInput(v));
       if (k === 'service_pct') {
         v = Number(v);
@@ -774,6 +776,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       ? Math.round(service_pct * order.guests)
       : Math.round((subtotal * service_pct) / 100);
     const discount = Math.min(overrides.discount ?? order.discount ?? 0, subtotal + service_amount);
+    // A worker's own meal: no service charge.
+    if (overrides.staff) return { subtotal, service_type, service_pct: 0, service_amount: 0, discount: Math.min(discount, subtotal), total: subtotal - Math.min(discount, subtotal) };
     return { subtotal, service_type, service_pct, service_amount, discount, total: subtotal + service_amount - discount };
   }
 
@@ -1062,6 +1066,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   // Takes the payment and closes the check (inside a transaction). serveAll: dishes still in the kitchen count as served.
   function settle(user, o, items, body, serveAll) {
+    if (body.staff_id) return settleOnStaff(user, o, items, body, serveAll);
     // The service charge always comes from the boss's settings; it cannot be changed per check.
     const discount = int(body.discount, 'Chegirma');
     if (discount && !['owner', 'admin', 'cashier'].includes(user.role)) throw new HttpError(403, "Chegirma berish huquqi yo'q");
@@ -1082,6 +1087,40 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const ins = q("INSERT INTO transactions (type, category, amount, method, note, order_id, user_id, created_at) VALUES ('income', 'Savdo', ?, ?, ?, ?, ?, ?)");
     for (const m of METHODS) if (paid[m] > 0) ins.run(paid[m], m, `Chek #${o.id}`, o.id, user.id, ts);
     return { ...t, change };
+  }
+
+  /*
+   * A worker's own meal: the check is closed "on the worker" and the amount is taken from their pay
+   * (menu price or cost, as the boss chose). No money enters the till, so the cash count stays right.
+   */
+  function settleOnStaff(user, o, items, body, serveAll) {
+    if (!['owner', 'admin', 'cashier'].includes(user.role)) throw new HttpError(403, "Xodim hisobiga yopish huquqi yo'q");
+    if (!moduleOn('payroll')) throw new HttpError(403, '"Ish haqi" bo\'limi sizning paketingizda yoqilmagan');
+    const staff = q("SELECT * FROM users WHERE id = ? AND active = 1 AND role != 'owner'").get(int(body.staff_id, 'Xodim', { min: 1 }));
+    if (!staff) throw new HttpError(404, 'Xodim topilmadi');
+    const live = items.filter((i) => i.status !== 'cancelled');
+    let discount = 0;
+    let priceNote = '';
+    if (settings().staff_meal_price === 'cost') {
+      // At cost; a dish with no cost entered counts at its menu price.
+      const cost = live.reduce((s, i) => s + (i.cost > 0 ? i.cost : i.price) * i.qty, 0);
+      discount = Math.max(0, live.reduce((s, i) => s + i.price * i.qty, 0) - cost);
+      priceNote = ' (tannarx)';
+    }
+    const t = totals(o, items, { discount, staff: true });
+    const ts = now();
+    if (serveAll) q("UPDATE order_items SET status = 'served', served_at = ? WHERE order_id = ? AND status IN ('new', 'cooking', 'ready')").run(ts, o.id);
+    q(`UPDATE orders SET status = 'closed', closed_at = ?, cashier_id = ?, subtotal = ?, service_type = ?, service_pct = 0, service_amount = 0,
+      discount = ?, total = ?, paid_cash = 0, paid_card = 0, paid_transfer = 0, paid_staff = ?, staff_id = ?, bill_requested = 0 WHERE id = ?`).run(
+      ts, user.id, t.subtotal, t.service_type, t.discount, t.total, t.total, staff.id, o.id);
+    if (t.total > 0) {
+      const what = live.map((i) => `${i.name} x${i.qty}`).join(', ').slice(0, 150);
+      q("INSERT INTO payroll (user_id, type, amount, method, note, day, transaction_id, created_by, created_at) VALUES (?, 'deduction', ?, 'cash', ?, ?, NULL, ?, ?)")
+        .run(staff.id, t.total, `Ovqat: chek #${o.id}${priceNote} — ${what}`, payroll.today(), user.id, ts);
+    }
+    audit(user, 'staff_meal', `#${o.id} ${staff.name}: ${t.total}`);
+    events.publish('payroll', { type: 'deduction', amount: t.total, name: staff.name }, { userIds: [staff.id] });
+    return { ...t, change: 0, staff: staff.name };
   }
 
   // Counter sale (shops, fast food): goods and payment in one step. Kitchen dishes of a fast food order
@@ -1210,7 +1249,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const sums = q(`SELECT COUNT(*) count, COALESCE(SUM(o.total), 0) total, COALESCE(SUM(o.subtotal), 0) subtotal,
       COALESCE(SUM(o.service_amount), 0) service, COALESCE(SUM(o.discount), 0) discount, COALESCE(SUM(o.guests), 0) guests,
       COALESCE(SUM(o.paid_cash), 0) cash, COALESCE(SUM(o.paid_card), 0) card, COALESCE(SUM(o.paid_transfer), 0) transfer,
-      MIN(o.closed_at) first_at ${CHECK_FROM} WHERE ${where}`).get(...params);
+      COALESCE(SUM(o.paid_staff), 0) staff, MIN(o.closed_at) first_at ${CHECK_FROM} WHERE ${where}`).get(...params);
     return { rows, sums, offset, limit };
   }
 
@@ -1324,6 +1363,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       cash: sum(orders, (o) => o.paid_cash),
       card: sum(orders, (o) => o.paid_card),
       transfer: sum(orders, (o) => o.paid_transfer),
+      staff: sum(orders, (o) => o.paid_staff || 0),
       food_cost: sum(items, (i) => i.cost * i.qty),
     };
     sales.avg_check = sales.orders ? Math.round(sales.total / sales.orders) : 0;
@@ -1499,7 +1539,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   // Unlocking with the finance password gives a short-lived key the browser sends as "X-Finance".
   const financeTokens = new Map();
   const FINANCE_TTL = 15 * MIN;
-  const LOCK_FREE = /^\/api\/(shifts\/(current|open|close)|my\/payroll)$/;
+  const LOCK_FREE = /^\/api\/(shifts\/(current|open|close)|my\/payroll|attendance(\/pay)?)$/;
 
   function guard(route, user, financeKey) {
     const m = route.module;
@@ -1511,6 +1551,28 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const k = financeTokens.get(financeKey || '');
     if (!k || k.user_id !== user.id || k.exp < now()) throw new HttpError(423, "Moliya bo'limi qulflangan. Parolni kiriting");
     k.exp = now() + FINANCE_TTL;
+  }
+
+  // Who came today. Money columns (earned, spent, left to pay) only for those who may pay out: the boss,
+  // and an admin the boss lets into the cash book.
+  const canPayDaily = (user) => user.role === 'owner' || (user.role === 'admin' && moneyAccess(user).finance);
+  function attendanceDay({ user, query }) {
+    const d = payroll.dayView({ query });
+    d.can_pay = canPayDaily(user);
+    if (!d.can_pay) d.staff = d.staff.map(({ id, name, role, status, auto }) => ({ id, name, role, status, auto }));
+    return d;
+  }
+  // A daily worker's pay handed over in the evening (an admin: at most what is left for that day).
+  function payDaily({ user, body }) {
+    if (!canPayDaily(user)) throw new HttpError(403, "Ish haqi berish huquqi yo'q");
+    const uid = int(body.user_id, 'Xodim', { min: 1, required: true });
+    if (user.role !== 'owner') {
+      const row = payroll.dayView({ query: { day: body.day } }).staff.find((r) => r.id === uid);
+      if (!row || int(body.amount, 'Summa', { min: 1, required: true }) > Math.max(0, row.day_due)) {
+        throw new HttpError(403, "Bugungi qoldiqdan ko'p berib bo'lmaydi. Boshliqqa murojaat qiling");
+      }
+    }
+    return payroll.addEntry({ user, body: { ...body, user_id: uid, type: 'payment', note: body.note || 'Kunlik ish haqi' } });
   }
 
   function financeUnlock({ user, body }) {
@@ -1647,6 +1709,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['POST', '/api/payroll/attendance', ['owner'], payroll.setAttendance],
     ['GET', '/api/payroll/users/:id', ['owner'], payroll.userLedger],
     ['GET', '/api/my/payroll', ALL, payroll.myPayroll],
+    ['GET', '/api/attendance', MANAGERS, attendanceDay],
+    ['GET', '/api/staff-list', ['owner', 'admin', 'cashier'], () => q("SELECT id, name, role FROM users WHERE active = 1 AND role != 'owner' ORDER BY name").all()],
+    ['POST', '/api/attendance', MANAGERS, payroll.setAttendance],
+    ['POST', '/api/attendance/pay', MANAGERS, payDaily],
     ['GET', '/api/checks', MONEY, listChecks],
     ['GET', '/api/checks/export', MONEY, exportChecks],
   ].map(([method, pattern, roles, handler]) => {

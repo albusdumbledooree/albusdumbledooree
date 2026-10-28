@@ -323,6 +323,47 @@ function toast(msg, kind = 'info', ms = 4000) {
   document.getElementById('toasts').appendChild(el);
   setTimeout(() => el.remove(), ms);
 }
+/*
+ * "On a worker" payment in the pay dialogs: a worker's own meal is taken from their pay.
+ * staffPayButton() goes among the payment methods, staffPayBox() under them; bindStaffPay() wires both.
+ */
+function canStaffMeal() { return can('owner', 'admin', 'cashier') && moduleOn('payroll'); }
+function staffPayButton() {
+  return canStaffMeal() ? `<button type="button" class="method" data-staff-pay>${icon('users', 26)}${t('Xodim hisobiga')}</button>` : '';
+}
+function staffPayBox() {
+  return canStaffMeal() ? `<div id="staff-box" class="stack" hidden><label class="field">${t('Qaysi xodim?')}<select name="staff_id"><option value="">…</option></select></label>
+    <p class="small muted">${icon('info', 14)} ${App.settings.staff_meal_price === 'cost' ? t('Tannarxda, xizmat haqisiz. Summa xodimning ish haqidan ushlanadi.') : t('Menyu narxida, xizmat haqisiz. Summa xodimning ish haqidan ushlanadi.')}</p></div>` : '';
+}
+function bindStaffPay(form, onChange) {
+  const btn = form.querySelector('[data-staff-pay]');
+  const state = { on: false };
+  if (!btn) return state;
+  const box = form.querySelector('#staff-box');
+  const hide = (on) => {
+    form.querySelectorAll('.pay .form-grid, #pay-change, input[name=discount]').forEach((el) => { (el.closest('label') || el).style.display = on ? 'none' : ''; });
+    box.hidden = !on;
+  };
+  btn.onclick = async () => {
+    state.on = true;
+    form.querySelectorAll('[data-m], [data-staff-pay]').forEach((x) => x.classList.toggle('active', x === btn));
+    form.querySelectorAll('input[name^=paid_]').forEach((i) => { i.value = ''; });
+    hide(true);
+    const sel = form.staff_id;
+    if (sel.options.length <= 1) {
+      try {
+        const list = await GET('/api/staff-list');
+        sel.innerHTML = `<option value="">${t('Xodimni tanlang')}</option>${list.map((u) => `<option value="${u.id}">${esc(u.name)} — ${roleName(u.role)}</option>`).join('')}`;
+      } catch (e) { toastError(e); }
+    }
+    if (onChange) onChange();
+  };
+  form.querySelectorAll('[data-m]').forEach((b) => b.addEventListener('click', () => {
+    state.on = false; btn.classList.remove('active'); hide(false); if (onChange) onChange();
+  }));
+  return state;
+}
+
 function toastError(e) { if (e && e.silent) return; toast(e && e.message ? e.message : String(e), 'error', 6000); }
 
 function closeModal() { document.getElementById('modal-root').innerHTML = ''; }

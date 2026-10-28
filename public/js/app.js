@@ -12,7 +12,7 @@ function navOrder(role) {
     chef: ['kitchen', 'stoplist', 'settings'],
   }[role];
 }
-const CHILD_OF = { room: 'rooms', order: 'rooms', soboy: 'rooms', reports: 'money', finance: 'money', payroll: 'money' };
+const CHILD_OF = { room: 'rooms', order: 'rooms', soboy: 'rooms', reports: 'money', finance: 'money', payroll: 'money', attendance: 'staff' };
 let currentView = null;
 let currentParams = [];
 let currentData = null;

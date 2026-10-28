@@ -1,4 +1,5 @@
 /* FLOWI — light, simple, touch-friendly. Dark theme only when chosen in settings. */
+[hidden] { display: none !important; }
 :root {
   --bg: #e7e9ed;
   --panel: #ffffff;
@@ -685,3 +686,25 @@ body.kb-open .statusbar, body.kb-open .tabbar { display: none; }
 .money-tile.locked { opacity: .6; cursor: pointer; font: inherit; text-align: left; border-style: dashed; }
 .money-tile.locked:hover { opacity: 1; }
 .check.muted { opacity: .5; }
+
+/* ---------- Attendance ---------- */
+.att-cell.rest { background: var(--primary-soft); color: var(--primary); border-color: transparent; }
+.att-cell.sick { background: var(--orange-soft); color: var(--orange); border-color: transparent; }
+.chip.orange { background: var(--orange-soft); color: var(--orange); }
+.att-list { padding: 0; }
+.att-row { display: grid; grid-template-columns: minmax(200px, 1.2fr) auto minmax(260px, 1.3fr); gap: 14px; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.att-row:last-child { border-bottom: 0; }
+.att-who { display: flex; gap: 10px; align-items: center; }
+.att-who > div { display: flex; flex-direction: column; }
+.att-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.att-btn { border: 1px solid var(--line); background: var(--panel); color: var(--muted); font: inherit; font-weight: 700; font-size: 14px; padding: 9px 12px; border-radius: 10px; cursor: pointer; min-height: 42px; }
+.att-btn.on.active { background: var(--green); border-color: var(--green); color: #fff; }
+.att-btn.off.active { background: var(--red); border-color: var(--red); color: #fff; }
+.att-btn.rest.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.att-btn.sick.active { background: var(--orange); border-color: var(--orange); color: #fff; }
+.att-money { display: flex; gap: 10px; align-items: center; justify-content: flex-end; flex-wrap: wrap; text-align: right; }
+.att-money .red { color: var(--red); }
+@media (max-width: 900px) {
+  .att-row { grid-template-columns: 1fr; }
+  .att-money { justify-content: flex-start; text-align: left; }
+}

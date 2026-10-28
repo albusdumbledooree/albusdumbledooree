@@ -122,16 +122,19 @@ function posPayment() {
         <div class="stack">
           <div class="sum-rows num" id="pay-sums"></div>
           ${canDiscount ? `<label class="field">${t('Chegirma')} (${esc(App.settings.currency)})<input type="number" name="discount" min="0" placeholder="0"></label>` : ''}
-          <div class="methods">${['cash', 'card', 'transfer'].map((m) => `<button type="button" class="method" data-m="${m}">${icon(METHOD_ICONS[m], 26)}${methodName(m)}</button>`).join('')}</div>
+          <div class="methods">${['cash', 'card', 'transfer'].map((m) => `<button type="button" class="method" data-m="${m}">${icon(METHOD_ICONS[m], 26)}${methodName(m)}</button>`).join('')}${staffPayButton()}</div>
+          ${staffPayBox()}
           <div class="form-grid" style="grid-template-columns:repeat(3,1fr)">${['cash', 'card', 'transfer'].map((m) => `<label class="field">${methodName(m)}<input type="number" name="paid_${m}" min="0" placeholder="0"></label>`).join('')}</div>
           <div id="pay-change" class="change"></div>
           ${(App.user.perms || {}).print ? `<label class="check"><input type="checkbox" name="print" ${App.biz === 'fastfood' || store('cp_pos_print') !== false ? 'checked' : ''}> ${icon('printer', 18)} ${t('Chekni chop etish')}</label>` : ''}
         </div></div>`,
     actions: [{ label: t('Bekor') }, { label: t("To'lovni yakunlash"), cls: 'ok', icon: 'circle-check', onClick: async (f) => {
       const x = formData(f);
+      if (staffPay.on && !x.staff_id) { toast(t('Xodimni tanlang'), 'warn'); return false; }
       const r = await POST('/api/sales', {
         items: PosCart.lines.map(({ dish_id, qty }) => ({ dish_id, qty })), label: PosCart.label,
-        discount: Number(x.discount) || 0, paid_cash: Number(x.paid_cash) || 0, paid_card: Number(x.paid_card) || 0, paid_transfer: Number(x.paid_transfer) || 0,
+        ...(staffPay.on ? { staff_id: Number(x.staff_id) } : {
+          discount: Number(x.discount) || 0, paid_cash: Number(x.paid_cash) || 0, paid_card: Number(x.paid_card) || 0, paid_transfer: Number(x.paid_transfer) || 0 }),
       });
       if ('print' in x) store('cp_pos_print', !!x.print);
       PosCart.lines = []; PosCart.label = ''; UI.drawer = false;
@@ -149,6 +152,11 @@ function posPayment() {
   });
   const calc = () => {
     const x = formData(form);
+    if (staffPay.on) {
+      form.querySelector('#pay-sums').innerHTML = `<span>${t('Xodim hisobiga')}</span><span class="right">${x.staff_id ? esc(form.staff_id.selectedOptions[0].textContent.split(' — ')[0]) : '—'}</span>
+        <span style="grid-column:1/-1" class="big-total">${money(subtotal)}</span>`;
+      return subtotal;
+    }
     const discount = Math.min(Number(x.discount) || 0, subtotal);
     const total = subtotal - discount;
     const paid = (Number(x.paid_cash) || 0) + (Number(x.paid_card) || 0) + (Number(x.paid_transfer) || 0);
@@ -160,7 +168,10 @@ function posPayment() {
     return total;
   };
   form.addEventListener('input', calc);
+  form.addEventListener('change', calc);
+  const staffPay = bindStaffPay(form, calc);
   form.querySelectorAll('[data-m]').forEach((b) => b.onclick = () => {
+    staffPay.on = false;
     const total = calc();
     form.querySelectorAll('[data-m]').forEach((y) => y.classList.toggle('active', y === b));
     for (const m of ['cash', 'card', 'transfer']) form[`paid_${m}`].value = m === b.dataset.m ? total : '';

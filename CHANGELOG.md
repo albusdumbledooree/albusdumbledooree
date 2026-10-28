@@ -2,6 +2,21 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.8.0 — Davomat, xodim xarajatlari, kunlik to'lov va avans
+- **Davomat** sahifasi (Xodimlar → Davomat, yoki Moliya → Davomat): har bir xodim uchun katta tugmalar —
+  Keldi / Kelmadi / Dam olish / Kasal; kun tanlab o'tgan kunlarni ham to'g'rilash mumkin. Dasturga kirgan xodim o'zi "Keldi" bo'ladi.
+  Boshliq va admin belgilaydi. Ish haqi sahifasidagi oylik jadvalda ham katakni bosib: ✓ → ✕ → D → K → bo'sh.
+- **Kunlik ishchi kechqurun pulini oladi:** Davomatda har kunlik xodim yonida "To'lash 120 000 so'm" — bugun ishlagani
+  minus bugungi xarajatlari (ovqat, ichimlik). Admin faqat shu kungi qoldiqni bera oladi, boshliq istalganini.
+- **Oylik xodimga avans:** Ish haqi sahifasida "Avans" tugmasi (oylikning yarmi taklif qilinadi). 15-sanadan keyin
+  avans berilmagan oylikchilar haqida eslatma chiqadi. Avans va to'lov kassada "Ish haqi" xarajati bo'lib yoziladi.
+- **Xodim xarajati** (ovqat, ichimlik, boshqa) — ish haqidan ushlanadi, jarimadan alohida ko'rinadi.
+- **Kassada "Xodim hisobiga"**: xodim yegan ovqat chekini kassir xodimni tanlab yopadi — summa o'sha xodimning
+  ish haqidan avtomatik ushlanadi, xizmat haqisiz; kassaga naqd tushmaydi, hisobotda alohida ko'rinadi.
+  Narxini boshliq tanlaydi: menyu narxida yoki tannarxda (Sozlamalar → Muassasa → Xodimlar ovqati).
+  Xodim ovqatidan ofitsantga foiz yozilmaydi.
+- Eski ish haqi yozuvlari yangi bazaga o'zgarishsiz ko'chiriladi.
+
 ## 1.7.0 — flowi.uz bosh sahifasi
 - Saytning bosh sahifasi (flowi.uz) endi FLOWI haqida: nima qiladi, qanday ishlaydi (dasturning haqiqiy rasmlari bilan),
   imkoniyatlar, xavfsizlik, kimlar uchun, narxlar, savollar va bog'lanish. O'zbek va rus tilida, telefonga moslashgan.

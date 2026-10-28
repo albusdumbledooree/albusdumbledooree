@@ -194,7 +194,8 @@ Views.history = {
 const MONEY_PAGES = () => [
   ['reports', 'chart-column', t('Hisobot'), t("Kirim, chiqim va foyda — kunlar bo'yicha")],
   ['finance', 'arrow-right-left', t('Kirim-chiqim'), t('Xarajat va boshqa kirimlarni yozish')],
-  ['payroll', 'hand-coins', t('Ish haqi'), t('Maosh, bonus, jarima va davomat')],
+  ['payroll', 'hand-coins', t('Ish haqi'), t('Maosh, avans, xarajat, bonus va jarima')],
+  ['attendance', 'calendar', t('Davomat'), t("Kim keldi, kunlik ish haqini berish")],
 ];
 Views.money = {
   title: () => t('Moliya'), icon: () => 'chart-column', roles: ['owner', 'admin', 'cashier'],
@@ -202,7 +203,7 @@ Views.money = {
   render() {
     return `<div class="page-head"><h1>${t('Moliya')}</h1>${App.settings.finance_lock && App.financeKey ? `<button class="btn sm" id="fin-lock">${icon('lock', 16)} ${t('Qulflash')}</button>` : ''}</div>
       <div class="money-tiles">${MONEY_PAGES().filter(([k]) => viewOn(k)).map(([k, ic, n, d]) => `<a class="money-tile" href="#/${k}">${icon(ic, 32)}<b>${n}</b><span class="small muted">${d}</span></a>`).join('')}
-        ${can('owner') ? MONEY_PAGES().filter(([k]) => planLocked(k)).map(([k, ic, n, d]) => `<button type="button" class="money-tile locked" data-upgrade="${esc(n)}">${icon(ic, 32)}<b>${n} ${icon('lock', 16)}</b><span class="small muted">${d}</span></button>`).join('') : ''}</div>
+        ${can('owner') ? MONEY_PAGES().filter(([k]) => planLocked(Views[k].module)).map(([k, ic, n, d]) => `<button type="button" class="money-tile locked" data-upgrade="${esc(n)}">${icon(ic, 32)}<b>${n} ${icon('lock', 16)}</b><span class="small muted">${d}</span></button>`).join('') : ''}</div>
       <p class="small muted" style="margin-top:14px">${icon('eye-off', 14)} ${t("Bu bo'lim begona ko'zdan uzoqroq turishi uchun menyuning eng chetida.")}${can('owner') ? ` ${t('Kim ko\'rishi va parol: Sozlamalar → Ruxsatlar.')}` : ''}</p>`;
   },
   bind(root) {
@@ -333,7 +334,13 @@ Views.finance = {
 // ---------- Payroll (boss only) ----------
 const MONTHS = () => [t('Yanvar'), t('Fevral'), t('Mart'), t('Aprel'), t('May'), t('Iyun'), t('Iyul'), t('Avgust'), t('Sentabr'), t('Oktabr'), t('Noyabr'), t('Dekabr')];
 const PAY_TYPES = () => ({ monthly: t('Oylik'), daily: t('Kunlik'), none: t('Faqat foiz') });
-const ENTRY_TYPES = () => ({ payment: [t("To'lov"), 'served', 'banknote'], bonus: [t('Bonus'), 'ready', 'gift'], fine: [t('Jarima'), 'red', 'triangle-alert'] });
+const ENTRY_TYPES = () => ({ payment: [t("To'lov"), 'served', 'banknote'], advance: [t('Avans'), 'served', 'wallet'], bonus: [t('Bonus'), 'ready', 'gift'],
+  fine: [t('Jarima'), 'red', 'triangle-alert'], deduction: [t('Xodim xarajati'), 'red', 'utensils'] });
+const EXPENSE_KINDS = () => [['Ovqat', t('Ovqat')], ['Ichimlik', t('Ichimlik')], ['Boshqa', t('Boshqa')]];
+// Attendance marks: present / absent / day off / sick; the boss taps a cell to go to the next one.
+const ATT = () => ({ present: [t('Keldi'), '✓', 'on'], absent: [t('Kelmadi'), '✕', 'off'], dayoff: [t('Dam olish'), 'D', 'rest'], sick: [t('Kasal'), 'K', 'sick'] });
+const ATT_NEXT = { '': 'present', present: 'absent', absent: 'dayoff', dayoff: 'sick', sick: 'clear' };
+const attStatus = (src) => (!src ? '' : src === 'auto' || src === 'manual' ? 'present' : src);
 UI.payMonth = UI.payMonth || localDay().slice(0, 7);
 function monthTitle(m) { const [y, mm] = m.split('-').map(Number); return `${MONTHS()[mm - 1]} ${y}`; }
 function shiftMonth(m, n) { const [y, mm] = m.split('-').map(Number); const d = new Date(y, mm - 1 + n, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; }
@@ -344,7 +351,7 @@ function rateText(r) {
 }
 function balanceHtml(b) {
   if (b > 0) return `<b style="color:var(--orange)">${t('Berish kerak')}: ${money(b)}</b>`;
-  if (b < 0) return `<b style="color:var(--blue)">${t('Avans')}: ${money(-b)}</b>`;
+  if (b < 0) return `<b style="color:var(--blue)">${t("Ortiqcha berilgan")}: ${money(-b)}</b>`;
   return `<span class="chip green">${t('Teng')}</span>`;
 }
 
@@ -354,36 +361,42 @@ Views.payroll = {
   render(d) {
     const tt = d.totals;
     const att = new Map(d.attendance.map((a) => [`${a.user_id}|${a.day}`, a.source]));
+    const noAdvance = d.staff.filter((r) => r.advance_missing);
     return `<div class="page-head"><a class="btn sm" href="#/money">${icon('arrow-left', 16)}</a><h1>${t('Ish haqi')}</h1>
+      <a class="btn" href="#/attendance">${icon('calendar', 18)} ${t('Bugungi davomat')}</a>
       <button class="icon-btn" data-month="-1">${icon('chevron-left')}</button><b>${monthTitle(d.month)}</b><button class="icon-btn" data-month="1">${icon('chevron-right')}</button></div>
+      ${noAdvance.length ? `<div class="notice">${icon('wallet', 18)} <span>${t("Avans kuni o'tdi — hali avans berilmagan")}: ${noAdvance.map((r) => `<a href="#" data-adv="${r.id}"><b>${esc(r.name)}</b></a>`).join(', ')}</span></div>` : ''}
       <div class="kpis">
         ${kpi(t('Hisoblangan'), money(tt.accrued), '', '', 'hand-coins')}
         ${kpi(t('Berilgan'), money(tt.paid), '', '', 'banknote')}
-        ${kpi(t('Bonus / jarima'), `${money(tt.bonus)} / ${money(tt.fine)}`, '', '', 'gift')}
+        ${kpi(t('Xarajat / jarima'), `${money(tt.deduction)} / ${money(tt.fine)}`, tt.bonus ? `${t('Bonus')}: ${money(tt.bonus)}` : '', '', 'utensils')}
         ${kpi(t('Choyxona qarzi'), money(tt.owed), t('xodimlarga berish kerak'), tt.owed ? 'warn' : 'good', 'wallet')}
       </div>
       <div class="card"><div class="card-head"><h2>${t('Xodimlar')}</h2></div>
       ${d.staff.length ? `<div class="table-wrap"><table>
-        <tr><th>${t('Xodim')}</th><th>${t('Maosh')}</th><th class="right">${t('Kun')}</th><th class="right">${t('Hisoblangan')}</th><th class="right">${t('Berilgan')}</th><th>${t('Holat')}</th><th></th></tr>
+        <tr><th>${t('Xodim')}</th><th>${t('Maosh')}</th><th class="right">${t('Kun')}</th><th class="right">${t('Hisoblangan')}</th><th class="right">${t('Xarajat')}</th><th class="right">${t('Berilgan')}</th><th>${t('Holat')}</th><th></th></tr>
         ${d.staff.map((r) => `<tr style="${r.active ? '' : 'opacity:.6'}">
           <td><div class="row" style="flex-wrap:nowrap"><span class="avatar ${r.role}">${esc(initials(r.name))}</span><div><b>${esc(r.name)}</b><br><span class="small muted">${roleName(r.role)}</span></div></div></td>
           <td class="small">${rateText(r.rate)}</td><td class="right">${r.days_worked}</td>
           <td class="right num">${money(r.accrued)}${r.bonus || r.fine ? `<br><span class="small muted">+${num(r.bonus)} / −${num(r.fine)}</span>` : ''}</td>
-          <td class="right num">${r.paid ? money(r.paid) : '—'}</td><td>${balanceHtml(r.balance)}</td>
+          <td class="right num">${r.deduction ? `−${money(r.deduction)}` : '—'}</td>
+          <td class="right num">${r.paid ? money(r.paid) : '—'}${r.advance ? `<br><span class="small muted">${t('avans')} ${num(r.advance)}</span>` : ''}</td><td>${balanceHtml(r.balance)}</td>
           <td class="actions"><button class="btn sm primary" data-pay="${r.id}">${icon('banknote', 16)} ${t("To'lash")}</button>
+            ${r.rate && r.rate.pay_type === 'monthly' ? `<button class="btn sm" data-adv="${r.id}">${icon('wallet', 16)} ${t('Avans')}</button>` : ''}
+            <button class="icon-btn" data-ded="${r.id}" title="${esc(t('Xodim xarajati'))}">${icon('utensils', 18)}</button>
             <button class="icon-btn" data-bonus="${r.id}" title="${esc(t('Bonus'))}">${icon('gift', 18)}</button>
             <button class="icon-btn" data-fine="${r.id}" title="${esc(t('Jarima'))}">${icon('triangle-alert', 18)}</button>
             <button class="icon-btn" data-rate="${r.id}" title="${esc(t('Maosh'))}">${icon('sliders-horizontal', 18)}</button>
             <button class="icon-btn" data-hist="${r.id}" title="${esc(t('Tarix'))}">${icon('history', 18)}</button></td></tr>`).join('')}
       </table></div>` : emptyState('users', t("Xodimlar yo'q"))}</div>
-      <div class="card"><div class="card-head"><h2>${t('Davomat')}</h2><span class="small muted">${t('Tizimga kirgan kun o\'zi belgilanadi. Bosib o\'zgartiring.')}</span></div>
+      <div class="card"><div class="card-head"><h2>${t('Davomat')}</h2><span class="small muted">${t("Dasturga kirgan kun o'zi belgilanadi. Katakni bosing: ✓ keldi → ✕ kelmadi → D dam olish → K kasal → bo'sh.")}</span></div>
         <div class="table-wrap"><table class="att">
           <tr><th>${t('Xodim')}</th>${d.days.map((day) => `<th class="c ${day === d.today ? 'today' : ''}">${Number(day.slice(8))}</th>`).join('')}<th class="right">${t('Jami')}</th></tr>
           ${d.staff.filter((r) => r.active).map((r) => `<tr><td><b>${esc(r.name)}</b></td>${d.days.map((day) => {
-            const src = att.get(`${r.id}|${day}`);
-            const on = src && src !== 'absent';
-            return `<td class="c ${day === d.today ? 'today' : ''}"><button class="att-cell ${on ? 'on' : src === 'absent' ? 'off' : ''}" ${day > d.today ? 'disabled' : ''}
-              data-att="${r.id}" data-day="${day}" data-on="${on ? 1 : 0}" title="${day}">${on ? '✓' : src === 'absent' ? '✕' : ''}</button></td>`;
+            const st = attStatus(att.get(`${r.id}|${day}`));
+            const a = ATT()[st];
+            return `<td class="c ${day === d.today ? 'today' : ''}"><button class="att-cell ${a ? a[2] : ''}" ${day > d.today ? 'disabled' : ''}
+              data-att="${r.id}" data-day="${day}" data-st="${st}" title="${day}${a ? ` · ${a[0]}` : ''}">${a ? a[1] : ''}</button></td>`;
           }).join('')}<td class="right"><b>${r.days_worked}</b></td></tr>`).join('')}
         </table></div></div>`;
   },
@@ -391,11 +404,13 @@ Views.payroll = {
     const byId = (id) => d.staff.find((r) => r.id === Number(id));
     root.querySelectorAll('[data-month]').forEach((b) => b.onclick = () => { UI.payMonth = shiftMonth(UI.payMonth, Number(b.dataset.month)); refreshView(); });
     root.querySelectorAll('[data-att]').forEach((b) => b.onclick = async () => {
-      try { await POST('/api/payroll/attendance', { user_id: Number(b.dataset.att), day: b.dataset.day, present: b.dataset.on !== '1' }); refreshView(); } catch (e) { toastError(e); }
+      try { await POST('/api/attendance', { user_id: Number(b.dataset.att), day: b.dataset.day, status: ATT_NEXT[b.dataset.st] }); refreshView(); } catch (e) { toastError(e); }
     });
     root.querySelectorAll('[data-pay]').forEach((b) => b.onclick = () => payEntry(byId(b.dataset.pay), 'payment'));
     root.querySelectorAll('[data-bonus]').forEach((b) => b.onclick = () => payEntry(byId(b.dataset.bonus), 'bonus'));
     root.querySelectorAll('[data-fine]').forEach((b) => b.onclick = () => payEntry(byId(b.dataset.fine), 'fine'));
+    root.querySelectorAll('[data-adv]').forEach((b) => b.onclick = (e) => { e.preventDefault(); payEntry(byId(b.dataset.adv), 'advance'); });
+    root.querySelectorAll('[data-ded]').forEach((b) => b.onclick = () => payEntry(byId(b.dataset.ded), 'deduction'));
     root.querySelectorAll('[data-rate]').forEach((b) => b.onclick = () => payRate(byId(b.dataset.rate)));
     root.querySelectorAll('[data-hist]').forEach((b) => b.onclick = () => payHistory(byId(b.dataset.hist)));
   },
@@ -408,12 +423,15 @@ function payEntry(r, type) {
     title: `${icon(ic)} ${esc(r.name)} — ${name}`,
     body: `${type === 'payment' ? `<p>${balanceHtml(r.balance)}</p>` : ''}
       <div class="form-grid">
-        <label class="field">${t('Summa')}<input type="number" name="amount" min="1" required value="${type === 'payment' && r.balance > 0 ? r.balance : ''}"></label>
-        ${type === 'payment' ? `<label class="field">${t("To'lov turi")}<select name="method">${['cash', 'card', 'transfer'].map((m) => `<option value="${m}">${methodName(m)}</option>`).join('')}</select></label>` : ''}
+        ${type === 'deduction' ? `<label class="field">${t('Nima uchun')}<select name="kind">${EXPENSE_KINDS().map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select></label>` : ''}
+        <label class="field">${t('Summa')}<input type="number" name="amount" min="1" required value="${type === 'payment' && r.balance > 0 ? r.balance
+          : type === 'advance' && r.rate && r.rate.pay_type === 'monthly' ? Math.round(r.rate.amount / 2) : ''}"></label>
+        ${type === 'payment' || type === 'advance' ? `<label class="field">${t("To'lov turi")}<select name="method">${['cash', 'card', 'transfer'].map((m) => `<option value="${m}">${methodName(m)}</option>`).join('')}</select></label>` : ''}
         <label class="field">${t('Sana')}<input type="date" name="day" value="${today}" max="${today}"></label></div>
       <label class="field" style="margin-top:12px">${type === 'fine' ? t('Sabab (majburiy)') : t('Izoh')}<input name="note" ${type === 'fine' ? 'required' : ''}></label>
-      ${type === 'payment' ? `<p class="small muted" style="margin-top:10px">${t("To'lov kassada \"Ish haqi\" xarajati bo'lib yoziladi.")}</p>` : ''}`,
-    actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: type === 'fine' ? 'danger' : 'primary', onClick: async (f) => {
+      ${type === 'payment' || type === 'advance' ? `<p class="small muted" style="margin-top:10px">${t("To'lov kassada \"Ish haqi\" xarajati bo'lib yoziladi.")}</p>` : ''}
+      ${type === 'deduction' ? `<p class="small muted" style="margin-top:10px">${t("Summa xodimning ish haqidan ushlanadi. Choyxonada yegan ovqatni kassada \"Xodim hisobiga\" bilan yopsangiz, o'zi yoziladi.")}</p>` : ''}`,
+    actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: type === 'fine' || type === 'deduction' ? 'danger' : 'primary', onClick: async (f) => {
       const x = formData(f);
       if (!x.amount) { toast(t('Summani kiriting'), 'warn'); return false; }
       await POST('/api/payroll/entries', { ...x, user_id: r.id, type, amount: Number(x.amount) });
@@ -460,6 +478,71 @@ async function payHistory(r) {
     }),
   });
 }
+
+// ---------- Attendance: who came today; daily workers are paid in the evening ----------
+UI.attDay = UI.attDay || localDay();
+Views.attendance = {
+  title: () => t('Davomat'), icon: () => 'calendar', roles: ['owner', 'admin'], refreshOn: ['payroll', 'finance'], module: 'payroll',
+  async load() { return GET(`/api/attendance?day=${UI.attDay}`); },
+  render(d) {
+    const A = ATT();
+    const c = d.counts;
+    const dayLabel = d.day === d.today ? t('Bugun') : fmtDate(new Date(`${d.day}T12:00`).getTime());
+    const row = (r) => {
+      const daily = r.rate && r.rate.pay_type === 'daily';
+      return `<div class="att-row">
+        <div class="att-who"><span class="avatar ${r.role}">${esc(initials(r.name))}</span><div><b>${esc(r.name)}</b>
+          <span class="small muted">${roleName(r.role)}${d.can_pay && r.rate ? ` · ${rateText(r.rate)}` : ''}${r.auto ? ` · ${t('dasturga kirgan')}` : ''}</span></div></div>
+        <div class="att-btns">${Object.entries(A).map(([k, [n, , cls]]) => `<button class="att-btn ${cls} ${r.status === k ? 'active' : ''}" data-set="${r.id}" data-st="${k}">${n}</button>`).join('')}</div>
+        ${d.can_pay ? `<div class="att-money">
+          ${daily ? `<span class="small muted">${t('Ishladi')} <b>${num(r.earned)}</b>${r.spent ? ` · ${t('xarajat')} <b class="red">−${num(r.spent)}</b>` : ''}${r.paid ? ` · ${t('berildi')} <b>${num(r.paid)}</b>` : ''}</span>
+            ${r.day_due > 0 ? `<button class="btn ok" data-daypay="${r.id}">${icon('banknote', 18)} ${t("To'lash")} ${money(r.day_due)}</button>`
+              : r.earned ? `<span class="chip green">${icon('check', 14)} ${t("To'langan")}</span>` : ''}`
+            : `<span class="small muted">${t('Oy bo\'yicha')}:</span> ${balanceHtml(r.balance)}${r.spent ? ` <span class="small muted">· ${t('bugun xarajat')} −${num(r.spent)}</span>` : ''}`}
+        </div>` : ''}
+      </div>`;
+    };
+    return `<div class="page-head"><a class="btn sm" href="${can('owner') ? '#/payroll' : '#/staff'}">${icon('arrow-left', 16)}</a><h1>${t('Davomat')}</h1>
+        <button class="icon-btn" data-day="-1">${icon('chevron-left')}</button><b>${esc(dayLabel)}</b>
+        <button class="icon-btn" data-day="1" ${d.day >= d.today ? 'disabled' : ''}>${icon('chevron-right')}</button></div>
+      <div class="row" style="gap:8px;margin-bottom:14px">
+        <span class="chip green">${A.present[0]}: ${c.present}</span><span class="chip red">${A.absent[0]}: ${c.absent}</span>
+        <span class="chip">${A.dayoff[0]}: ${c.dayoff}</span><span class="chip">${A.sick[0]}: ${c.sick}</span>
+        ${c.unmarked ? `<span class="chip orange">${t('Belgilanmagan')}: ${c.unmarked}</span>` : ''}</div>
+      ${d.staff.length ? `<div class="card att-list">${d.staff.map(row).join('')}</div>` : emptyState('users', t("Xodimlar yo'q"))}
+      <p class="small muted" style="margin-top:12px">${icon('info', 14)} ${t("Dasturga kirgan xodim o'zi \"Keldi\" bo'ladi. Kunlik maoshli xodim kechqurun \"To'lash\" bilan pulini oladi: ishlagan kuni − shu kungi xarajatlari (ovqat, ichimlik).")}</p>`;
+  },
+  bind(root, d) {
+    root.querySelectorAll('[data-day]').forEach((b) => b.onclick = () => {
+      const x = new Date(`${UI.attDay}T12:00`); x.setDate(x.getDate() + Number(b.dataset.day));
+      UI.attDay = [localDay(x.getTime()), d.today].sort()[0]; refreshView();
+    });
+    root.querySelectorAll('[data-set]').forEach((b) => b.onclick = async () => {
+      const r = d.staff.find((x) => x.id === Number(b.dataset.set));
+      const status = r.status === b.dataset.st ? 'clear' : b.dataset.st;
+      try { await POST('/api/attendance', { user_id: r.id, day: d.day, status }); refreshView(); } catch (e) { toastError(e); }
+    });
+    root.querySelectorAll('[data-daypay]').forEach((b) => b.onclick = () => {
+      const r = d.staff.find((x) => x.id === Number(b.dataset.daypay));
+      openModal({
+        title: `${icon('banknote')} ${esc(r.name)} — ${t('kunlik ish haqi')}`,
+        body: `<div class="sum-rows num"><span>${t('Ishladi')}</span><span class="right">${money(r.earned + r.bonus)}</span>
+            ${r.spent ? `<span>${t('Xarajatlari (ovqat, ichimlik)')}</span><span class="right">−${money(r.spent)}</span>` : ''}
+            ${r.fine ? `<span>${t('Jarima')}</span><span class="right">−${money(r.fine)}</span>` : ''}
+            ${r.paid ? `<span>${t('Berilgan')}</span><span class="right">−${money(r.paid)}</span>` : ''}
+            <span style="grid-column:1/-1" class="big-total">${money(r.day_due)}</span></div>
+          <div class="form-grid" style="margin-top:12px"><label class="field">${t('Summa')}<input type="number" name="amount" min="1" value="${r.day_due}"></label>
+            <label class="field">${t("To'lov turi")}<select name="method">${['cash', 'card', 'transfer'].map((m) => `<option value="${m}">${methodName(m)}</option>`).join('')}</select></label></div>
+          <p class="small muted" style="margin-top:10px">${t("To'lov kassada \"Ish haqi\" xarajati bo'lib yoziladi.")}</p>`,
+        actions: [{ label: t('Bekor') }, { label: t("To'lash"), cls: 'ok', icon: 'banknote', onClick: async (f) => {
+          const x = formData(f);
+          await POST('/api/attendance/pay', { user_id: r.id, day: d.day, amount: Number(x.amount), method: x.method });
+          toast(t('Saqlandi'), 'ok'); refreshView();
+        } }],
+      });
+    });
+  },
+};
 
 // ---------- Reservations ----------
 Views.reservations = {
@@ -626,7 +709,7 @@ Views.staff = {
   render({ users }) {
     const order = ['owner', 'admin', 'cashier', 'waiter', 'chef'];
     const pl = App.plan;
-    return `<div class="page-head"><h1>${t('Xodimlar')}</h1>${pl && pl.max_staff > 0 ? `<span class="chip ${pl.staff_used >= pl.max_staff ? 'red' : ''}" title="${esc(t('Tarif'))}: ${esc(pl.name)}">${icon('users', 14)} ${pl.staff_used}/${pl.max_staff}</span>` : ''}<button class="btn primary" id="add">${icon('plus', 18)} ${t('Xodim')}</button></div>
+    return `<div class="page-head"><h1>${t('Xodimlar')}</h1>${viewOn('attendance') ? `<a class="btn" href="#/attendance">${icon('calendar', 18)} ${t('Davomat')}</a>` : ''}${pl && pl.max_staff > 0 ? `<span class="chip ${pl.staff_used >= pl.max_staff ? 'red' : ''}" title="${esc(t('Tarif'))}: ${esc(pl.name)}">${icon('users', 14)} ${pl.staff_used}/${pl.max_staff}</span>` : ''}<button class="btn primary" id="add">${icon('plus', 18)} ${t('Xodim')}</button></div>
       <div class="card"><div class="table-wrap"><table>
       ${order.flatMap((role) => users.filter((u) => u.role === role)).map((u) => `<tr style="${u.active ? '' : 'opacity:.5'}" class="${canEditRole(u.role) ? 'clickable' : ''}" data-edit="${u.id}">
         <td><div class="row" style="flex-wrap:nowrap"><span class="avatar ${u.role}">${esc(initials(u.name))}</span><div><b>${esc(u.name)}</b><br><span class="small muted">${icon(ROLE_ICONS[u.role], 13)} ${roleName(u.role)}</span></div></div></td>
@@ -749,6 +832,10 @@ Views.settings = {
       <div class="form-grid">
         <label class="field">${t('Chek ostidagi matn')}<input name="receipt_footer" value="${esc(s.receipt_footer)}"></label>
         <label class="field">${t('Printer kengligi')}<select name="receipt_width">${['80', '58'].map((w) => `<option value="${w}" ${String(s.receipt_width || '80') === w ? 'selected' : ''}>${w} mm</option>`).join('')}</select></label></div>
+      ${moduleOn('payroll') ? `<h3 style="margin:18px 0 10px">${icon('utensils', 18)} ${t('Xodimlar ovqati')}</h3>
+      <div class="form-grid"><label class="field">${t('Kassada "Xodim hisobiga" yopilgan chek ish haqidan qaysi narxda ushlanadi')}<select name="staff_meal_price">
+        <option value="menu" ${s.staff_meal_price !== 'cost' ? 'selected' : ''}>${t('Menyu narxida')}</option>
+        <option value="cost" ${s.staff_meal_price === 'cost' ? 'selected' : ''}>${t('Tannarxda (taomga kiritilgan tannarx)')}</option></select></label></div>` : ''}
       <h3 style="margin:18px 0 10px">${icon('list', 18)} ${t('Kategoriyalar')}</h3>
       <div class="form-grid">
         <label class="field">${t('Xarajat kategoriyalari (har biri yangi qatorda)')}<textarea name="expense_categories" rows="6">${esc(s.expense_categories.join('\n'))}</textarea></label>

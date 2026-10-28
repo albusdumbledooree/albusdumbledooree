@@ -839,3 +839,85 @@ test('front page tells about FLOWI; the program opens only from a business link'
   assert.ok(info.plans[0].price > 0 && Array.isArray(info.plans[0].modules));
   assert.equal(info.tenants, undefined);
 });
+
+test('attendance, worker meals taken from pay, daily pay in the evening, advance', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  assert.equal((await call('POST', '/api/platform/tenants', admin, { name: 'Maosh', code: 'maosh', owner_name: 'E', owner_username: 'ega', owner_password: 'ega12345', plan: 'pro', kitchen_mode: 'off' })).status, 200);
+  const boss = await login('ega', 'ega12345', 'maosh');
+  const ali = (await call('POST', '/api/users', boss, { name: 'Ali', role: 'waiter', pin: '1111' })).data;
+  const vali = (await call('POST', '/api/users', boss, { name: 'Vali', role: 'chef', pin: '2222' })).data;
+  const adm = (await call('POST', '/api/users', boss, { name: 'Admin', username: 'adm', password: 'adm1', role: 'admin' })).data;
+  const kas = (await call('POST', '/api/users', boss, { name: 'Kassir', username: 'kas', password: 'kas1', role: 'cashier' })).data;
+  const day = new Date(); const today = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+  await call('PUT', `/api/payroll/rates/${ali.id}`, boss, { pay_type: 'daily', amount: 150000, from_day: '2020-01-01' });
+  await call('PUT', `/api/payroll/rates/${vali.id}`, boss, { pay_type: 'monthly', amount: 4000000, from_day: '2020-01-01' });
+
+  // Attendance: came / day off; the admin can mark too, the cashier cannot.
+  const admT = await login('adm', 'adm1', 'maosh');
+  assert.equal((await call('POST', '/api/attendance', admT, { user_id: ali.id, day: today, status: 'present' })).status, 200);
+  assert.equal((await call('POST', '/api/attendance', boss, { user_id: vali.id, day: today, status: 'dayoff' })).status, 200);
+  assert.equal((await call('POST', '/api/attendance', boss, { user_id: vali.id, day: today, status: 'nope' })).status, 400);
+  const kasT = await login('kas', 'kas1', 'maosh');
+  assert.equal((await call('POST', '/api/attendance', kasT, { user_id: ali.id, day: today, status: 'absent' })).status, 403);
+
+  // Ali eats: the cashier closes the check "on Ali" — no service charge, no money in the till, taken from his pay.
+  const room = (await call('POST', '/api/rooms', boss, { number: '1', name: 'Xona' })).data;
+  const osh = (await call('POST', '/api/dishes', boss, { name: 'Osh', price: 40000, cost: 15000, needs_kitchen: false })).data;
+  const choy = (await call('POST', '/api/dishes', boss, { name: 'Choy', price: 5000, needs_kitchen: false })).data;
+  let o = (await call('POST', '/api/orders', boss, { room_id: room.id })).data;
+  await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: osh.id, qty: 1 }, { dish_id: choy.id, qty: 2 }] });
+  let c = await call('POST', `/api/orders/${o.id}/close`, kasT, { staff_id: ali.id });
+  assert.equal(c.status, 200, JSON.stringify(c.data));
+  assert.equal(c.data.total, 50000);
+  assert.equal(c.data.service_amount, 0);
+  assert.equal(c.data.paid_staff, 50000);
+  assert.equal(c.data.paid_cash, 0);
+
+  // At cost when the boss chooses so (a dish with no cost counts at its menu price).
+  await call('PUT', '/api/settings', boss, { staff_meal_price: 'cost' });
+  o = (await call('POST', '/api/orders', boss, { room_id: room.id })).data;
+  await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: osh.id, qty: 2 }, { dish_id: choy.id, qty: 1 }] });
+  c = await call('POST', `/api/orders/${o.id}/close`, kasT, { staff_id: ali.id });
+  assert.equal(c.data.total, 2 * 15000 + 5000);
+  // A waiter cannot close on a worker; the boss himself is not a worker.
+  o = (await call('POST', '/api/orders', boss, { room_id: room.id })).data;
+  await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: choy.id, qty: 1 }] });
+  const owner = (await call('GET', '/api/me', boss)).data.user;
+  assert.equal((await call('POST', `/api/orders/${o.id}/close`, kasT, { staff_id: owner.id })).status, 404);
+
+  // A drink written by hand.
+  assert.equal((await call('POST', '/api/payroll/entries', boss, { user_id: ali.id, type: 'deduction', kind: 'Ichimlik', amount: 3000 })).status, 200);
+
+  // Evening: Ali earned 150 000, spent 50 000 + 35 000 + 3 000 → 62 000 to hand over.
+  let dv = (await call('GET', `/api/attendance?day=${today}`, admT)).data;
+  let a = dv.staff.find((r) => r.id === ali.id);
+  assert.equal(a.status, 'present');
+  assert.equal(a.earned, 150000);
+  assert.equal(a.spent, 88000);
+  assert.equal(a.day_due, 62000);
+  assert.equal(dv.staff.find((r) => r.id === vali.id).status, 'dayoff');
+  // The cashier sees who came, but no money.
+  const kv = (await call('GET', `/api/attendance?day=${today}`, kasT));
+  assert.equal(kv.status, 403);
+  // The admin cannot hand over more than what is left today; the boss can.
+  assert.equal((await call('POST', '/api/attendance/pay', admT, { user_id: ali.id, amount: 70000 })).status, 403);
+  assert.equal((await call('POST', '/api/attendance/pay', admT, { user_id: ali.id, amount: 62000 })).status, 200);
+  a = (await call('GET', `/api/attendance?day=${today}`, boss)).data.staff.find((r) => r.id === ali.id);
+  assert.equal(a.day_due, 0);
+  assert.equal(a.balance, 0);
+
+  // The day off does not earn a daily wage; a monthly worker gets an advance (also an expense in the cash book).
+  assert.equal((await call('POST', '/api/payroll/entries', boss, { user_id: vali.id, type: 'advance', amount: 1000000 })).status, 200);
+  const m = (await call('GET', '/api/payroll', boss)).data;
+  const v = m.staff.find((r) => r.id === vali.id);
+  assert.equal(v.advance, 1000000);
+  assert.equal(v.advance_missing, false);
+  const txs = (await call('GET', '/api/transactions?type=expense', boss)).data;
+  assert.ok(txs.some((x) => x.category === 'Ish haqi' && x.amount === 1000000 && /avans/.test(x.note)));
+  assert.ok(txs.some((x) => x.category === 'Ish haqi' && x.amount === 62000));
+  // The meals are not cash: the report shows them apart, the shift's cash is not raised by them.
+  const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+  const rep = (await call('GET', `/api/reports?from=${d0.getTime()}&to=${d0.getTime() + 864e5}`, boss)).data;
+  assert.equal(rep.sales.staff, 85000);
+  assert.equal(rep.sales.cash, 0);
+});

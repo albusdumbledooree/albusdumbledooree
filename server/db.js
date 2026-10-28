@@ -157,7 +157,7 @@ CREATE TABLE IF NOT EXISTS attendance (
 CREATE TABLE IF NOT EXISTS payroll (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('payment','bonus','fine')),
+  type TEXT NOT NULL CHECK (type IN ('payment','advance','bonus','fine','deduction')),
   amount INTEGER NOT NULL,
   method TEXT NOT NULL DEFAULT 'cash',
   note TEXT DEFAULT '',
@@ -230,6 +230,8 @@ const DEFAULT_SETTINGS = {
   pin_lock_minutes: '5',
   // Room types named by the boss: [{"key","name"}]; empty = the standard list.
   room_types: '[]',
+  // A worker's own meal closed "on the worker": charged at the menu price or at cost, taken from their pay.
+  staff_meal_price: 'menu',
 };
 
 function seedSettings(db, name) {
@@ -391,6 +393,34 @@ function migrate(db) {
   addCol('sessions', 'via', "TEXT NOT NULL DEFAULT ''");
   // Which shared device a PIN session was opened on, and when it was last used (one device per waiter on cheaper plans).
   addCol('sessions', 'device_id', 'INTEGER');
+  // A check closed "on a worker": the worker it is taken from (the amount is in paid_staff).
+  addCol('orders', 'paid_staff', 'INTEGER NOT NULL DEFAULT 0');
+  // Pay entries gained "advance" and "deduction" (a worker's own expenses): the table is rebuilt once, rows kept.
+  const payrollSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'payroll'").get() || {}).sql || '';
+  if (payrollSql.includes("('payment','bonus','fine')")) {
+    db.exec('BEGIN');
+    try {
+      db.exec(`CREATE TABLE payroll_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('payment','advance','bonus','fine','deduction')),
+        amount INTEGER NOT NULL,
+        method TEXT NOT NULL DEFAULT 'cash',
+        note TEXT DEFAULT '',
+        day TEXT NOT NULL,
+        transaction_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL,
+        created_by INTEGER REFERENCES users(id),
+        created_at INTEGER NOT NULL
+      );
+      INSERT INTO payroll_new (id, user_id, type, amount, method, note, day, transaction_id, created_by, created_at)
+        SELECT id, user_id, type, amount, method, note, day, transaction_id, created_by, created_at FROM payroll;
+      DROP TABLE payroll;
+      ALTER TABLE payroll_new RENAME TO payroll;
+      CREATE INDEX IF NOT EXISTS idx_payroll_user ON payroll(user_id, day);`);
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); throw e; }
+  }
+  addCol('orders', 'staff_id', 'INTEGER');
   addCol('sessions', 'last_seen', 'INTEGER');
   const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
   if (!orderCols.includes('service_type')) db.exec("ALTER TABLE orders ADD COLUMN service_type TEXT NOT NULL DEFAULT 'percent'");
