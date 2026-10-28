@@ -13,6 +13,7 @@ const { open } = require('./db');
 const { createApi, MODULES, BUSINESS_TYPES, SHOP_TYPES } = require('./api');
 const { createHub } = require('./events');
 const { snapshot, listTenantBackups, stampNow } = require('./backup');
+const { createLeads } = require('./leads');
 const { hashPassword, verifyPassword, newToken, HttpError, str, int } = require('./util');
 
 const SCHEMA = `
@@ -166,6 +167,10 @@ function createPlatform(dataDir) {
   // ---------- Platform settings: the support contact every desktop shows ----------
   function pget(key, def = '') { const r = q('SELECT value FROM platform_settings WHERE key = ?').get(key); return r ? r.value : def; }
   function pset(key, value) { q('INSERT INTO platform_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value); }
+
+  // Applications from the front page and the owner's Telegram bot.
+  const leads = createLeads({ pdb, pget, pset, now });
+  leads.start();
 
   function supportInput(v) {
     const o = v && typeof v === 'object' ? v : {};
@@ -545,6 +550,13 @@ function createPlatform(dataDir) {
     ['GET', '/api/platform/types', true, () => BUSINESS_TYPES],
     ['GET', '/api/platform/plans', true, () => ({ plans: getPlans(), terms: getTerms() })],
     ['PUT', '/api/platform/plans', true, savePlans],
+    ['GET', '/api/platform/leads', true, leads.list],
+    ['PUT', '/api/platform/leads/:id', true, leads.update],
+    ['GET', '/api/platform/telegram', true, leads.botStatus],
+    ['PUT', '/api/platform/telegram', true, leads.setToken],
+    ['POST', '/api/platform/telegram/relink', true, leads.relink],
+    ['POST', '/api/platform/telegram/test', true, leads.test],
+    ['DELETE', '/api/platform/telegram', true, leads.unlink],
   ].map(([method, pattern, auth, handler]) => ({
     method, auth, handler, re: new RegExp('^' + pattern.replace(':id', '(\\d+)') + '$'),
   }));
@@ -563,11 +575,12 @@ function createPlatform(dataDir) {
   }
 
   function close() {
+    leads.stop();
     for (const c of contexts.values()) c.db.close();
     pdb.close();
   }
 
-  return { handle, byCode, byToken, assertActive, close, supportFor, restoreTenant, planFor, publicInfo };
+  return { handle, byCode, byToken, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, submitLead: leads.submit };
 }
 
 module.exports = { createPlatform };

@@ -2,6 +2,20 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.10.0 — Arizalar va Telegram bot
+- flowi.uz bosh sahifasida **"Ariza qoldiring"** anketasi (o'zbek/rus): ism, telefon, biznes nomi va turi, xodimlar soni,
+  shahar, qo'ng'iroq uchun qulay vaqt, tarif, izoh. Narxlardagi "Ulanish" tugmasi tarifni anketada o'zi tanlaydi.
+- Ariza avval serverga yoziladi, keyin **Telegram botingizga** xabar keladi. Telegram ishlamay qolsa ham ariza yo'qolmaydi —
+  server keyin qayta yuboradi.
+- Xabar ostida tugmalar: "📞 Qo'ng'iroq qilindi", "✅ Ulandi", "✖️ Rad etildi" — holat platformada ham o'zgaradi.
+- Platformada **Arizalar** bo'limi: yangi arizalar soni, shu oy, nechtasi mijozga aylangani, qidiruv, holat, izoh,
+  "Biznes ochish" (ma'lumotlari o'zi to'ldiriladi, ariza "Ulandi" bo'ladi).
+- **Ariza qayerdan kelgani**: havolaga `?from=instagram` kabi belgi qo'yilsa, platformada manbalar bo'yicha hisob ko'rinadi.
+- Botni ulash platformadagi ✈ tugmasidan: token → "O'zimning Telegramimga" yoki "Guruhga". Bir martalik kod bilan ulanadi,
+  tugmalarni faqat ulangan chat bosa oladi. Token kodda emas, serverdagi bazada saqlanadi.
+- Spamdan himoya: bitta manzildan soatiga 5 tadan ortiq ariza qabul qilinmaydi, robotlar uchun yashirin maydon,
+  bir xil raqamdan qayta bosilsa ikkinchi ariza ochilmaydi.
+
 ## 1.9.1
 - flowi.uz bosh sahifasi endi doim ochiladi: shu brauzerda dasturga kirilgan bo'lsa ham avtomatik dasturga o'tkazib yubormaydi.
   Dastur o'z havolasidan (flowi.uz/c/kod) yoki telefondagi belgidan ochiladi.

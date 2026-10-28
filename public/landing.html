@@ -155,6 +155,27 @@
     .final .btn.light { color: var(--blue-2); }
     .contact-text { font-size: 15px; color: rgba(255,255,255,.85); text-align: center; }
 
+    /* Application form */
+    .final { align-items: start; }
+    .apply { background: #fff; color: var(--text); border-radius: 22px; padding: clamp(20px, 3vw, 30px); box-shadow: 0 30px 60px -30px rgba(0,0,0,.45); }
+    .apply h3 { font-size: 22px; margin-bottom: 4px; }
+    .apply .sub { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
+    .apply .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .apply .full { grid-column: 1 / -1; }
+    .apply label { display: grid; gap: 6px; font-size: 14px; font-weight: 650; color: var(--navy); }
+    .apply label i { font-style: normal; color: #dc2626; }
+    .apply input, .apply select, .apply textarea { width: 100%; font: inherit; font-size: 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--text); }
+    .apply textarea { resize: vertical; min-height: 76px; }
+    .apply input:focus, .apply select:focus, .apply textarea:focus { outline: 2px solid var(--blue); outline-offset: 0; border-color: var(--blue); }
+    .apply .btn { width: 100%; margin-top: 16px; font-size: 17px; }
+    .apply .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+    .apply .err { color: #b91c1c; font-size: 14px; margin-top: 10px; min-height: 1em; }
+    .apply .fine { font-size: 12.5px; color: var(--muted); margin-top: 10px; text-align: center; }
+    .apply .done { text-align: center; padding: 26px 6px; }
+    .apply .done .ok { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto 14px; background: #dcfce7; color: var(--green); }
+    .final .side { display: grid; gap: 14px; margin-top: 22px; }
+    .final .side .btn.light { justify-self: start; }
+
     footer { padding: 36px 0 46px; color: var(--muted); font-size: 14px; }
     footer .wrap { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 
@@ -166,6 +187,7 @@
       .who { grid-template-columns: repeat(3, 1fr); }
       .final { grid-template-columns: 1fr; }
     }
+    @media (max-width: 520px) { .apply .grid { grid-template-columns: 1fr; } }
     @media (max-width: 620px) {
       body { font-size: 16px; }
       header.top .wrap { gap: 12px; }
@@ -340,8 +362,30 @@
 
 <section id="boglanish" style="padding-top:0">
   <div class="wrap final">
-    <div><h2 data-t="final_title">14 kun bepul sinab ko'ring</h2><p data-t="final_p">Biz biznesingizni ulab beramiz, menyuni kiritishga yordam beramiz. Yoqmasa — hech narsa to'lamaysiz.</p></div>
-    <div class="acts" id="contact"></div>
+    <div><h2 data-t="final_title">14 kun bepul sinab ko'ring</h2><p data-t="final_p">Biz biznesingizni ulab beramiz, menyuni kiritishga yordam beramiz. Yoqmasa — hech narsa to'lamaysiz.</p>
+      <div class="side" id="contact"></div></div>
+    <form class="apply" id="apply" novalidate>
+      <h3 data-t="ap_title">Ariza qoldiring</h3>
+      <p class="sub" data-t="ap_sub">1 daqiqa vaqt oladi. O'zimiz qo'ng'iroq qilamiz.</p>
+      <div class="grid">
+        <label><span><span data-t="ap_name">Ismingiz</span> <i>*</i></span><input name="name" autocomplete="name" maxlength="80" required></label>
+        <label><span><span data-t="ap_phone">Telefon</span> <i>*</i></span><input name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" placeholder="+998 __ ___ __ __" required></label>
+        <label><span data-t="ap_business">Biznes nomi</span><input name="business" maxlength="100"></label>
+        <label><span data-t="ap_type">Biznes turi</span><select name="type">
+          <option value="" data-t="ap_choose">Tanlang</option><option value="choyxona" data-t="ap_t_choyxona">Choyxona</option><option value="restoran" data-t="ap_t_restoran">Restoran / kafe</option>
+          <option value="fastfood" data-t="ap_t_fastfood">Fast food</option><option value="market" data-t="ap_t_market">Do'kon</option><option value="clothing" data-t="ap_t_clothing">Kiyim do'koni</option><option value="other" data-t="ap_t_other">Boshqa</option></select></label>
+        <label><span data-t="ap_staff">Xodimlar soni</span><input name="staff" type="number" inputmode="numeric" min="0" max="10000"></label>
+        <label><span data-t="ap_city">Shahar / tuman</span><input name="city" maxlength="80"></label>
+        <label><span data-t="ap_time">Qo'ng'iroq uchun qulay vaqt</span><select name="call_time">
+          <option value="" data-t="ap_any">Istalgan vaqt</option><option>09:00–12:00</option><option>12:00–15:00</option><option>15:00–18:00</option><option>18:00–21:00</option></select></label>
+        <label><span data-t="ap_plan">Tarif</span><select name="plan"><option value="" data-t="ap_plan_unsure">Hali bilmayman</option><option value="start">Start</option><option value="biznes">Biznes</option><option value="pro">Pro</option></select></label>
+        <label class="full"><span data-t="ap_note">Izoh (ixtiyoriy)</span><textarea name="note" maxlength="1000" rows="3"></textarea></label>
+        <label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
+      </div>
+      <button class="btn primary" type="submit" data-t="ap_send">Ariza yuborish</button>
+      <div class="err" id="apply-err" role="alert"></div>
+      <p class="fine" data-t="ap_fine">Ma'lumotlaringiz faqat siz bilan bog'lanish uchun ishlatiladi.</p>
+    </form>
   </div>
 </section>
 
@@ -399,11 +443,18 @@
     q5: 'Сложно ли обучить сотрудников?', a5: 'Нет. Официанту хватит 10 минут: нажал комнату, выбрал блюдо, «Отправить». Мы подключим и поможем в первые дни.',
     q6: 'Что будет, если оплата просрочена?', a6: 'Несколько дней программа работает с предупреждением, затем переходит в режим просмотра. Ничего не удаляется — после оплаты работа продолжается с того же места.',
     final_title: '14 дней бесплатно', final_p: 'Мы подключим ваш бизнес и поможем внести меню. Не понравится — ничего не платите.',
+    ap_title: 'Оставьте заявку', ap_sub: 'Займёт 1 минуту. Мы сами позвоним.', ap_name: 'Ваше имя', ap_phone: 'Телефон', ap_business: 'Название бизнеса',
+    ap_type: 'Тип бизнеса', ap_choose: 'Выберите', ap_t_choyxona: 'Чайхана', ap_t_restoran: 'Ресторан / кафе', ap_t_fastfood: 'Фастфуд', ap_t_market: 'Магазин',
+    ap_t_clothing: 'Магазин одежды', ap_t_other: 'Другое', ap_staff: 'Количество сотрудников', ap_city: 'Город / район', ap_time: 'Удобное время для звонка',
+    ap_any: 'В любое время', ap_plan: 'Тариф', ap_plan_unsure: 'Пока не знаю', ap_note: 'Комментарий (необязательно)', ap_send: 'Отправить заявку',
+    ap_fine: 'Ваши данные используются только для связи с вами.',
     // dynamic
     per_month: 'сум / мес', popular: 'Популярный', staff_upto: 'До {0} сотрудников', staff_any: 'Без ограничения сотрудников', devices_any: 'Устройства без ограничений',
     base_all: 'Зал, заказы, кухня, касса, чеки', year: 'При оплате за год: {0} сум ({1} мес.)', choose: 'Подключить',
     t_trial: '{0} дней бесплатно', t_branch: 'Доп. филиал: {0} сум / мес', t_year: 'Год = {0} месяцев', t_nodel: 'Данные не удаляются',
     write_us: 'Написать нам', contact_soon: 'Оставьте заявку — свяжемся с вами', currency: 'сум',
+    ap_need: 'Введите имя и номер телефона', ap_bad_phone: 'Проверьте номер телефона', ap_sending: 'Отправляется…', ap_fail: 'Не удалось отправить. Проверьте интернет и попробуйте ещё раз',
+    ap_done_t: 'Спасибо! Заявка принята', ap_done_p: 'Мы свяжемся с вами в течение 24 часов.', ap_more: 'Отправить ещё одну заявку', or_write: 'Или напишите нам напрямую:',
     mod: { 'Stop-list': 'Стоп-лист', 'Hisobotlar va boshqaruv paneli': 'Отчёты и панель', 'Kirim-chiqim va kassa smenasi': 'Приход-расход и смена', 'Ish haqi': 'Зарплата', 'Bronlar': 'Брони', 'Cheklar tarixi': 'История чеков', 'Amallar tarixi': 'Журнал действий', 'Excelga yuklab olish': 'Выгрузка в Excel' },
   };
   var UZ_DYN = {
@@ -411,6 +462,8 @@
     base_all: 'Zal, buyurtma, oshxona, kassa, cheklar', year: "Yillik to'lovda: {0} so'm ({1} oy narxi)", choose: 'Ulanish',
     t_trial: '{0} kun bepul', t_branch: "Qo'shimcha filial: {0} so'm / oy", t_year: '1 yil = {0} oy narxi', t_nodel: "Ma'lumot hech qachon o'chmaydi",
     write_us: 'Bizga yozing', contact_soon: "Ariza qoldiring — o'zimiz bog'lanamiz", currency: "so'm", mod: {},
+    ap_need: 'Ism va telefon raqamini kiriting', ap_bad_phone: 'Telefon raqamini tekshiring', ap_sending: 'Yuborilmoqda…', ap_fail: "Yuborilmadi. Internetni tekshirib, qayta urinib ko'ring",
+    ap_done_t: 'Rahmat! Arizangiz qabul qilindi', ap_done_p: "24 soat ichida siz bilan bog'lanamiz.", ap_more: 'Yana ariza yuborish', or_write: "Yoki to'g'ridan-to'g'ri yozing:",
   };
   var ALL_MODS = ['Stop-list', 'Hisobotlar va boshqaruv paneli', 'Cheklar tarixi', 'Kirim-chiqim va kassa smenasi', 'Ish haqi', 'Bronlar', 'Amallar tarixi', 'Excelga yuklab olish'];
   var FALLBACK = { plans: [
@@ -434,7 +487,6 @@
   function contactHref() { var s = info.support; return s && s.link ? s.link : null; }
 
   function renderPlans() {
-    var href = contactHref() || '#boglanish';
     document.getElementById('plans').innerHTML = info.plans.map(function (p) {
       var hot = p.key === 'biznes';
       var mods = ALL_MODS.map(function (m) {
@@ -447,10 +499,13 @@
         '<div class="year">' + f(d('year'), money(p.price * info.terms.yearly_months), info.terms.yearly_months) + '</div>' +
         '<ul><li>' + CHECK + '<b>' + (p.max_staff > 0 ? f(d('staff_upto'), p.max_staff) : d('staff_any')) + '</b></li>' +
         '<li>' + CHECK + '<span>' + d('devices_any') + '</span></li><li>' + CHECK + '<span>' + d('base_all') + '</span></li>' + mods + '</ul>' +
-        '<a class="btn ' + (hot ? 'primary' : 'light') + '" href="' + esc(href) + '"' + (contactHref() ? ' target="_blank" rel="noopener"' : '') + '>' + d('choose') + '</a></div>';
+        '<a class="btn ' + (hot ? 'primary' : 'light') + '" href="#boglanish" data-plan="' + esc(p.key) + '">' + d('choose') + '</a></div>';
     }).join('');
     var tm = info.terms;
     var ico = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+    document.querySelectorAll('[data-plan]').forEach(function (a) {
+      a.onclick = function () { var f = document.getElementById('apply'); if (f.plan) f.plan.value = a.dataset.plan; };
+    });
     document.getElementById('terms').innerHTML = [f(d('t_trial'), tm.trial_days), f(d('t_year'), tm.yearly_months), f(d('t_branch'), money(tm.branch_price)), d('t_nodel')]
       .map(function (x) { return '<span>' + ico + x + '</span>'; }).join('');
   }
@@ -458,15 +513,12 @@
   function renderContact() {
     var s = info.support; var box = document.getElementById('contact');
     if (s && s.text) {
-      box.innerHTML = (s.link ? '<a class="btn light" href="' + esc(s.link) + '" target="_blank" rel="noopener">' + d('write_us') + '</a>' : '') +
-        '<div class="contact-text">' + esc(s.text) + '</div>';
+      box.innerHTML = '<div class="contact-text" style="text-align:left">' + d('or_write') + ' <b>' + esc(s.text) + '</b></div>' +
+        (s.link ? '<a class="btn light" href="' + esc(s.link) + '" target="_blank" rel="noopener">' + d('write_us') + '</a>' : '');
       document.getElementById('foot-contact').textContent = s.text;
     } else {
-      box.innerHTML = '<div class="contact-text">' + d('contact_soon') + '</div>';
+      box.innerHTML = '';
     }
-    document.querySelectorAll('.contact-link').forEach(function (a) {
-      if (s && s.link) { a.href = s.link; a.target = '_blank'; a.rel = 'noopener'; }
-    });
   }
 
   function apply() {
@@ -488,6 +540,52 @@
       document.querySelectorAll('[data-pane]').forEach(function (p) { p.hidden = p.dataset.pane !== b.dataset.step; });
     };
   });
+  // Where the visitor came from: ?from=instagram (or utm_source), kept for the whole visit.
+  var source = (function () {
+    try {
+      var p = new URLSearchParams(location.search);
+      var v = p.get('from') || p.get('utm_source') || p.get('ref');
+      if (v) { sessionStorage.setItem('flowi_src', v); return v; }
+      var kept = sessionStorage.getItem('flowi_src');
+      if (kept) return kept;
+      var r = document.referrer && new URL(document.referrer).hostname;
+      if (r && r !== location.hostname) { sessionStorage.setItem('flowi_src', r); return r; }
+    } catch (e) { /* no source */ }
+    return '';
+  }());
+
+  var form = document.getElementById('apply');
+  var errBox = document.getElementById('apply-err');
+  var formHtml = form.innerHTML;
+  function bindForm() {
+    form.oninput = function () { errBox.textContent = ''; };
+    form.onsubmit = function (e) {
+      e.preventDefault();
+      errBox.textContent = '';
+      var data = {};
+      Array.prototype.forEach.call(form.elements, function (el) { if (el.name) data[el.name] = el.value; });
+      var digits = (data.phone || '').replace(/\D/g, '');
+      if (!data.name.trim() || !digits) { errBox.textContent = d('ap_need'); return; }
+      if (digits.length < 9 || digits.length > 15) { errBox.textContent = d('ap_bad_phone'); form.phone.focus(); return; }
+      data.source = source; data.lang = lang;
+      var btn = form.querySelector('button[type=submit]');
+      btn.disabled = true; btn.textContent = d('ap_sending');
+      fetch('/api/public/lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (x) {
+          if (!x.ok) throw new Error((x.j && x.j.error) || d('ap_fail'));
+          form.innerHTML = '<div class="done"><div class="ok">' + CHECK.replace('width="18" height="18"', 'width="32" height="32"') + '</div><h3>' + d('ap_done_t') + '</h3>' +
+            '<p class="sub" style="margin:8px 0 18px">' + d('ap_done_p') + '</p><button type="button" class="btn light" id="apply-more">' + d('ap_more') + '</button></div>';
+          document.getElementById('apply-more').onclick = function () { form.innerHTML = formHtml; errBox = document.getElementById('apply-err'); apply(); bindForm(); };
+          if (window.ym) try { window.ym('reachGoal', 'lead'); } catch (e2) { /* optional analytics */ }
+        })
+        .catch(function (err) {
+          btn.disabled = false; btn.textContent = lang === 'ru' ? RU.ap_send : uzText.ap_send;
+          errBox.textContent = err && err.message && err.message !== 'Failed to fetch' ? err.message : d('ap_fail');
+        });
+    };
+  }
+  bindForm();
   document.getElementById('year').textContent = new Date().getFullYear();
   apply();
   fetch('/api/public/info').then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { if (j && j.plans) { info = j; apply(); } }).catch(function () {});

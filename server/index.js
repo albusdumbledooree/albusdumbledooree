@@ -140,10 +140,12 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
 
       // Site owner's panel: choyxonas, subscriptions, boss accounts.
       if (pathname === '/api/platform/release') return reply({ release: RELEASE });
-      if (pathname.startsWith('/api/platform/')) return reply(platform.handle(req.method, pathname, { body, query, token, ip }));
+      if (pathname.startsWith('/api/platform/')) return reply(await platform.handle(req.method, pathname, { body, query, token, ip }));
 
       // Front page: current plans and prices, and how to reach the platform owner.
       if (pathname === '/api/public/info' && req.method === 'GET') return reply(platform.publicInfo());
+      // Front page: "leave an application" — saved, then sent to the owner's Telegram bot.
+      if (pathname === '/api/public/lead' && req.method === 'POST') return reply(platform.submitLead({ body, ip }));
 
       // Login screen: which choyxona does this code belong to?
       if (pathname === '/api/info' && req.method === 'GET') {

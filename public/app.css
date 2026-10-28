@@ -726,3 +726,16 @@ body.kb-open .statusbar, body.kb-open .tabbar { display: none; }
 :is(b, span, td, strong, p).red:not(.chip):not(.notice):not(.pay-notice) { color: var(--red); }
 .ios-hint { display: flex; gap: 12px; align-items: flex-start; width: calc(100% - 32px); max-width: 520px; margin: 0 auto 14px; box-sizing: border-box; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,.94); color: #0b1f33; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
 .ios-hint .icon-btn { flex: none; }
+/* Platform: applications */
+.ptabs { margin-bottom: 16px; }
+.ptabs button { display: inline-flex; align-items: center; gap: 6px; }
+.ptabs .badge { margin-left: 2px; }
+.chip.blue { background: var(--primary-soft); color: var(--primary); }
+.lead-src { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.tcard.lead.new { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary), var(--shadow); }
+.tcard.lead.rejected { opacity: .7; }
+.lead-st { width: auto; min-width: 170px; padding: 7px 10px; }
+.warn-dot { position: relative; }
+.warn-dot::after { content: ""; position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--orange); }
+.tcard footer.lead-foot { flex-wrap: wrap; }
+.tcard footer.lead-foot .lead-st { flex: 1 1 100%; }

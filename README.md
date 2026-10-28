@@ -56,6 +56,15 @@ O'chirilgan bo'lim choyxonaning menyusidan darhol yo'qoladi va server ham uni yo
 Har bir choyxona bo'yicha xodimlar, xonalar, oxirgi 30 kundagi cheklar va savdo, oxirgi faollik ko'rinadi.
 Muddat 5 kundan kam qolganda boshliqning ekranida eslatma chiqadi.
 
+### Arizalar va Telegram bot
+Bosh sahifadagi "Ariza qoldiring" anketasi to'ldirilsa, ariza avval serverga (platform.db) yoziladi, keyin Telegram botingizga xabar boradi.
+Platformada **Arizalar** bo'limi: holat (Yangi / Qo'ng'iroq qilindi / Ulandi / Rad etildi), izoh, "Biznes ochish".
+
+Botni ulash: Telegramda @BotFather → `/newbot` → tokenni platformadagi ✈ (Telegram bot) tugmasiga joylang →
+"O'zimning Telegramimga" yoki "Guruhga" tugmasini bosing. Xabar ostidagi tugmalar holatni platformada ham o'zgartiradi.
+Telegram vaqtincha ishlamasa, arizalar yo'qolmaydi — server ulanish tiklanganda qayta yuboradi.
+Reklama havolasiga belgi qo'ying (`https://flowi.uz/?from=instagram`) — arizaning manbasi platformada ko'rinadi.
+
 ## Ishga tushirish (kompyuterda)
 
 **Windows — eng oson yo'l (git va buyruqlar shart emas):**

@@ -1042,3 +1042,105 @@ test('Pro: customers with cashback, debts paid back later, ingredients taken by 
   // The branch's own boss does not see the others.
   assert.equal((await call('GET', `/api/branches?from=${d0.getTime()}&to=${d0.getTime() + 864e5}`, filBoss)).status, 404);
 });
+
+test('front page applications: saved first, sent to the Telegram bot, buttons change the status', async () => {
+  const http = require('node:http');
+  // A small stand-in for api.telegram.org.
+  const calls = [];
+  const updates = [];
+  let nextId = 1;
+  let msgId = 100;
+  const tg = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      const [, token, method] = /^\/bot([^/]+)\/(\w+)$/.exec(req.url) || [];
+      const body = raw ? JSON.parse(raw) : {};
+      const ok = (result) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, result })); };
+      if (token !== '123456:ABCdefGHIjklMNOpqrSTUvwxYZ_12345') { res.writeHead(401); return res.end(JSON.stringify({ ok: false, description: 'Unauthorized' })); }
+      calls.push({ method, body });
+      if (method === 'getMe') return ok({ id: 1, username: 'flowi_test_bot' });
+      if (method === 'getUpdates') return setTimeout(() => ok(updates.splice(0).filter((u) => u.update_id >= (body.offset || 0))), 100);
+      if (method === 'sendMessage') return ok({ message_id: ++msgId });
+      return ok(true);
+    });
+  });
+  await new Promise((r) => tg.listen(0, r));
+  process.env.TELEGRAM_API = `http://127.0.0.1:${tg.address().port}`;
+  const waitFor = async (fn, what) => {
+    for (let i = 0; i < 100; i++) { const v = await fn(); if (v) return v; await new Promise((r) => setTimeout(r, 50)); }
+    throw new Error(`timeout: ${what} ${JSON.stringify(calls.map((c) => c.method + ':' + (c.body.text || '').slice(0, 30)))}`);
+  };
+  try {
+    // Without a bot the application is still kept.
+    assert.equal((await call('POST', '/api/public/lead', null, { name: 'Akmal', phone: '12' })).status, 400);
+    assert.equal((await call('POST', '/api/public/lead', null, { name: '', phone: '901234567' })).status, 400);
+    const robot = await call('POST', '/api/public/lead', null, { name: 'Bot', phone: '901112233', website: 'x' });
+    assert.equal(robot.status, 200);
+    const a = await call('POST', '/api/public/lead', null, { name: 'Akmal <b>', phone: '90 123-45-67', business: 'Navro\'z', type: 'choyxona', staff: 8, city: 'Toshkent', call_time: '14:00-18:00', note: 'Qarz daftari kerak', plan: 'pro', source: 'instagram' });
+    assert.equal(a.status, 200, JSON.stringify(a.data));
+    const again = await call('POST', '/api/public/lead', null, { name: 'Akmal', phone: '+998 90 123 45 67' });
+    assert.equal(again.data.id, a.data.id, 'same phone within minutes = one application');
+
+    const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+    assert.equal((await call('GET', '/api/platform/leads', null)).status, 401);
+    let list = (await call('GET', '/api/platform/leads', admin)).data;
+    assert.equal(list.rows.length, 1);
+    assert.equal(list.rows[0].phone, '+998901234567');
+    assert.equal(list.rows[0].tg_sent, 0);
+    assert.equal(list.unsent, 1);
+    assert.equal(list.rows[0].ip, undefined);
+
+    // Link the bot: token, then the one-time code from the owner's chat.
+    assert.equal((await call('PUT', '/api/platform/telegram', admin, { token: 'bad' })).status, 400);
+    assert.equal((await call('PUT', '/api/platform/telegram', admin, { token: '999999:ABCdefGHIjklMNOpqrSTUvwxYZ_00000' })).status, 400);
+    const st = (await call('PUT', '/api/platform/telegram', admin, { token: '123456:ABCdefGHIjklMNOpqrSTUvwxYZ_12345' })).data;
+    assert.equal(st.bot, 'flowi_test_bot');
+    assert.match(st.link_code, /^\d{6}$/);
+    updates.push({ update_id: nextId++, message: { message_id: 1, chat: { id: 555, type: 'private', first_name: 'Begona' }, text: '/start 000000' } });
+    updates.push({ update_id: nextId++, message: { message_id: 2, chat: { id: 777, type: 'private', first_name: 'Ega' }, text: `/start ${st.link_code}` } });
+    const linked = await waitFor(async () => { const s = (await call('GET', '/api/platform/telegram', admin)).data; return s.chat_id && s; }, 'link');
+    assert.equal(linked.chat_id, 777, 'a wrong code from another chat does not link');
+    assert.equal(linked.chat_title, 'Ega');
+
+    // The waiting application goes out by itself once the bot is linked.
+    const sent = await waitFor(() => calls.find((c) => c.method === 'sendMessage' && /ariza #/i.test(c.body.text)), 'lead sent');
+    assert.equal(sent.body.chat_id, 777);
+    assert.match(sent.body.text, /Akmal &lt;b&gt;/);
+    assert.match(sent.body.text, /Manba: instagram/);
+    assert.equal(sent.body.reply_markup.inline_keyboard.flat().length, 3);
+    list = (await call('GET', '/api/platform/leads', admin)).data;
+    assert.equal(list.rows[0].tg_sent, 1);
+
+    // A button in Telegram changes the status; one from a stranger's chat does not.
+    const id = a.data.id;
+    updates.push({ update_id: nextId++, callback_query: { id: 'x1', from: { first_name: 'Begona' }, data: `lead:${id}:rejected`, message: { message_id: 1, chat: { id: 555 } } } });
+    updates.push({ update_id: nextId++, callback_query: { id: 'x2', from: { first_name: 'Ega' }, data: `lead:${id}:called`, message: { message_id: sent.id, chat: { id: 777 } } } });
+    await waitFor(async () => (await call('GET', '/api/platform/leads', admin)).data.rows[0].status === 'called', 'button');
+    assert.ok(calls.some((c) => c.method === 'editMessageText' && /Qo'ng'iroq qilindi/.test(c.body.text)));
+
+    // The panel changes it too, and the Telegram message follows.
+    const up = await call('PUT', `/api/platform/leads/${id}`, admin, { status: 'connected', admin_note: 'Pro, 2 filial' });
+    assert.equal(up.status, 200);
+    assert.equal(up.data.status, 'connected');
+    await waitFor(() => calls.some((c) => c.method === 'editMessageText' && /Ulandi/.test(c.body.text) && /2 filial/.test(c.body.text)), 'edit');
+    assert.equal((await call('PUT', `/api/platform/leads/${id}`, admin, { status: 'nope' })).status, 400);
+    const f = (await call('GET', '/api/platform/leads?status=connected&q=1234567', admin)).data;
+    assert.equal(f.rows.length, 1);
+    assert.equal(f.counts.connected, 1);
+
+    // A new application is sent right away.
+    await call('POST', '/api/public/lead', null, { name: 'Dilshod', phone: '+998 93 000 00 01', lang: 'ru' });
+    await waitFor(() => calls.some((c) => c.method === 'sendMessage' && /Dilshod/.test(c.body.text)), 'second lead');
+    assert.equal((await call('POST', '/api/platform/telegram/test', admin)).status, 200);
+
+    // Too many from one address.
+    let last;
+    for (let i = 0; i < 5; i++) last = await call('POST', '/api/public/lead', null, { name: `Spam ${i}`, phone: `+99890000100${i}` });
+    assert.equal(last.status, 429);
+    assert.equal((await call('DELETE', '/api/platform/telegram', admin)).data.configured, false);
+  } finally {
+    delete process.env.TELEGRAM_API;
+    tg.close();
+  }
+});

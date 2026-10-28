@@ -2,7 +2,7 @@
 /* Platform panel for the site owner: create businesses, give each boss a login, track subscriptions,
    open any business as its boss, restore it from a backup, set the support contact. */
 
-const P = { admin: null, tenants: [], search: '', filter: 'all', modules: {}, types: {}, plans: {}, terms: {} };
+const P = { admin: null, tenants: [], search: '', filter: 'all', modules: {}, types: {}, plans: {}, terms: {}, tab: 'biz', leads: null, leadStatus: '', leadQ: '', tg: {} };
 const DAY_MS = 24 * 60 * MIN;
 const TOKEN_KEY = 'cp_ptoken';
 const TYPE_ICONS = { choyxona: 'house', restoran: 'utensils', fastfood: 'sandwich', market: 'shopping-cart', clothing: 'shirt' };
@@ -105,19 +105,27 @@ function tenantCard(t) {
 }
 
 function mainHtml() {
+  return `<header class="ptop">${flowiLogo(22)}<b class="hide-xs">Platforma</b>${P.release ? `<span class="chip">v${esc(P.release)}</span>` : ''}<span class="grow"></span>
+      <span class="muted small hide-xs">${esc(P.admin.name)}</span>
+      <button class="btn sm" id="pplans" title="Tariflar va narxlar">${icon('star', 16)} <span class="hide-xs">Tariflar</span></button>
+      <button class="icon-btn ${P.tg.chat_id ? '' : 'warn-dot'}" id="ptg" title="Telegram bot (arizalar)">${icon('send')}</button>
+      <button class="icon-btn" id="psettings" title="Yordam kontakti">${icon('life-buoy')}</button>
+      <button class="icon-btn" id="pw" title="Parol">${icon('key-round')}</button>
+      <button class="icon-btn" id="logout" title="Chiqish">${icon('log-out')}</button></header>
+  <main class="pmain">
+    <div class="seg ptabs"><button class="${P.tab === 'biz' ? 'active' : ''}" data-tab="biz">${icon('store', 16)} Bizneslar</button>
+      <button class="${P.tab === 'leads' ? 'active' : ''}" data-tab="leads">${icon('inbox', 16)} Arizalar${P.leads && P.leads.counts.new ? ` <span class="badge">${P.leads.counts.new}</span>` : ''}</button></div>
+    ${P.tab === 'leads' ? leadsHtml() : bizHtml()}
+  </main>`;
+}
+function bizHtml() {
   const q = P.search.toLowerCase();
   const list = P.tenants.filter((t) => (P.filter === 'all' || t.business_type === P.filter || (P.filter === 'blocked' && t.status === 'blocked'))
     && (!q || `${t.name} ${t.code} ${t.contact_name} ${t.phone}`.toLowerCase().includes(q)));
   const active = P.tenants.filter((t) => t.status === 'active');
   const due = active.filter((t) => { const d = daysLeft(t); return d !== null && d <= 5; });
   const types = [...new Set(P.tenants.map((t) => t.business_type))];
-  return `<header class="ptop">${flowiLogo(22)}<b class="hide-xs">Platforma</b>${P.release ? `<span class="chip">v${esc(P.release)}</span>` : ''}<span class="grow"></span>
-      <span class="muted small hide-xs">${esc(P.admin.name)}</span>
-      <button class="btn sm" id="pplans" title="Tariflar va narxlar">${icon('star', 16)} <span class="hide-xs">Tariflar</span></button>
-      <button class="icon-btn" id="psettings" title="Yordam kontakti">${icon('life-buoy')}</button>
-      <button class="icon-btn" id="pw" title="Parol">${icon('key-round')}</button>
-      <button class="icon-btn" id="logout" title="Chiqish">${icon('log-out')}</button></header>
-  <main class="pmain">
+  return `
     ${P.admin.default_password ? `<div class="notice red">${icon('triangle-alert', 18)} Siz standart parol bilan kirdingiz. <a href="#" id="pw2">Hoziroq parolni o'zgartiring</a>.</div>` : ''}
     <div class="kpis">
       ${kpiP('Bizneslar', P.tenants.length, `${active.length} faol`, 'store')}
@@ -133,9 +141,141 @@ function mainHtml() {
     ${list.length ? `<div class="tgrid">${list.map(tenantCard).join('')}</div>`
       : `<div class="card">${emptyState('store', P.tenants.length ? 'Hech narsa topilmadi' : "Hali biznes qo'shilmagan. \"Yangi biznes\" tugmasini bosing.")}</div>`}
     <p class="muted small" style="margin-top:16px">Har bir biznesning ma'lumotlari alohida faylda saqlanadi va har kuni avtomatik zaxiralanadi.
-      Xodimlar kirishi uchun: <b>${esc(location.origin)}/c/&lt;kod&gt;</b></p>
-  </main>`;
+      Xodimlar kirishi uchun: <b>${esc(location.origin)}/c/&lt;kod&gt;</b></p>`;
 }
+
+// ---------- Applications from the front page ----------
+const LEAD_CLS = { new: 'blue', called: 'orange', connected: 'green', rejected: '' };
+function leadsHtml() {
+  const L = P.leads;
+  if (!L) return `<div class="card">${emptyState('inbox', 'Yuklanmoqda…')}</div>`;
+  const c = L.counts;
+  const total = Object.values(c).reduce((a, b) => a + b, 0);
+  const conv = total ? Math.round((c.connected / total) * 100) : 0;
+  const tgWarn = !P.tg.chat_id
+    ? `<div class="notice">${icon('send', 18)} Telegram bot ulanmagan — arizalar shu yerda saqlanadi, lekin xabar kelmaydi. <a href="#" id="tg-link">Botni ulash</a></div>`
+    : L.unsent ? `<div class="notice red">${icon('triangle-alert', 18)} ${L.unsent} ta ariza Telegramga hali yetib bormadi — server qayta urinib turibdi.${P.tg.error ? ` (${esc(P.tg.error)})` : ''}</div>` : '';
+  return `${tgWarn}
+    <div class="kpis">
+      ${kpiP('Yangi arizalar', c.new, "hali qo'ng'iroq qilinmagan", 'inbox', c.new ? 'bad' : '')}
+      ${kpiP('Shu oy', L.month, `jami ${total} ta`, 'calendar')}
+      ${kpiP('Ulandi', c.connected, `${conv}% arizadan mijoz chiqdi`, 'circle-check', 'good')}
+      ${kpiP("Qo'ng'iroq qilindi", c.called, `rad etildi: ${c.rejected}`, 'phone')}
+    </div>
+    ${L.sources.length ? `<div class="card" style="margin-bottom:14px"><b>${icon('link', 16)} Arizalar qayerdan kelyapti</b>
+      <div class="lead-src">${L.sources.map((x) => `<span class="chip">${esc(x.source)}: <b>${x.c}</b>${x.won ? ` · ✅ ${x.won}` : ''}</span>`).join('')}</div>
+      <p class="small muted" style="margin:8px 0 0">Reklamada havolaga belgi qo'ying: <b>${esc(location.origin)}/?from=instagram</b>, <b>?from=telegram</b>, <b>?from=banner</b> — shu yerda ko'rinadi.</p></div>` : ''}
+    <div class="ptools">
+      <input type="search" id="lsearch" placeholder="Qidirish: ism, telefon, biznes, shahar" value="${esc(P.leadQ)}">
+      <div class="seg">${[['', 'Hammasi'], ...Object.entries(L.statuses)].map(([k, n]) => `<button class="${P.leadStatus === k ? 'active' : ''}" data-lstatus="${k}">${n}${k ? ` (${c[k]})` : ''}</button>`).join('')}</div>
+    </div>
+    ${L.rows.length ? `<div class="tgrid">${L.rows.map(leadCard).join('')}</div>`
+      : `<div class="card">${emptyState('inbox', total ? 'Hech narsa topilmadi' : `Hali ariza yo'q. Bosh sahifadagi anketa: <a href="/#boglanish" target="_blank" rel="noopener">${esc(location.host)}</a>`)}</div>`}`;
+}
+// +998901234567 → +998 90 123 45 67
+function fmtPhone(p) { const m = /^\+998(\d{2})(\d{3})(\d{2})(\d{2})$/.exec(p || ''); return m ? `+998 ${m[1]} ${m[2]} ${m[3]} ${m[4]}` : p; }
+function leadCard(l) {
+  const L = P.leads;
+  const tenant = l.tenant_id && P.tenants.find((t) => t.id === l.tenant_id);
+  const plan = l.plan ? planName(l.plan) : '';
+  return `<article class="tcard lead ${l.status}">
+    <header><span class="tc-ic">${icon('user-round', 22)}</span>
+      <div class="grow"><b>${esc(l.name)}</b><span class="small muted">#${l.id} · ${fmtDateTime(l.created_at)}</span></div>
+      <span class="chip ${LEAD_CLS[l.status]}">${esc(L.statuses[l.status])}</span></header>
+    <div class="tc-rows">
+      <span>${icon('phone', 15)}</span><span><a href="tel:${esc(l.phone)}"><b>${esc(fmtPhone(l.phone))}</b></a>${l.call_time ? ` <span class="small muted">· qulay vaqt ${esc(l.call_time)}</span>` : ''}</span>
+      ${l.business || l.type || l.city || l.staff ? `<span>${icon('store', 15)}</span><span>${[l.business && `<b>${esc(l.business)}</b>`, l.type && esc(L.types[l.type] || l.type), l.city && esc(l.city), l.staff ? `${l.staff} xodim` : ''].filter(Boolean).join(' · ')}</span>` : ''}
+      ${plan ? `<span>${icon('star', 15)}</span><span>Tarif: <b>${esc(plan)}</b></span>` : ''}
+      ${l.note ? `<span>${icon('message-square', 15)}</span><span>${esc(l.note)}</span>` : ''}
+      ${l.source ? `<span>${icon('link', 15)}</span><span class="small muted">Manba: ${esc(l.source)}</span>` : ''}
+      ${l.admin_note ? `<span>${icon('pencil', 15)}</span><span class="small"><i>${esc(l.admin_note)}</i></span>` : ''}
+      ${tenant ? `<span>${icon('circle-check', 15)}</span><span class="small">Biznes: <b>${esc(tenant.name)}</b> (${esc(tenant.code)})</span>` : ''}
+      ${!l.tg_sent && P.tg.chat_id ? `<span>${icon('clock', 15)}</span><span class="small warn">Telegramga yuborilishi kutilmoqda</span>` : ''}
+    </div>
+    <footer class="lead-foot">
+      <select data-lst="${l.id}" class="lead-st">${Object.entries(L.statuses).map(([k, n]) => `<option value="${k}" ${l.status === k ? 'selected' : ''}>${n}</option>`).join('')}</select>
+      <button class="btn sm" data-lnote="${l.id}">${icon('pencil', 16)} Izoh</button>
+      ${tenant ? '' : `<button class="btn sm primary" data-lbiz="${l.id}" title="Shu arizadan biznes ochish">${icon('plus', 16)} Biznes ochish</button>`}
+    </footer></article>`;
+}
+async function loadLeads() {
+  const qs = new URLSearchParams({ status: P.leadStatus, q: P.leadQ });
+  [P.leads, P.tg] = await Promise.all([GET(`/api/platform/leads?${qs}`), GET('/api/platform/telegram')]);
+}
+async function setLead(id, body) {
+  try { await PUT(`/api/platform/leads/${id}`, body); await loadLeads(); render(); } catch (e) { toastError(e); }
+}
+function bindLeads(root) {
+  const byId = (id) => P.leads.rows.find((l) => l.id === Number(id));
+  const tl = root.querySelector('#tg-link');
+  if (tl) tl.onclick = (e) => { e.preventDefault(); telegramDialog(); };
+  const ls = root.querySelector('#lsearch');
+  if (ls) {
+    let tm = null;
+    ls.oninput = () => { clearTimeout(tm); tm = setTimeout(async () => { P.leadQ = ls.value; try { await loadLeads(); render(); } catch (e) { toastError(e); } }, 350); };
+  }
+  root.querySelectorAll('[data-lstatus]').forEach((b) => b.onclick = async () => { P.leadStatus = b.dataset.lstatus; try { await loadLeads(); render(); } catch (e) { toastError(e); } });
+  root.querySelectorAll('[data-lst]').forEach((sel) => sel.onchange = () => setLead(sel.dataset.lst, { status: sel.value }));
+  root.querySelectorAll('[data-lnote]').forEach((b) => b.onclick = () => {
+    const l = byId(b.dataset.lnote);
+    openModal({
+      title: `${icon('pencil')} ${esc(l.name)} — izoh`,
+      body: `<label class="field">Faqat sizga ko'rinadi (Telegramdagi xabarga ham qo'shiladi)<textarea name="admin_note" rows="4">${esc(l.admin_note)}</textarea></label>`,
+      actions: [{ label: 'Bekor', onClick: () => {} }, { label: 'Saqlash', cls: 'primary', onClick: (f) => setLead(l.id, { admin_note: f.admin_note.value }) }],
+    });
+  });
+  root.querySelectorAll('[data-lbiz]').forEach((b) => b.onclick = () => addTenant(byId(b.dataset.lbiz)));
+}
+
+// ---------- Telegram bot for applications ----------
+async function telegramDialog() {
+  let st;
+  try { st = await GET('/api/platform/telegram'); } catch (e) { return toastError(e); }
+  P.tg = st;
+  const steps = !st.configured ? `
+      <ol class="stack" style="padding-left:20px;margin:0 0 12px">
+        <li>Telegramda <a href="https://t.me/BotFather" target="_blank" rel="noopener"><b>@BotFather</b></a> ni oching → <b>/newbot</b> → bot nomi va username (oxiri <b>bot</b>) ni yozing.</li>
+        <li>U bergan <b>tokenni</b> (masalan <code>7012345678:AAH...</code>) shu yerga joylang va "Saqlash" ni bosing.</li></ol>
+      <label class="field">Bot tokeni<input name="token" autocomplete="off" spellcheck="false" placeholder="7012345678:AAH…"></label>`
+    : !st.chat_id ? `
+      <p>Bot: <b>@${esc(st.bot)}</b> ✅ — endi xabar qaysi chatga kelishini tanlang:</p>
+      <div class="stack">
+        <a class="btn primary" href="https://t.me/${esc(st.bot)}?start=${esc(st.link_code)}" target="_blank" rel="noopener">${icon('send', 18)} O'zimning Telegramimga</a>
+        <a class="btn" href="https://t.me/${esc(st.bot)}?startgroup=${esc(st.link_code)}" target="_blank" rel="noopener">${icon('users', 18)} Guruhga (jamoa bilan)</a></div>
+      <p class="small muted" style="margin-top:12px">Tugma ishlamasa, botga (yoki bot qo'shilgan guruhga) shu xabarni yozing: <b>/start ${esc(st.link_code)}</b>
+        <br>Kod bir martalik. Ulangach bu oyna o'zi yangilanadi.</p>
+      <p class="small muted" id="tg-wait">${icon('clock', 14)} Kutilmoqda…</p>`
+    : `
+      <p>Bot: <b>@${esc(st.bot)}</b> → <b>${esc(st.chat_title || st.chat_id)}</b> ✅</p>
+      <p class="small muted">Yangi ariza kelganda shu chatga xabar keladi. Xabar ostidagi tugmalar ("Qo'ng'iroq qilindi", "Ulandi", "Rad etildi") holatni platformada ham o'zgartiradi.
+        Bu tugmalarni faqat shu chat bosa oladi.</p>
+      ${st.error ? `<div class="notice red">${icon('triangle-alert', 16)} ${esc(st.error)}</div>` : ''}`;
+  const form = openModal({
+    title: `${icon('send')} Telegram bot — arizalar`,
+    body: steps,
+    actions: !st.configured
+      ? [{ label: 'Bekor', onClick: () => {} }, { label: 'Saqlash', cls: 'primary', onClick: async (f) => {
+        await PUT('/api/platform/telegram', { token: f.token.value.trim() }); telegramDialog(); return false;
+      } }]
+      : [{ label: "Botni o'chirish", cls: 'red-text', onClick: async () => {
+        if (!confirm("Bot uzilsinmi? Arizalar saqlanishda davom etadi, faqat Telegramga xabar kelmaydi.")) return false;
+        await DEL('/api/platform/telegram'); await reloadTg(); toast('Bot uzildi', 'ok');
+      } },
+      ...(st.chat_id ? [{ label: 'Boshqa chatga ulash', onClick: async () => { await POST('/api/platform/telegram/relink'); telegramDialog(); return false; } },
+        { label: 'Sinov xabari', cls: 'primary', icon: 'send', onClick: async () => { await POST('/api/platform/telegram/test'); toast('Yuborildi — Telegramni tekshiring', 'ok'); return false; } }]
+        : [{ label: 'Yopish', onClick: () => {} }])],
+  });
+  if (st.configured && !st.chat_id) {
+    // Wait for the code from Telegram, then show the linked state.
+    const tick = async () => {
+      if (!document.body.contains(form)) return;
+      try { const s2 = await GET('/api/platform/telegram'); if (s2.chat_id) { P.tg = s2; toast('Bot ulandi ✅', 'ok'); telegramDialog(); render(); return; } } catch { /* keep waiting */ }
+      setTimeout(tick, 2500);
+    };
+    setTimeout(tick, 2500);
+  }
+}
+async function reloadTg() { try { P.tg = await GET('/api/platform/telegram'); render(); } catch (e) { toastError(e); } }
 function kpiP(label, value, sub, ic, cls = '') {
   return `<div class="kpi ${cls}"><div class="kpi-ic">${icon(ic, 22)}</div><div><div class="label">${label}</div><div class="value">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div></div>`;
 }
@@ -143,7 +283,7 @@ function emptyState(ic, text) { return `<div class="empty">${icon(ic, 56)}<div>$
 
 async function load() {
   [P.tenants, P.modules, P.types, { release: P.release }, { plans: P.plans, terms: P.terms }] = await Promise.all([GET('/api/platform/tenants'),
-    GET('/api/platform/modules'), GET('/api/platform/types'), GET('/api/platform/release'), GET('/api/platform/plans')]);
+    GET('/api/platform/modules'), GET('/api/platform/types'), GET('/api/platform/release'), GET('/api/platform/plans'), loadLeads()]);
 }
 
 // ---------- Forms ----------
@@ -244,10 +384,11 @@ async function render() {
     };
     return;
   }
-  const active = document.activeElement && document.activeElement.id === 'psearch';
+  const active = document.activeElement && ['psearch', 'lsearch'].includes(document.activeElement.id) ? document.activeElement.id : null;
   app.innerHTML = `<div class="platform">${mainHtml()}</div>`;
   bind(app);
-  if (active) { const s = app.querySelector('#psearch'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
+  const s = active && app.querySelector(`#${active}`);
+  if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
 }
 
 function applyThemeP() {
@@ -277,6 +418,9 @@ function bind(root) {
   if (pw2) pw2.onclick = (e) => { e.preventDefault(); pw(); };
   root.querySelector('#psettings').onclick = platformSettings;
   root.querySelector('#pplans').onclick = plansDialog;
+  root.querySelector('#ptg').onclick = telegramDialog;
+  root.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => { P.tab = b.dataset.tab; render(); });
+  if (P.tab === 'leads') return bindLeads(root);
   const s = root.querySelector('#psearch');
   s.oninput = () => { P.search = s.value; render(); };
   root.querySelectorAll('[data-filter]').forEach((b) => b.onclick = () => { P.filter = b.dataset.filter; render(); });
@@ -363,19 +507,20 @@ async function impersonate(t) {
   } catch (e) { if (tab) tab.close(); toastError(e); }
 }
 
-function addTenant() {
+function addTenant(lead = null) {
+  const pre = lead || {};
   const form = openModal({
     title: `${icon('plus')} Yangi biznes`, size: 'wide',
     body: `<div class="form-grid">
-      ${typeSelect()}
-      <label class="field">Nomi<input name="name" required placeholder="Navro'z choyxonasi"></label>
+      ${typeSelect(P.types[pre.type] ? pre.type : 'choyxona')}
+      <label class="field">Nomi<input name="name" required placeholder="Navro'z choyxonasi" value="${esc(pre.business || '')}"></label>
       <label class="field">Kod (kirish havolasi uchun)<input name="code" required placeholder="navruz" autocapitalize="none"></label>
-      <label class="field">Boshliq ismi<input name="owner_name" required placeholder="Akmal aka"></label>
-      <label class="field">Telefon<input name="phone" type="tel" value="+998 "></label>
+      <label class="field">Boshliq ismi<input name="owner_name" required placeholder="Akmal aka" value="${esc(pre.name || '')}"></label>
+      <label class="field">Telefon<input name="phone" type="tel" value="${esc(pre.phone || '+998 ')}"></label>
       <label class="field">Boshliq logini<input name="owner_username" required autocapitalize="none" value="boshliq"></label>
       <label class="field">Boshliq paroli<input name="owner_password" required value="${randomPassword()}"></label>
       <label class="field">To'langan muddat (gacha) — ${P.terms.trial_days} kun bepul sinov<input type="date" name="paid_until" value="${isoDate(Date.now() + P.terms.trial_days * DAY_MS)}"></label>
-      ${planFields()}
+      ${planFields(pre.plan ? { plan: pre.plan } : {})}
     </div>
     <p class="small muted" id="code-url" style="margin:8px 0 0"></p>
     <label class="check" style="margin-top:12px"><input type="checkbox" name="sample" checked> Namuna ma'lumotlar qo'shilsin (menyu yoki mahsulotlar; boshliq keyin o'zgartiradi)</label>
@@ -388,6 +533,7 @@ function addTenant() {
       d.code = d.code.trim().toLowerCase();
       if (d.phone.trim() === '+998') d.phone = '';
       const t = await POST('/api/platform/tenants', d);
+      if (lead) await PUT(`/api/platform/leads/${lead.id}`, { status: 'connected', tenant_id: t.id }).catch(() => {});
       await load(); render();
       showCredentials(t, d.owner_username, d.owner_password);
       return false;
