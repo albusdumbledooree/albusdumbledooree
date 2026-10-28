@@ -311,6 +311,7 @@ async function refreshBadges() {
     }
     if (['chef', 'owner', 'admin'].includes(role) && App.kitchenMode !== 'off') App.badges.kitchen = (await GET('/api/kitchen')).load.pending;
     if (['cashier', 'owner', 'admin'].includes(role)) App.badges.bills = (await GET('/api/orders?status=open')).filter((o) => o.bill_requested).length;
+    App.guestReqs = moduleOn('qrorder') && ['owner', 'admin', 'cashier', 'waiter'].includes(role) ? await GET('/api/guest-requests') : [];
     updateNav();
     renderReadyBanner();
   } catch { /* ignore */ }
@@ -319,17 +320,98 @@ async function refreshBadges() {
 function renderReadyBanner() {
   const el = document.getElementById('ready-banner');
   if (!el || !App.user) return;
-  const items = App.user.role === 'waiter' ? App.readyItems : [];
-  if (!items.length || parseHash().name === 'ready') { el.innerHTML = ''; return; }
-  el.innerHTML = `<div class="ready-banner"><div class="rb-head">${icon('bell', 20)} ${t('Tayyor — olib keting!')}</div>
+  const items = App.user.role === 'waiter' && parseHash().name !== 'ready' ? App.readyItems || [] : [];
+  const reqs = App.guestReqs || [];
+  if (!items.length && !reqs.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="float-stack">${reqs.length ? guestBannerHtml(reqs) : ''}
+    ${items.length ? `<div class="ready-banner"><div class="rb-head">${icon('bell', 20)} ${t('Tayyor — olib keting!')}</div>
     ${items.slice(0, 3).map((i) => `<div class="rb-item"><div class="grow"><b>${esc(i.room_name)}</b> · ${i.qty}× ${esc(i.name)}</div>
       <button class="btn sm" data-banner-serve="${i.id}">${icon('hand', 16)} ${t('Oldim')}</button></div>`).join('')}
-    ${items.length > 3 ? `<a href="#/ready" style="color:#fff">+${items.length - 3}</a>` : ''}</div>`;
+    ${items.length > 3 ? `<a href="#/ready" style="color:#fff">+${items.length - 3}</a>` : ''}</div>` : ''}</div>`;
+  bindGuestBanner(el);
   el.querySelectorAll('[data-banner-serve]').forEach((b) => b.onclick = async () => {
     b.disabled = true;
     try { await POST(`/api/items/${b.dataset.bannerServe}/serve`); await refreshBadges(); refreshSoon(); } catch (e) { toastError(e); }
   });
 }
+
+// ---------- QR menu: what guests send from the table ----------
+function guestReqLine(g) {
+  if (g.kind === 'waiter') return t('ofitsantni chaqirmoqda');
+  if (g.kind === 'bill') return t("hisob so'ramoqda");
+  return `${t('{0} ta taom', g.items.reduce((s, i) => s + i.qty, 0))} · ${moneyText(g.total)}`;
+}
+function guestBannerHtml(reqs) {
+  return `<div class="guest-banner"><div class="rb-head">${icon('concierge-bell', 20)} ${t("Mijozlardan so'rov")} <span class="badge">${reqs.length}</span></div>
+    ${reqs.slice(0, 4).map((g) => `<div class="rb-item"><div class="grow"><b>${esc(g.room)}</b> · ${guestReqLine(g)}
+        <span class="small" style="opacity:.8">· ${fmtTime(g.created_at)}</span></div>
+      ${g.kind === 'order' ? `<button class="btn sm" data-greq="${g.id}">${icon('eye', 16)} ${t("Ko'rish")}</button>`
+        : `<button class="btn sm" data-gdone="${g.id}">${icon('check', 16)} ${t('Bordim')}</button>`}</div>`).join('')}
+    ${reqs.length > 4 ? `<div class="small">+${reqs.length - 4}</div>` : ''}</div>`;
+}
+function bindGuestBanner(el) {
+  el.querySelectorAll('[data-greq]').forEach((b) => b.onclick = () => guestRequestDialog((App.guestReqs || []).find((g) => g.id === Number(b.dataset.greq))));
+  el.querySelectorAll('[data-gdone]').forEach((b) => b.onclick = async () => {
+    b.disabled = true;
+    try { await POST(`/api/guest-requests/${b.dataset.gdone}/done`); } catch (e) { toastError(e); }
+    refreshBadges();
+  });
+}
+// The worker checks what the guest asked for, may lower a quantity or drop a dish, then approves: the check opens.
+function guestRequestDialog(g) {
+  if (!g) return;
+  const qty = Object.fromEntries(g.items.map((i) => [i.dish_id, i.qty]));
+  const form = openModal({
+    title: `${icon('concierge-bell')} ${esc(g.room)} — ${t("mijoz buyurtmasi")}`,
+    body: `<p class="small muted" style="margin-top:0">${t('Yuborildi')}: ${fmtTime(g.created_at)} · ${t("Tasdiqlagandan keyin chekka yoziladi va oshxonaga boradi.")}</p>
+      <div class="stack" id="greq-lines">${g.items.map((i) => `<div class="greq-line ${i.available ? '' : 'off'}" data-dish="${i.dish_id}">
+          <div class="grow"><b>${esc(i.name)}</b>${i.available ? '' : ` <span class="chip red">${t('tugagan')}</span>`}
+            ${i.note ? `<div class="small muted">${icon('message-square', 13)} ${esc(i.note)}</div>` : ''}<div class="small muted">${moneyText(i.price)}</div></div>
+          <div class="qty-step"><button type="button" class="icon-btn" data-gm="${i.dish_id}">−</button><b data-gq="${i.dish_id}">${i.qty}</b>
+            <button type="button" class="icon-btn" data-gp="${i.dish_id}">+</button></div></div>`).join('')}</div>
+      ${g.note ? `<div class="notice" style="margin-top:12px">${icon('message-square', 18)} ${esc(g.note)}</div>` : ''}
+      <div class="lead" style="margin-top:12px">${t('Jami')}: <b id="greq-total"></b></div>`,
+    actions: [{ label: t('Bekor') }, { label: t('Rad etish'), cls: 'danger', onClick: () => { rejectGuestRequest(g); return false; } },
+      { label: t('Tasdiqlash'), cls: 'ok', icon: 'check', onClick: async () => {
+        const items = g.items.map((i) => ({ dish_id: i.dish_id, qty: qty[i.dish_id] }));
+        if (!items.some((i) => i.qty > 0)) { toast(t("Taom qolmadi — so'rovni rad eting"), 'warn'); return false; }
+        const r = await POST(`/api/guest-requests/${g.id}/approve`, { items });
+        toast(t('Tasdiqlandi — {0} chekiga yozildi', g.room), 'ok');
+        refreshBadges(); refreshSoon();
+        if (r.order && ['waiter', 'cashier'].includes(App.user.role)) location.hash = `#/order/${r.order.id}`;
+      } }],
+  });
+  const sync = () => {
+    form.querySelectorAll('[data-gq]').forEach((b) => { b.textContent = qty[b.dataset.gq]; b.closest('.greq-line').classList.toggle('zero', !qty[b.dataset.gq]); });
+    form.querySelector('#greq-total').textContent = moneyText(g.items.reduce((s, i) => s + i.price * qty[i.dish_id], 0));
+  };
+  const max = Object.fromEntries(g.items.map((i) => [i.dish_id, i.qty]));
+  form.querySelectorAll('[data-gm]').forEach((b) => b.onclick = () => { qty[b.dataset.gm] = Math.max(0, qty[b.dataset.gm] - 1); sync(); });
+  form.querySelectorAll('[data-gp]').forEach((b) => b.onclick = () => { qty[b.dataset.gp] = Math.min(max[b.dataset.gp], qty[b.dataset.gp] + 1); sync(); });
+  sync();
+}
+function rejectGuestRequest(g) {
+  const reasons = [t('Bu taom tugagan'), t('Ofitsant hozir keladi'), t("Oshxona yopilgan")];
+  openModal({
+    title: `${icon('x')} ${esc(g.room)} — ${t('rad etish')}`,
+    body: `<p class="small muted" style="margin-top:0">${t("Sababni mijoz o'z telefonida ko'radi.")}</p>
+      <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">${reasons.map((r) => `<button type="button" class="btn sm" data-reason="${esc(r)}">${esc(r)}</button>`).join('')}</div>
+      <label class="field">${t('Sabab')}<input name="reason" maxlength="200"></label>`,
+    onMount: (f) => f.querySelectorAll('[data-reason]').forEach((b) => b.onclick = () => { f.reason.value = b.dataset.reason; }),
+    actions: [{ label: t('Bekor') }, { label: t('Rad etish'), cls: 'danger', onClick: async (f) => {
+      await POST(`/api/guest-requests/${g.id}/reject`, { reason: f.reason.value });
+      toast(t('Rad etildi'), 'ok'); refreshBadges();
+    } }],
+  });
+}
+Live.on('guest', () => refreshBadges());
+Live.on('guest_request', (d) => {
+  const text = d.kind === 'waiter' ? t('{0}: ofitsantni chaqirmoqda', d.room) : d.kind === 'bill' ? t("{0}: hisob so'ramoqda", d.room) : t('{0}: QR orqali yangi buyurtma', d.room);
+  Voice.say(d.kind === 'waiter' ? t('{0} sizni chaqirmoqda.', d.room) : d.kind === 'bill' ? t("{0} hisob so'ramoqda.", d.room) : t('{0} dan yangi buyurtma. Tasdiqlang.', d.room), 'new');
+  notifySystem(t("Mijozdan so'rov"), text);
+  toast(text, 'warn', 8000);
+  refreshBadges();
+});
 
 // ---------- Boot ----------
 window.addEventListener('hashchange', () => { if (App.user) closeModal(); render(); });

@@ -528,7 +528,7 @@ table.list tr.selected td .ic { color: #fff; }
 /* ---------- Toasts, modals, banners ---------- */
 /* Bottom centre, so notices never cover the top bar buttons. */
 #toasts { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column-reverse; gap: 8px; width: max-content; max-width: min(460px, calc(100vw - 24px)); pointer-events: none; }
-@media (max-width: 860px) { #toasts { bottom: 150px; } }
+@media (max-width: 860px) { #toasts { bottom: auto; top: 70px; flex-direction: column; } }
 .toast { display: flex; gap: 10px; align-items: flex-start; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.15); animation: slide .2s ease-out; font-weight: 600; }
 .toast .ic { color: var(--primary); margin-top: 1px; }
 .toast.error .ic { color: var(--red); } .toast.ok .ic { color: var(--green); } .toast.warn .ic { color: var(--orange); }
@@ -543,15 +543,23 @@ table.list tr.selected td .ic { color: #fff; }
 .modal-foot { display: flex; gap: 10px; justify-content: flex-end; padding: 14px 20px 20px; flex-wrap: wrap; }
 .modal-foot .btn { min-width: 120px; }
 @media (max-width: 600px) { .modal-foot .btn { flex: 1; } .modal { border-radius: 18px; } }
-.ready-banner {
+.float-stack {
   position: fixed; left: 50%; transform: translateX(-50%); bottom: 84px; z-index: 50; width: min(520px, calc(100vw - 24px));
-  background: var(--green); color: #fff; border-radius: 18px; padding: 12px 16px; box-shadow: 0 12px 32px rgba(0,0,0,.25);
+  display: grid; gap: 10px;
 }
+.ready-banner, .guest-banner { color: #fff; border-radius: 18px; padding: 12px 16px; box-shadow: 0 12px 32px rgba(0,0,0,.25); }
+.ready-banner { background: var(--green); }
+.guest-banner { background: #5b21b6; }
+.guest-banner .rb-head, .guest-banner .rb-item { display: flex; align-items: center; gap: 8px; }
+.guest-banner .rb-head { font-weight: 800; }
+.guest-banner .rb-head .badge { background: #fff; color: #5b21b6; }
+.guest-banner .rb-item { padding: 8px 0; border-top: 1px solid rgba(255,255,255,.25); }
+.guest-banner .btn { background: #fff; color: #5b21b6; border-color: #fff; }
 .ready-banner .rb-head { display: flex; align-items: center; gap: 8px; font-weight: 800; }
 .ready-banner .rb-item { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,.25); }
 .ready-banner .rb-item:first-of-type { border-top: 0; }
 .ready-banner .btn { background: #fff; color: var(--green); border-color: #fff; }
-@media (min-width: 861px) { .ready-banner { bottom: 20px; } }
+@media (min-width: 861px) { .float-stack { bottom: auto; top: 76px; left: auto; right: 20px; transform: none; width: 420px; } }
 .notice { display: flex; gap: 10px; align-items: center; padding: 12px 14px; border-radius: 14px; background: var(--orange-soft); color: var(--orange); font-weight: 650; margin-bottom: 14px; }
 .notice.red { background: var(--red-soft); color: var(--red); }
 .notice.blue { background: var(--blue-soft); color: var(--blue); }
@@ -739,3 +747,20 @@ body.kb-open .statusbar, body.kb-open .tabbar { display: none; }
 .warn-dot::after { content: ""; position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--orange); }
 .tcard footer.lead-foot { flex-wrap: wrap; }
 .tcard footer.lead-foot .lead-st { flex: 1 1 100%; }
+
+/* QR menu */
+.qr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.qr-card { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 14px; }
+.qr-img { width: 150px; height: 150px; }
+.qr-img svg { width: 100%; height: 100%; display: block; }
+.dish-thumb { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; display: block; }
+.dish-photo-edit { display: flex; gap: 14px; align-items: center; }
+.dish-photo { width: 110px; height: 110px; flex: none; border-radius: 16px; background: var(--panel-2); display: grid; place-items: center; font-size: 44px; overflow: hidden; border: 1px solid var(--line); }
+.dish-photo img { width: 100%; height: 100%; object-fit: cover; }
+.greq-line { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.greq-line.zero { opacity: .45; }
+.greq-line.off { border-color: var(--red); }
+.qty-step { display: flex; align-items: center; gap: 6px; }
+.qty-step b { min-width: 24px; text-align: center; font-size: 18px; }
+.qty-step .icon-btn { font-size: 22px; font-weight: 700; }
+.qr-grid .card { margin: 0; }

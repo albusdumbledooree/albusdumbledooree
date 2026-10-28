@@ -1144,3 +1144,130 @@ test('front page applications: saved first, sent to the Telegram bot, buttons ch
     tg.close();
   }
 });
+
+test('QR menu: a guest orders from the table, a worker approves, the check opens', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  const t = (await call('POST', '/api/platform/tenants', admin, { name: 'QR choyxona', code: 'qrchoy', owner_name: 'E', owner_username: 'ega', owner_password: 'ega12345', plan: 'biznes', kitchen_mode: 'full', sample: true })).data;
+  const boss = await login('ega', 'ega12345', 'qrchoy');
+  const rooms = (await call('GET', '/api/rooms', boss)).data;
+  const room = rooms[0];
+  const other = rooms[1];
+  // Two waiters: Jasur serves the room, Bobur another one.
+  const mk = async (name, username) => (await call('POST', '/api/users', boss, { name, username, password: 'pass1234', role: 'waiter' })).data;
+  const jasurU = await mk('Jasur', 'jasur');
+  const boburU = await mk('Bobur', 'bobur');
+  await call('PUT', `/api/rooms/${room.id}`, boss, { waiter_ids: [jasurU.id] });
+  await call('PUT', `/api/rooms/${other.id}`, boss, { waiter_ids: [boburU.id] });
+  const kassa = (await call('POST', '/api/users', boss, { name: 'Kassir', username: 'kassa', password: 'pass1234', role: 'cashier' })).data;
+  const jasur = await login('jasur', 'pass1234', 'qrchoy');
+  const bobur = await login('bobur', 'pass1234', 'qrchoy');
+  const cashier = await login('kassa', 'pass1234', 'qrchoy');
+  assert.ok(kassa.id);
+
+  // QR keys: one per room, secret, renewable.
+  const qr = (await call('GET', '/api/qr', boss)).data;
+  assert.equal(qr.length, rooms.length);
+  const key = qr.find((r) => r.id === room.id).qr_token;
+  assert.match(key, new RegExp(`^${t.id}-[A-Za-z0-9]{12}$`));
+  assert.equal((await call('GET', '/api/qr', jasur)).status, 403);
+  const page = await fetch(`${base}/q/${key}`);
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /guest\.js/);
+
+  // A dish photo.
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const asset = (await call('POST', '/api/assets', boss, { kind: 'dish', data: png })).data;
+  const menu = (await call('GET', '/api/menu', boss)).data;
+  const dish = menu.dishes.find((d) => d.needs_kitchen);
+  const tea = menu.dishes.find((d) => d.id !== dish.id);
+  assert.equal((await call('PUT', `/api/dishes/${dish.id}`, boss, { photo: asset.id, description: 'Mol go\'shti, sabzi' })).status, 200);
+
+  // The guest's page: no login.
+  const gid = 'guest-abc-12345';
+  let g = await call('GET', `/api/guest/${key}?g=${gid}`, null);
+  assert.equal(g.status, 200, JSON.stringify(g.data));
+  assert.equal(g.data.room.name, room.name);
+  assert.deepEqual(g.data.waiters, ['Jasur']);
+  assert.equal(g.data.order.can, true);
+  const gd = g.data.dishes.find((d) => d.id === dish.id);
+  assert.equal(gd.description, "Mol go'shti, sabzi");
+  assert.equal((await fetch(base + gd.photo)).status, 200);
+  assert.equal((await fetch(`${base}/api/guest/${key}/img/999`)).status, 404);
+  assert.equal(g.data.dishes.some((d) => 'cost' in d), false, 'guests never see the cost');
+  assert.equal((await call('GET', `/api/guest/${t.id}-AAAAAAAAAAAA`, null)).status, 404);
+
+  // An order request; nothing reaches a check yet.
+  const r1 = await call('POST', `/api/guest/${key}/request`, null, { guest_id: gid, items: [{ dish_id: dish.id, qty: 3, note: 'achchiq emas' }, { dish_id: tea.id, qty: 1 }], note: 'Tezroq' });
+  assert.equal(r1.status, 200, JSON.stringify(r1.data));
+  assert.equal((await call('GET', '/api/orders?status=open', boss)).data.filter?.((o) => o.room_id === room.id).length || 0, 0);
+  assert.equal((await call('POST', `/api/guest/${key}/request`, null, { items: [{ dish_id: 99999, qty: 1 }] })).status, 404);
+  assert.equal((await call('POST', `/api/guest/${key}/request`, null, { items: [] })).status, 400);
+
+  // Who hears it: the room's waiter and the cashier, not another waiter.
+  assert.equal((await call('GET', '/api/guest-requests', bobur)).data.length, 0);
+  let list = (await call('GET', '/api/guest-requests', jasur)).data;
+  assert.equal(list.length, 1);
+  assert.equal(list[0].items.length, 2);
+  assert.equal(list[0].total, dish.price * 3 + tea.price);
+  assert.equal((await call('GET', '/api/guest-requests', cashier)).data.length, 1);
+  assert.equal((await call('POST', `/api/guest-requests/${r1.data.id}/approve`, bobur, {})).status, 403);
+
+  // Two waiting orders at most per room.
+  const r2 = await call('POST', `/api/guest/${key}/request`, null, { guest_id: gid, items: [{ dish_id: tea.id, qty: 2 }] });
+  assert.equal(r2.status, 200);
+  assert.equal((await call('POST', `/api/guest/${key}/request`, null, { items: [{ dish_id: tea.id, qty: 1 }] })).status, 429);
+
+  // The waiter approves the first one with 2 instead of 3; a dish the guest did not ask for cannot be slipped in.
+  const other2 = menu.dishes.find((d) => d.id !== dish.id && d.id !== tea.id);
+  assert.equal((await call('POST', `/api/guest-requests/${r1.data.id}/approve`, jasur, { items: [{ dish_id: other2.id, qty: 1 }] })).status, 400);
+  const ap = await call('POST', `/api/guest-requests/${r1.data.id}/approve`, jasur, { items: [{ dish_id: dish.id, qty: 2 }, { dish_id: tea.id, qty: 1 }] });
+  assert.equal(ap.status, 200, JSON.stringify(ap.data));
+  const order = ap.data.order;
+  assert.equal(order.room_id, room.id);
+  assert.equal(order.waiter_id, jasurU.id);
+  assert.equal(order.items.find((i) => i.dish_id === dish.id).qty, 2);
+  assert.equal(order.items.find((i) => i.dish_id === dish.id).note, 'achchiq emas');
+  assert.equal((await call('POST', `/api/guest-requests/${r1.data.id}/approve`, jasur, {})).status, 409, 'answered once');
+  // The cashier rejects the second; it goes to the same check otherwise.
+  assert.equal((await call('POST', `/api/guest-requests/${r2.data.id}/reject`, cashier, { reason: 'Choy tugadi' })).status, 200);
+
+  // The guest sees what happened and the bill.
+  g = (await call('GET', `/api/guest/${key}?g=${gid}`, null)).data;
+  assert.deepEqual(g.requests.map((r) => r.status), ['rejected', 'approved']);
+  assert.equal(g.requests[0].reason, 'Choy tugadi');
+  assert.equal(g.bill.items.length, 2);
+  assert.ok(g.bill.total > 0);
+  assert.equal((await call('GET', `/api/guest/${key}?g=someone-else-1`, null)).data.requests.length, 0, 'other phones do not see these');
+
+  // Call the waiter (once is enough) and ask for the bill.
+  const c1 = await call('POST', `/api/guest/${key}/request`, null, { kind: 'waiter', guest_id: gid });
+  const c2 = await call('POST', `/api/guest/${key}/request`, null, { kind: 'waiter', guest_id: gid });
+  assert.equal(c2.data.id, c1.data.id);
+  assert.equal(c2.data.again, true);
+  await call('POST', `/api/guest/${key}/request`, null, { kind: 'bill' });
+  assert.equal((await call('GET', `/api/orders/${order.id}`, boss)).data.bill_requested, 1);
+  list = (await call('GET', '/api/guest-requests', jasur)).data;
+  assert.deepEqual(list.map((x) => x.kind).sort(), ['bill', 'waiter']);
+  assert.equal((await call('POST', `/api/guest-requests/${c1.data.id}/done`, jasur)).status, 200);
+
+  // The boss can stop orders (menu stays), set hours, renew a QR code.
+  await call('PUT', '/api/settings', boss, { qr_order: false });
+  g = (await call('GET', `/api/guest/${key}`, null)).data;
+  assert.equal(g.order.can, false);
+  assert.equal((await call('POST', `/api/guest/${key}/request`, null, { items: [{ dish_id: tea.id, qty: 1 }] })).status, 409);
+  assert.equal((await call('PUT', '/api/settings', boss, { qr_order: true, qr_from: '25:00' })).status, 400);
+  await call('PUT', '/api/settings', boss, { qr_order: true, qr_from: '', qr_to: '' });
+  const renewed = (await call('POST', `/api/rooms/${room.id}/qr`, boss)).data;
+  assert.notEqual(renewed.qr_token, key);
+  assert.equal((await call('GET', `/api/guest/${key}`, null)).status, 404);
+  assert.equal((await call('GET', `/api/guest/${renewed.qr_token}`, null)).status, 200);
+
+  // Start plan: menu only; without the QR menu section the page is closed.
+  await call('PUT', `/api/platform/tenants/${t.id}`, admin, { plan: 'start' });
+  g = (await call('GET', `/api/guest/${renewed.qr_token}`, null)).data;
+  assert.equal(g.order.can, false);
+  assert.equal(g.order.why, 'plan');
+  assert.equal((await call('GET', '/api/guest-requests', boss)).status, 403);
+  await call('PUT', `/api/platform/tenants/${t.id}`, admin, { disabled_modules: ['qrmenu'] });
+  assert.equal((await call('GET', `/api/guest/${renewed.qr_token}`, null)).status, 404);
+});

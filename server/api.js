@@ -4,6 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { hashPassword, verifyPassword, newToken, HttpError, str, int } = require('./util');
 const { createPro } = require('./pro');
+const { createGuest } = require('./guest');
 const { createPayroll } = require('./payroll');
 const { snapshot } = require('./backup');
 
@@ -35,6 +36,8 @@ const MODULES = {
   debts: 'Qarz daftari (nasiya)',
   inventory: 'Masalliq ombori va tex-karta',
   branches: 'Filiallar hisoboti',
+  qrmenu: 'QR-menyu (mijoz telefonida)',
+  qrorder: "QR orqali buyurtma va chaqiruv",
 };
 function routeModule(pattern) {
   if (/^\/api\/(kitchen|items\/:id\/(accept|ready))$/.test(pattern)) return 'kitchen';
@@ -47,6 +50,8 @@ function routeModule(pattern) {
   if (pattern === '/api/checks/export') return 'export';
   if (/^\/api\/(ingredients|inventory)/.test(pattern) || pattern === '/api/dishes/:id/recipe') return 'inventory';
   if (pattern === '/api/branches') return 'branches';
+  if (/^\/api\/guest-requests/.test(pattern)) return 'qrorder';
+  if (pattern === '/api/qr' || pattern === '/api/rooms/:id/qr') return 'qrmenu';
   if (/^\/api\/checks/.test(pattern)) return 'history';
   return null;
 }
@@ -62,6 +67,12 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   const now = () => Date.now();
   const payroll = createPayroll(db, { audit, events: hub, now });
   const pro = createPro(db, { audit, events: hub, now, moduleOn: (m) => moduleOn(m), settings: () => settings() });
+  // QR menu: guests order from the table, a worker approves.
+  const guest = createGuest(db, {
+    tenantId: Number((/^t(\d+)_/.exec(tokenPrefix) || [])[1]) || 0, audit, events: hub, now, moduleOn: (m) => moduleOn(m), settings: () => settings(),
+    readOnly: () => { const p = plan(); return !!(p && p.read_only); }, kitchenLoad: () => kitchenLoad(),
+    openOrder: (a) => openOrder(a), addItems: (a) => addItems(a), orderDetails: (id) => orderDetails(id), placeName: (o, r) => placeName(o, r),
+  });
 
   function tx(fn) {
     db.exec('BEGIN');
@@ -345,7 +356,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   function updateSettings({ user, body }) {
     const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width',
       'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo',
-      'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', 'cashback_pct', ...OWNER_SETTINGS];
+      'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', 'cashback_pct', 'qr_order', 'qr_from', 'qr_to', ...OWNER_SETTINGS];
     if (user.role !== 'owner' && OWNER_SETTINGS.some((k) => body[k] !== undefined)) throw new HttpError(403, "Moliya huquqlarini faqat boshliq o'zgartiradi");
     const set = q('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     for (const k of allowed) {
@@ -368,6 +379,11 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       if (k === 'cashback_pct') {
         v = Number(v);
         if (!(v >= 0 && v <= 30)) throw new HttpError(400, "Keshbek 0–30% oralig'ida bo'lsin");
+      }
+      if (k === 'qr_order') v = v ? '1' : '0';
+      if (k === 'qr_from' || k === 'qr_to') {
+        v = String(v || '').trim();
+        if (v && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(v)) throw new HttpError(400, "Vaqt 09:00 ko'rinishida bo'lsin");
       }
       if (k === 'lock_bg') v = JSON.stringify(lockBgInput(v));
       if (k === 'service_pct') {
@@ -442,7 +458,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   function uploadAsset({ user, body }) {
     const kind = str(body.kind, 'Turi', { required: true });
-    if (!['logo', 'bg'].includes(kind)) throw new HttpError(400, "Rasm turi noto'g'ri");
+    if (!['logo', 'bg', 'dish'].includes(kind)) throw new HttpError(400, "Rasm turi noto'g'ri");
     const m = /^data:([a-z/+-]+);base64,([A-Za-z0-9+/=]+)$/.exec(String(body.data || ''));
     if (!m || !IMAGE_TYPES[m[1]]) throw new HttpError(400, 'Faqat JPG, PNG yoki WEBP rasm yuklash mumkin');
     const data = Buffer.from(m[2], 'base64');
@@ -459,7 +475,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   // Pictures no setting points to any more are removed (an upload not saved within a day, an old logo).
   function cleanAssets() {
     const s = settings();
-    const keep = [s.logo, s.receipt_logo_id, s.lock_bg.image].filter(Boolean).map(Number);
+    const keep = [s.logo, s.receipt_logo_id, s.lock_bg.image, ...q('SELECT photo FROM dishes WHERE photo IS NOT NULL').all().map((r) => r.photo)].filter(Boolean).map(Number);
     q(`DELETE FROM assets WHERE created_at < ? ${keep.length ? `AND id NOT IN (${keep.join(',')})` : ''}`).run(now() - 24 * 60 * MIN);
     q(`DELETE FROM assets WHERE kind = 'logo' AND created_at < ? ${keep.length ? `AND id NOT IN (${keep.join(',')})` : ''}`).run(now());
   }
@@ -696,6 +712,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       barcode: pick('barcode', (v) => str(v, 'Shtrix-kod', { max: 40 })) ?? '',
       size: pick('size', (v) => str(v, "O'lcham", { max: 20 })) ?? '',
       color: pick('color', (v) => str(v, 'Rang', { max: 30 })) ?? '',
+      // QR menu: a photo (uploaded as a 'dish' picture) and a line or two shown to guests.
+      photo: pick('photo', (v) => (v ? assetId(v, 'dish') : null)) ?? null,
+      description: pick('description', (v) => str(v, 'Tavsif', { max: 300 })) ?? '',
     };
     if (d.barcode && q('SELECT 1 FROM dishes WHERE barcode = ? AND active = 1 AND id != ?').get(d.barcode, prev.id || 0)) {
       throw new HttpError(409, 'Bu shtrix-kod boshqa mahsulotda bor');
@@ -704,14 +723,16 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     let id = prev.id;
     if (id) {
       q(`UPDATE dishes SET category_id = ?, name = ?, price = ?, cost = ?, prep_minutes = ?, unit = ?, needs_kitchen = ?, icon = ?, stock = ?,
-        barcode = ?, size = ?, color = ?, available = CASE WHEN ? = 0 THEN 0 WHEN ? > 0 AND available = 0 AND stock = 0 THEN 1 ELSE available END WHERE id = ?`).run(
-        d.category_id, d.name, d.price, d.cost, d.prep_minutes, d.unit, d.needs_kitchen, d.icon, d.stock, d.barcode, d.size, d.color, d.stock ?? 1, d.stock ?? 0, id
+        barcode = ?, size = ?, color = ?, photo = ?, description = ?,
+        available = CASE WHEN ? = 0 THEN 0 WHEN ? > 0 AND available = 0 AND stock = 0 THEN 1 ELSE available END WHERE id = ?`).run(
+        d.category_id, d.name, d.price, d.cost, d.prep_minutes, d.unit, d.needs_kitchen, d.icon, d.stock, d.barcode, d.size, d.color, d.photo, d.description,
+        d.stock ?? 1, d.stock ?? 0, id
       );
       if (prev.price !== d.price) audit(user, 'price_change', `${d.name}: ${prev.price} → ${d.price}`);
     } else {
-      id = q(`INSERT INTO dishes (category_id, name, price, cost, prep_minutes, unit, needs_kitchen, icon, stock, barcode, size, color, available)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(d.category_id, d.name, d.price, d.cost, d.prep_minutes, d.unit, d.needs_kitchen, d.icon, d.stock,
-        d.barcode, d.size, d.color, d.stock === 0 ? 0 : 1).lastInsertRowid;
+      id = q(`INSERT INTO dishes (category_id, name, price, cost, prep_minutes, unit, needs_kitchen, icon, stock, barcode, size, color, photo, description, available)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(d.category_id, d.name, d.price, d.cost, d.prep_minutes, d.unit, d.needs_kitchen, d.icon, d.stock,
+        d.barcode, d.size, d.color, d.photo, d.description, d.stock === 0 ? 0 : 1).lastInsertRowid;
     }
     audit(user, prev.id ? 'dish_update' : 'dish_create', d.name);
     events.publish('menu');
@@ -1714,6 +1735,12 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['GET', '/api/rooms', ALL, listRooms],
     ['POST', '/api/rooms', MANAGERS, createRoom],
     ['PUT', '/api/rooms/:id', MANAGERS, updateRoom],
+    ['GET', '/api/qr', MANAGERS, guest.listQr],
+    ['POST', '/api/rooms/:id/qr', MANAGERS, guest.renewQr],
+    ['GET', '/api/guest-requests', ['owner', 'admin', 'cashier', 'waiter'], guest.list],
+    ['POST', '/api/guest-requests/:id/approve', ['owner', 'admin', 'cashier', 'waiter'], guest.approve],
+    ['POST', '/api/guest-requests/:id/reject', ['owner', 'admin', 'cashier', 'waiter'], guest.reject],
+    ['POST', '/api/guest-requests/:id/done', ['owner', 'admin', 'cashier', 'waiter'], guest.done],
     ['GET', '/api/menu', ALL, menu],
     ['POST', '/api/categories', MANAGERS, saveCategory],
     ['PUT', '/api/categories/:id', MANAGERS, saveCategory],
@@ -1802,7 +1829,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return null;
   }
 
-  return { match, guard, authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, planInfo, wasKicked, summary, ROLES };
+  return { match, guard, authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, planInfo, wasKicked, summary, ROLES,
+    guestInfo: guest.info, guestImage: guest.image, guestRequest: guest.request };
 }
 
 module.exports = { createApi, MODULES, BUSINESS_TYPES, SHOP_TYPES };

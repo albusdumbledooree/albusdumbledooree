@@ -49,6 +49,8 @@ function serveStatic(req, res, pathname) {
   // (or /app on a device that is already connected), so no login form is shown to visitors.
   if (pathname === PLATFORM_PATH || pathname.startsWith(PLATFORM_PATH + '/')) file = path.join(PUBLIC, 'platform.html');
   else if (/^\/c\/[a-z0-9-]+\/?$/i.test(pathname) || pathname === '/app') file = path.join(PUBLIC, 'index.html');
+  // A room's QR code: the guest menu (no login).
+  else if (/^\/q\/\d+-[A-Za-z0-9]{12}\/?$/.test(pathname)) file = path.join(PUBLIC, 'guest.html');
   else if (['/platform.html', '/index.html', '/'].includes(pathname) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(PUBLIC, 'landing.html');
   // Code and styles are re-checked on every load (cheap 304), so an update reaches every device at once.
   const st = fs.statSync(file);
@@ -141,6 +143,23 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       // Site owner's panel: choyxonas, subscriptions, boss accounts.
       if (pathname === '/api/platform/release') return reply({ release: RELEASE });
       if (pathname.startsWith('/api/platform/')) return reply(await platform.handle(req.method, pathname, { body, query, token, ip }));
+
+      // QR menu of a room: what a guest sees and sends (no login; the room's secret key is the address).
+      const g = /^\/api\/guest\/(\d+-[A-Za-z0-9]{12})(?:\/(request|img\/(\d+)))?$/.exec(pathname);
+      if (g) {
+        const ctx = platform.byGuestKey(g[1]);
+        if (!ctx) throw new HttpError(404, "Bu QR kod endi ishlamaydi");
+        if (ctx.row.status !== 'active') throw new HttpError(403, 'Bu joy vaqtincha ishlamayapti');
+        if (g[3] && req.method === 'GET') {
+          const a = ctx.api.guestImage(g[1], Number(g[3]));
+          if (!a) throw new HttpError(404, 'Topilmadi');
+          res.writeHead(200, { 'Content-Type': a.mime, 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' });
+          return res.end(a.data);
+        }
+        if (!g[2] && req.method === 'GET') return reply(ctx.api.guestInfo(g[1], String(query.g || '')));
+        if (g[2] === 'request' && req.method === 'POST') return reply(ctx.api.guestRequest(g[1], body, ip));
+        throw new HttpError(404, 'Topilmadi');
+      }
 
       // Front page: current plans and prices, and how to reach the platform owner.
       if (pathname === '/api/public/info' && req.method === 'GET') return reply(platform.publicInfo());

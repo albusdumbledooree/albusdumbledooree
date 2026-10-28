@@ -58,15 +58,15 @@ const CODE_RE = /^[a-z0-9][a-z0-9-]{1,30}$/;
  * the three keys stay. max_staff 0 = no limit. A lower plan never deletes anything: it only stops adding more.
  */
 const PLAN_KEYS = ['start', 'biznes', 'pro'];
-const BIZ_MODULES = ['stoplist', 'reports', 'finance', 'payroll', 'reservations', 'history', 'audit', 'export'];
+const BIZ_MODULES = ['stoplist', 'reports', 'finance', 'payroll', 'reservations', 'history', 'audit', 'export', 'qrmenu', 'qrorder'];
 const PRO_MODULES = [...BIZ_MODULES, 'customers', 'debts', 'inventory', 'branches'];
 const DEFAULT_PLANS = {
-  start: { name: 'Start', price: 199000, max_staff: 5, devices_per_staff: 1, modules: ['stoplist', 'reports', 'history'] },
+  start: { name: 'Start', price: 199000, max_staff: 5, devices_per_staff: 1, modules: ['stoplist', 'reports', 'history', 'qrmenu'] },
   biznes: { name: 'Biznes', price: 349000, max_staff: 15, devices_per_staff: 1, modules: BIZ_MODULES },
   pro: { name: 'Pro', price: 599000, max_staff: 0, devices_per_staff: 0, modules: PRO_MODULES },
 };
 // Sections that existed when plans were first saved; a section added later goes to the plans that have it by default.
-const FIRST_MODULES = BIZ_MODULES;
+const FIRST_MODULES = ['stoplist', 'reports', 'finance', 'payroll', 'reservations', 'history', 'audit', 'export'];
 // branch_price: a second (third…) place of the same owner; yearly_months: a year is paid as this many months;
 // grace_days: days after the paid term ends before the business becomes read-only; trial_days: free start.
 const DEFAULT_TERMS = { branch_price: 149000, yearly_months: 10, grace_days: 3, trial_days: 14 };
@@ -151,6 +151,12 @@ function createPlatform(dataDir) {
   function byCode(code) {
     const row = q('SELECT * FROM tenants WHERE code = ?').get(String(code || '').trim().toLowerCase());
     return row ? context(row.id) : null;
+  }
+
+  // A room's QR key starts with the business id: "12-AbCdEf…".
+  function byGuestKey(key) {
+    const m = /^(\d+)-[A-Za-z0-9]{12}$/.exec(key || '');
+    return m ? context(Number(m[1])) : null;
   }
 
   function byToken(token) {
@@ -580,7 +586,7 @@ function createPlatform(dataDir) {
     pdb.close();
   }
 
-  return { handle, byCode, byToken, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, submitLead: leads.submit };
+  return { handle, byCode, byToken, byGuestKey, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, submitLead: leads.submit };
 }
 
 module.exports = { createPlatform };

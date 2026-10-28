@@ -2,6 +2,22 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.11.0 — QR-menyu: mijoz stoldan buyurtma beradi
+- **Har bir xona/stol uchun QR kod** (Sozlamalar → QR-menyu). Kod ichida maxfiy kalit bor — xona raqamini taxmin qilib
+  boshqa xonaga buyurtma berib bo'lmaydi. Kod tarqalib ketsa, bitta tugma bilan yangilanadi (eskisi darhol ishlamay qoladi).
+  **Chop etish**: A4 varaqqa 4 tadan stol kartasi — logotip, joy nomi, xona, QR kod, o'zbek va rus tilida yozuv.
+- **Mijoz telefonida menyu** (login va ilova kerak emas): xona nomi, ofitsant va kassir ismi, bo'limlar, qidiruv,
+  taom rasmlari va tavsifi, narx, tayyor bo'lish vaqti. Tugagan taomlar ko'rinmaydi. O'zbek va rus tilida.
+- **Buyurtma so'rovi**: mijoz taomlarni tanlab (har biriga izoh bilan) "Ofitsantga yuborish" ni bosadi. Bu hali chek emas:
+  xona ofitsanti va kassirga ovozli xabar keladi, ular ko'rib, kerak bo'lsa miqdorni kamaytirib **tasdiqlaydi** — shundan
+  keyingina chek ochiladi va taomlar oshxonaga boradi. Yoki sabab bilan **rad etadi**. Mijoz holatni o'z telefonida ko'radi.
+- **"Ofitsantni chaqirish"** va **"Hisob"** tugmalari: mijoz o'z hisobini (taomlar, xizmat haqi, jami) ko'radi va hisob so'raydi.
+- Himoya: bir xonadan bir vaqtda ko'pi bilan 2 ta tasdiqlanmagan buyurtma, 15 daqiqada javob berilmagan so'rov o'zi bekor bo'ladi,
+  bir manzildan juda ko'p so'rov qabul qilinmaydi. Boshliq QR buyurtmani o'chirib qo'yishi yoki vaqt belgilashi mumkin (masalan 10:00–23:00).
+- Menyu → taom: **rasm** va **qisqa tavsif** (mijoz uchun). Rasm telefonga moslab avtomatik kichraytiriladi.
+- Tariflar: QR-menyu (ko'rish) — barcha tariflarda; QR orqali buyurtma, chaqiruv, hisob — Biznes va Pro'da.
+  Ilgari saqlangan tariflarga bu bo'limlar o'zi qo'shiladi.
+
 ## 1.10.0 — Arizalar va Telegram bot
 - flowi.uz bosh sahifasida **"Ariza qoldiring"** anketasi (o'zbek/rus): ism, telefon, biznes nomi va turi, xodimlar soni,
   shahar, qo'ng'iroq uchun qulay vaqt, tarif, izoh. Narxlardagi "Ulanish" tugmasi tarifni anketada o'zi tanlaydi.

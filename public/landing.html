@@ -455,7 +455,9 @@
     write_us: 'Написать нам', contact_soon: 'Оставьте заявку — свяжемся с вами', currency: 'сум',
     ap_need: 'Введите имя и номер телефона', ap_bad_phone: 'Проверьте номер телефона', ap_sending: 'Отправляется…', ap_fail: 'Не удалось отправить. Проверьте интернет и попробуйте ещё раз',
     ap_done_t: 'Спасибо! Заявка принята', ap_done_p: 'Мы свяжемся с вами в течение 24 часов.', ap_more: 'Отправить ещё одну заявку', or_write: 'Или напишите нам напрямую:',
-    mod: { 'Stop-list': 'Стоп-лист', 'Hisobotlar va boshqaruv paneli': 'Отчёты и панель', 'Kirim-chiqim va kassa smenasi': 'Приход-расход и смена', 'Ish haqi': 'Зарплата', 'Bronlar': 'Брони', 'Cheklar tarixi': 'История чеков', 'Amallar tarixi': 'Журнал действий', 'Excelga yuklab olish': 'Выгрузка в Excel' },
+    mod: { 'Stop-list': 'Стоп-лист', 'Hisobotlar va boshqaruv paneli': 'Отчёты и панель', 'Kirim-chiqim va kassa smenasi': 'Приход-расход и смена', 'Ish haqi': 'Зарплата', 'Bronlar': 'Брони', 'Cheklar tarixi': 'История чеков', 'Amallar tarixi': 'Журнал действий', 'Excelga yuklab olish': 'Выгрузка в Excel',
+      'QR-menyu (mijoz telefonida)': 'QR-меню (на телефоне гостя)', 'QR orqali buyurtma va chaqiruv': 'Заказ и вызов официанта по QR',
+      'Mijozlar va keshbek': 'Клиенты и кэшбэк', 'Qarz daftari (nasiya)': 'Долговая тетрадь', 'Masalliq ombori va tex-karta': 'Склад продуктов и техкарты', 'Filiallar hisoboti': 'Отчёт по филиалам' },
   };
   var UZ_DYN = {
     per_month: "so'm / oy", popular: 'Eng ommabop', staff_upto: '{0} tagacha xodim', staff_any: 'Xodimlar soni cheksiz', devices_any: 'Qurilmalar soni cheksiz',
@@ -465,10 +467,12 @@
     ap_need: 'Ism va telefon raqamini kiriting', ap_bad_phone: 'Telefon raqamini tekshiring', ap_sending: 'Yuborilmoqda…', ap_fail: "Yuborilmadi. Internetni tekshirib, qayta urinib ko'ring",
     ap_done_t: 'Rahmat! Arizangiz qabul qilindi', ap_done_p: "24 soat ichida siz bilan bog'lanamiz.", ap_more: 'Yana ariza yuborish', or_write: "Yoki to'g'ridan-to'g'ri yozing:",
   };
-  var ALL_MODS = ['Stop-list', 'Hisobotlar va boshqaruv paneli', 'Cheklar tarixi', 'Kirim-chiqim va kassa smenasi', 'Ish haqi', 'Bronlar', 'Amallar tarixi', 'Excelga yuklab olish'];
+  var ALL_MODS = ['Stop-list', 'Hisobotlar va boshqaruv paneli', 'Cheklar tarixi', 'QR-menyu (mijoz telefonida)', 'Kirim-chiqim va kassa smenasi', 'Ish haqi', 'Bronlar', 'Amallar tarixi',
+    'Excelga yuklab olish', 'QR orqali buyurtma va chaqiruv', 'Mijozlar va keshbek', 'Qarz daftari (nasiya)', 'Masalliq ombori va tex-karta', 'Filiallar hisoboti'];
+  var BIZ_MODS = ALL_MODS.slice(0, 10);
   var FALLBACK = { plans: [
-    { key: 'start', name: 'Start', price: 199000, max_staff: 5, modules: ['Stop-list', 'Hisobotlar va boshqaruv paneli', 'Cheklar tarixi'] },
-    { key: 'biznes', name: 'Biznes', price: 349000, max_staff: 15, modules: ALL_MODS },
+    { key: 'start', name: 'Start', price: 199000, max_staff: 5, modules: ['Stop-list', 'Hisobotlar va boshqaruv paneli', 'Cheklar tarixi', 'QR-menyu (mijoz telefonida)'] },
+    { key: 'biznes', name: 'Biznes', price: 349000, max_staff: 15, modules: BIZ_MODS },
     { key: 'pro', name: 'Pro', price: 599000, max_staff: 0, modules: ALL_MODS }],
     terms: { branch_price: 149000, yearly_months: 10, grace_days: 3, trial_days: 14 }, support: null };
 

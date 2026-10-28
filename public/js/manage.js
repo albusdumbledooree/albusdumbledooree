@@ -5,6 +5,38 @@
 function kpi(label, value, sub = '', cls = '', ic = 'chart-column') {
   return `<div class="kpi ${cls}"><div class="kpi-ic">${icon(ic, 22)}</div><div><div class="label">${label}</div><div class="value">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div></div>`;
 }
+// ---------- QR menu: codes and printing ----------
+const guestUrl = (key) => `${location.origin}/q/${key}`;
+function qrSvg(text) {
+  const qr = qrcode(0, 'M');
+  qr.addData(text);
+  qr.make();
+  const n = qr.getModuleCount();
+  let d = '';
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d += `M${c + 2} ${r + 2}h1v1h-1z`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n + 4} ${n + 4}" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+}
+// A4 sheets, four table cards per page: logo, place, room, QR code, a line in Uzbek and Russian.
+function printQr(rooms) {
+  const s = App.settings;
+  const logo = App.info && App.info.logo ? `${location.origin}${App.info.logo}` : '';
+  const w = window.open('', '_blank');
+  if (!w) return toast(t("Brauzer yangi oynani to'sib qo'ydi — ruxsat bering"), 'warn');
+  const card = (r) => `<div class="c">${logo ? `<img class="l" src="${esc(logo)}" alt="">` : ''}<div class="v">${esc(s.name)}</div>
+    <div class="r">${esc(r.name)}</div><div class="q">${qrSvg(guestUrl(r.qr_token))}</div>
+    <div class="t">${moduleOn('qrorder') ? 'Menyu va buyurtma — skanerlang' : "Menyuni ko'rish uchun skanerlang"}</div>
+    <div class="t ru">${moduleOn('qrorder') ? 'Меню и заказ — отсканируйте' : 'Отсканируйте, чтобы открыть меню'}</div><div class="f">flowi.uz</div></div>`;
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>QR — ${esc(s.name)}</title><style>
+    @page { size: A4; margin: 10mm; } * { box-sizing: border-box; } body { margin: 0; font-family: Inter, Arial, sans-serif; color: #0b1f33; }
+    .g { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; } .c { border: 1.5px dashed #9aa3b2; border-radius: 6mm; height: 132mm; padding: 7mm 6mm;
+      display: flex; flex-direction: column; align-items: center; text-align: center; break-inside: avoid; }
+    .l { height: 14mm; max-width: 50mm; object-fit: contain; } .v { font-size: 13pt; font-weight: 700; margin-top: 2mm; }
+    .r { font-size: 22pt; font-weight: 800; margin: 2mm 0 3mm; } .q svg { width: 62mm; height: 62mm; display: block; }
+    .t { font-size: 12pt; font-weight: 700; margin-top: 3mm; } .ru { font-weight: 500; color: #475569; margin-top: 1mm; } .f { margin-top: auto; font-size: 9pt; color: #94a3b8; }
+  </style></head><body><div class="g">${rooms.map(card).join('')}</div><script>window.onload = () => setTimeout(() => window.print(), 300);<\/script></body></html>`);
+  w.document.close();
+}
+const dishPhoto = (id) => `/media/${encodeURIComponent((App.info && App.info.code) || '')}/${id}`;
 function hbars(rows, { red = false } = {}) {
   if (!rows.length) return `<p class="muted">${t("Ma'lumot yo'q")}</p>`;
   const max = Math.max(1, ...rows.map((r) => r.value));
@@ -902,7 +934,7 @@ Views.menuadmin = {
       ${groups.filter((g) => (g.c.id && !q) || g.ds.length).map(({ c, ds }) => `<div class="card"><div class="card-head"><h2>${c.id ? `<i class="cat-dot" style="background:${catColor({ categories }, c.id)}"></i>` : ''}${esc(c.icon)} ${esc(c.name)}</h2>
         ${c.id ? `<button class="icon-btn" data-edit-cat="${c.id}">${icon('pencil', 18)}</button><button class="icon-btn danger" data-del-cat="${c.id}">${icon('trash-2', 18)}</button>` : ''}</div>
         ${ds.length ? `<div class="table-wrap"><table>
-        ${ds.map((d) => `<tr><td style="width:44px;font-size:24px">${esc(d.icon)}</td><td><b>${esc(d.name)}</b>${d.size || d.color ? ` <span class="chip">${esc([d.size, d.color].filter(Boolean).join(' · '))}</span>` : ''}<br>
+        ${ds.map((d) => `<tr><td style="width:44px;font-size:24px">${d.photo ? `<img class="dish-thumb" src="${dishPhoto(d.photo)}" alt="" loading="lazy">` : esc(d.icon)}</td><td><b>${esc(d.name)}</b>${d.size || d.color ? ` <span class="chip">${esc([d.size, d.color].filter(Boolean).join(' · '))}</span>` : ''}<br>
             <span class="small muted">${shop ? `${d.barcode ? `${icon('scan-barcode', 13)} ${esc(d.barcode)} · ` : ''}${icon('package', 13)} ${d.stock ?? '∞'} ${esc(d.unit)}`
               : d.needs_kitchen ? `${icon('chef-hat', 13)} ${d.prep_minutes} ${t('daq')}` : `${icon('check', 13)} ${t('Darhol')}`}</span></td>
           <td class="right num"><b>${money(d.price)}</b>${shop && d.cost ? `<br><span class="small muted">${money(d.cost)}</span>` : ''}</td>
@@ -949,11 +981,35 @@ Views.menuadmin = {
           <input type="hidden" name="unit" value="${esc(d.unit || 'porsiya')}">`}
         <label class="field">${t('Belgi (emoji)')}<input name="icon" value="${esc(d.icon || (shop ? '📦' : '🍽️'))}"></label>
         <label class="field">${t("Qoldiq (bo'sh = cheksiz)")}<input type="number" name="stock" min="0" value="${d.stock ?? ''}"></label></div>
-        ${shop ? '<input type="hidden" name="needs_kitchen" value="">' : `<label class="check" style="margin-top:14px"><input type="checkbox" name="needs_kitchen" ${d.needs_kitchen === 0 ? '' : 'checked'}> ${icon('chef-hat', 18)} ${t('Oshxonada tayyorlanadi')}</label>`}`,
+        ${shop ? '<input type="hidden" name="needs_kitchen" value="">' : `<label class="check" style="margin-top:14px"><input type="checkbox" name="needs_kitchen" ${d.needs_kitchen === 0 ? '' : 'checked'}> ${icon('chef-hat', 18)} ${t('Oshxonada tayyorlanadi')}</label>`}
+        ${!shop && moduleOn('qrmenu') ? `<h3 style="margin:18px 0 8px">${icon('qr-code', 18)} ${t('QR-menyu uchun')}</h3>
+        <div class="dish-photo-edit"><div class="dish-photo" id="dp-prev">${d.photo ? `<img src="${dishPhoto(d.photo)}" alt="">` : esc(d.icon || '🍽️')}</div>
+          <div class="stack" style="gap:8px"><input type="hidden" name="photo" value="${d.photo || ''}">
+            <label class="btn sm">${icon('image', 16)} ${t('Rasm tanlash')}<input type="file" accept="image/*" id="dp-file" hidden></label>
+            <button type="button" class="btn sm" id="dp-del" ${d.photo ? '' : 'hidden'}>${icon('x', 16)} ${t("Rasmni olib tashlash")}</button>
+            <span class="small muted">${t("Mijoz telefonida ko'rinadi. Kvadrat, yorug' rasm yaxshi chiqadi.")}</span></div></div>
+        <label class="field" style="margin-top:12px">${t('Qisqa tavsif (mijozga)')}<textarea name="description" rows="2" maxlength="300" placeholder="${esc(t("Masalan: mol go'shti, sabzi, no'xat — 400 g"))}">${esc(d.description || '')}</textarea></label>` : ''}`,
+      onMount: (f) => {
+        const file = f.querySelector('#dp-file');
+        if (!file) return;
+        const prev = f.querySelector('#dp-prev');
+        const del = f.querySelector('#dp-del');
+        file.onchange = async () => {
+          const fl = file.files[0];
+          if (!fl) return;
+          try {
+            prev.innerHTML = `<span class="small muted">${t('Yuklanmoqda…')}</span>`;
+            const r = await POST('/api/assets', { kind: 'dish', data: await imageToDataUrl(fl, 900, 'image/jpeg') });
+            f.photo.value = r.id; prev.innerHTML = `<img src="${dishPhoto(r.id)}" alt="">`; del.hidden = false;
+          } catch (e) { prev.textContent = d.icon || '🍽️'; toastError(e); }
+        };
+        del.onclick = () => { f.photo.value = ''; prev.textContent = f.icon.value || '🍽️'; del.hidden = true; };
+      },
       actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: 'primary', onClick: async (f) => {
         const x = formData(f);
         x.category_id = x.category_id ? Number(x.category_id) : null;
         x.stock = x.stock === '' ? null : x.stock;
+        if ('photo' in x) x.photo = x.photo ? Number(x.photo) : null;
         if (shop) { x.needs_kitchen = false; x.prep_minutes = 0; }
         if (d.id) await PUT(`/api/dishes/${d.id}`, x); else await POST('/api/dishes', x);
         toast(t('Saqlandi'), 'ok'); refreshView();
@@ -1071,11 +1127,13 @@ const AUDIT_NAMES = () => ({
   session_kicked: t('Boshqa qurilmadan kirdi (avvalgisi chiqarildi)'), device_add: t('Qurilma uladi'), device_remove: t('Qurilmani uzdi'), pay_payment: t("Ish haqi to'ladi"), pay_bonus: t('Bonus yozdi'), pay_fine: t('Jarima yozdi'),
   customer_create: t("Mijoz qo'shdi"), customer_update: t('Mijozni tahrirladi'), debt_pay: t("Qarz to'lovini oldi"), ingredient_save: t('Masalliqni saqladi'), ingredient_delete: t("Masalliqni o'chirdi"),
   stock_in: t('Omborga kirim qildi'), stock_receive: t('Omborga kirim qildi'), stock_count: t('Ombor sanog\'i'), stock_writeoff: t('Hisobdan chiqardi'), recipe_set: t('Tex-kartani saqladi'), staff_meal: t('Xodim hisobiga yopdi'),
+  guest_approve: t('QR buyurtmani tasdiqladi'), guest_reject: t('QR buyurtmani rad etdi'), qr_renew: t('QR kodni yangiladi'),
 });
 const SETTINGS_TABS = () => [
   ['general', 'store', t('Muassasa'), ['owner', 'admin']],
   ['look', 'palette', t("Ko'rinish"), ['owner', 'admin']],
   ...(isShop() ? [] : [['rooms', 'door-open', App.biz === 'fastfood' ? t('Stollar') : t('Xonalar'), ['owner', 'admin']]]),
+  ...(isShop() ? [] : [['qr', 'qr-code', t('QR-menyu'), ['owner', 'admin'], 'qrmenu']]),
   ['rights', 'shield-check', t('Ruxsatlar'), ['owner', 'admin']],
   ['devices', 'monitor-smartphone', t('Qurilmalar'), ['owner', 'admin']],
   ['audit', 'history', t('Amallar tarixi'), ['owner', 'admin'], 'audit'],
@@ -1094,6 +1152,7 @@ Views.settings = {
     const data = { tab };
     if (tab === 'rooms') [data.rooms, data.users] = await Promise.all([GET('/api/rooms?all=1'), GET('/api/users')]);
     if (tab === 'devices') data.devices = await GET('/api/devices');
+    if (tab === 'qr') data.qr = await GET('/api/qr');
     if (tab === 'audit') data.rows = await GET('/api/audit?limit=300');
     if (tab === 'backup') [data.local, data.folder] = await Promise.all([LocalBackup.all(), FolderBackup.status()]);
     if (tab === 'me' && App.user.role !== 'owner' && moduleOn('payroll')) data.pay = await GET('/api/my/payroll').catch(() => null);
@@ -1251,6 +1310,47 @@ Views.settings = {
     };
     const rdel = root.querySelector('#rlogo-del');
     if (rdel) rdel.onclick = () => save({ receipt_logo_id: '' }, t("O'chirildi"));
+  },
+
+  tab_qr({ qr }) {
+    const s = App.settings;
+    const orders = moduleOn('qrorder');
+    return `<div class="card"><p style="margin-top:0">${icon('info', 16)} ${t("Har bir xona uchun alohida QR kod. Mijoz telefon kamerasi bilan skanerlaydi — menyu rasmlar bilan ochiladi, ilova yoki login kerak emas.")}
+        ${orders ? t("Mijoz buyurtma yuborsa, xona ofitsanti va kassirga xabar keladi; ular tasdiqlagandan keyingina chek ochiladi.") : ''}</p>
+      ${orders ? `<form id="qr-form"><div class="form-grid">
+          <label class="check" style="align-self:end"><input type="checkbox" name="qr_order" ${s.qr_order === '1' ? 'checked' : ''}> ${t("Mijozlar QR orqali buyurtma bersin, ofitsantni chaqirsin")}</label>
+          <label class="field">${t('Buyurtma qabul qilish vaqti: dan')}<input type="time" name="qr_from" value="${esc(s.qr_from || '')}"></label>
+          <label class="field">${t('gacha (ikkalasi bo\'sh = doim)')}<input type="time" name="qr_to" value="${esc(s.qr_to || '')}"></label></div>
+          <button class="btn primary" style="margin-top:12px">${icon('check', 18)} ${t('Saqlash')}</button></form>`
+        : `<div class="notice">${icon('lock', 18)} ${t("Hozir QR kod faqat menyuni ko'rsatadi. Mijoz QR orqali buyurtma berishi, ofitsantni chaqirishi — Biznes va Pro tariflarida.")}</div>`}</div>
+    <div class="page-head" style="margin-top:18px"><h2 style="margin:0">${t('QR kodlar')}</h2>
+      <button class="btn primary" id="qr-print-all" ${qr.length ? '' : 'disabled'}>${icon('printer', 18)} ${t('Hammasini chop etish')}</button></div>
+    ${qr.length ? `<div class="qr-grid">${qr.map((r) => `<div class="card qr-card">
+        <div class="qr-img">${qrSvg(guestUrl(r.qr_token))}</div>
+        <b>${esc(r.name)}</b>${r.section ? `<span class="small muted">${esc(r.section)}</span>` : ''}
+        <div class="row" style="gap:6px;justify-content:center;flex-wrap:wrap">
+          <button class="btn sm" data-qr-print="${r.id}">${icon('printer', 16)} ${t('Chop etish')}</button>
+          <a class="btn sm" href="${esc(guestUrl(r.qr_token))}" target="_blank" rel="noopener">${icon('external-link', 16)} ${t('Ochish')}</a>
+          <button class="icon-btn" data-qr-renew="${r.id}" title="${esc(t('Yangi QR kod (eskisi ishlamay qoladi)'))}">${icon('refresh-cw', 18)}</button></div></div>`).join('')}</div>`
+      : `<div class="card">${emptyState('qr-code', t("Avval Xonalar bo'limida xona qo'shing"))}</div>`}
+    <p class="small muted">${icon('shield-check', 14)} ${t("QR kod ichida maxfiy kalit bor — xona raqamini taxmin qilib boshqa xonaga buyurtma berib bo'lmaydi. Kod tarqalib ketsa, ⟳ tugmasi bilan yangilang: eskisi darhol ishlamay qoladi.")}</p>`;
+  },
+  bind_qr(root, { qr }) {
+    const f = root.querySelector('#qr-form');
+    if (f) f.onsubmit = async (e) => {
+      e.preventDefault();
+      const d = formData(f);
+      try { App.settings = await PUT('/api/settings', d); toast(t('Saqlandi'), 'ok'); } catch (err) { toastError(err); }
+    };
+    const byId = (id) => qr.find((r) => r.id === Number(id));
+    const all = root.querySelector('#qr-print-all');
+    if (all) all.onclick = () => printQr(qr);
+    root.querySelectorAll('[data-qr-print]').forEach((b) => b.onclick = () => printQr([byId(b.dataset.qrPrint)]));
+    root.querySelectorAll('[data-qr-renew]').forEach((b) => b.onclick = async () => {
+      const r = byId(b.dataset.qrRenew);
+      if (!(await confirmModal(t('Yangi QR kod'), t('"{0}" uchun yangi QR kod yaratilsinmi? Eski (chop etilgan) kod ishlamay qoladi — yangisini chop etib qo\'yasiz.', esc(r.name)), t('Yangilash')))) return;
+      try { await POST(`/api/rooms/${r.id}/qr`); toast(t('Yangilandi — endi chop eting'), 'ok'); refreshView(); } catch (e) { toastError(e); }
+    });
   },
 
   tab_rooms({ rooms }) {

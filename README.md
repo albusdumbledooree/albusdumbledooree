@@ -56,6 +56,12 @@ O'chirilgan bo'lim choyxonaning menyusidan darhol yo'qoladi va server ham uni yo
 Har bir choyxona bo'yicha xodimlar, xonalar, oxirgi 30 kundagi cheklar va savdo, oxirgi faollik ko'rinadi.
 Muddat 5 kundan kam qolganda boshliqning ekranida eslatma chiqadi.
 
+### QR-menyu (mijoz stoldan buyurtma beradi)
+Sozlamalar → **QR-menyu**: har bir xona uchun QR kod, "Hammasini chop etish" (A4, 4 ta karta). Mijoz skanerlaydi —
+`/q/<kalit>` sahifasida menyu (rasmlar bilan) ochiladi, login kerak emas. Mijoz yuborgan buyurtma **so'rov** bo'lib keladi:
+xona ofitsanti yoki kassir tasdiqlagandan keyingina chek ochiladi. "Ofitsantni chaqirish" va "Hisob" tugmalari ham bor.
+Taom rasmi va tavsifi: Menyu → taomni tahrirlash. Buyurtma vaqtini cheklash yoki o'chirish: shu QR-menyu bo'limida.
+
 ### Arizalar va Telegram bot
 Bosh sahifadagi "Ariza qoldiring" anketasi to'ldirilsa, ariza avval serverga (platform.db) yoziladi, keyin Telegram botingizga xabar boradi.
 Platformada **Arizalar** bo'limi: holat (Yangi / Qo'ng'iroq qilindi / Ulandi / Rad etildi), izoh, "Biznes ochish".

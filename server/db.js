@@ -234,6 +234,10 @@ const DEFAULT_SETTINGS = {
   staff_meal_price: 'menu',
   // Pro: share of each paid check returned to the customer as bonus (0 = no cashback).
   cashback_pct: '3',
+  // QR menu: guests may send orders from the table ('0' = menu only); hours when ordering is open ('' = always).
+  qr_order: '1',
+  qr_from: '',
+  qr_to: '',
 };
 
 function seedSettings(db, name) {
@@ -486,6 +490,30 @@ CREATE TABLE IF NOT EXISTS ingredient_moves (
 CREATE INDEX IF NOT EXISTS idx_imoves_ing ON ingredient_moves(ingredient_id);
 `);
   addCol('sessions', 'last_seen', 'INTEGER');
+  // QR menu: a secret key per room (printed as a QR code), a photo and a short description per dish.
+  addCol('rooms', 'qr_token', 'TEXT');
+  addCol('dishes', 'photo', 'INTEGER');
+  addCol('dishes', 'description', "TEXT NOT NULL DEFAULT ''");
+  db.exec(`
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rooms_qr ON rooms(qr_token);
+-- What guests send from the QR menu. Nothing reaches a check until a worker approves it.
+CREATE TABLE IF NOT EXISTS guest_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  room_id INTEGER NOT NULL REFERENCES rooms(id),
+  kind TEXT NOT NULL CHECK (kind IN ('order','waiter','bill')),
+  items TEXT NOT NULL DEFAULT '[]',
+  note TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','expired','done')),
+  reason TEXT NOT NULL DEFAULT '',
+  order_id INTEGER,
+  decided_by INTEGER,
+  decided_at INTEGER,
+  ip TEXT NOT NULL DEFAULT '',
+  guest_id TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_guest_req ON guest_requests(status, room_id);
+`);
   const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
   if (!orderCols.includes('service_type')) db.exec("ALTER TABLE orders ADD COLUMN service_type TEXT NOT NULL DEFAULT 'percent'");
   if (!orderCols.includes('takeaway')) db.exec('ALTER TABLE orders ADD COLUMN takeaway INTEGER NOT NULL DEFAULT 0');
