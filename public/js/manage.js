@@ -196,6 +196,9 @@ const MONEY_PAGES = () => [
   ['finance', 'arrow-right-left', t('Kirim-chiqim'), t('Xarajat va boshqa kirimlarni yozish')],
   ['payroll', 'hand-coins', t('Ish haqi'), t('Maosh, avans, xarajat, bonus va jarima')],
   ['attendance', 'calendar', t('Davomat'), t("Kim keldi, kunlik ish haqini berish")],
+  ['customers', 'book-user', t('Mijozlar'), t('Qarz daftari, keshbek va doimiy mijozlar')],
+  ['inventory', 'warehouse', t('Ombor'), t("Masalliqlar qoldig'i, kirim va tex-karta")],
+  ['branches', 'network', t('Filiallar'), t("Hamma filial savdosi bitta jadvalda")],
 ];
 Views.money = {
   title: () => t('Moliya'), icon: () => 'chart-column', roles: ['owner', 'admin', 'cashier'],
@@ -257,7 +260,7 @@ Views.reports = {
       <div class="card"><div class="card-head"><h2>${r.hourly ? t("Soatlar bo'yicha") : t("Kunlar bo'yicha")}</h2></div>${barChart(r.series)}</div>
       <div class="grid grid-2" style="margin-top:16px">
         <div class="card"><div class="card-head"><h2>${t("To'lov turlari")}</h2></div>
-          ${hbars([{ label: t('Naqd'), value: s.cash }, { label: t('Karta'), value: s.card }, { label: t("O'tkazma"), value: s.transfer }, ...(r.other_income ? [{ label: t('Boshqa kirim'), value: r.other_income }] : [])])}</div>
+          ${hbars([{ label: t('Naqd'), value: s.cash }, { label: t('Karta'), value: s.card }, { label: t("O'tkazma"), value: s.transfer }, ...(s.debt ? [{ label: t('Qarzga'), value: s.debt }] : []), ...(s.bonus ? [{ label: t('Bonus bilan'), value: s.bonus }] : []), ...(s.staff ? [{ label: t('Xodim hisobiga'), value: s.staff }] : []), ...(r.other_income ? [{ label: t('Boshqa kirim'), value: r.other_income }] : [])])}</div>
         <div class="card"><div class="card-head"><h2>${t('Xarajatlar')}</h2></div>${hbars(r.expense_by_category.map((x) => ({ label: x.key, value: x.value })), { red: true })}</div>
         <div class="card"><div class="card-head"><h2>${t('Eng ko\'p sotilgan')}</h2></div>${hbars(r.dishes.slice(0, 8).map((d) => ({ label: `${d.name} (${d.qty})`, value: d.revenue })))}</div>
         <div class="card"><div class="card-head"><h2>${isShop() ? t('Sotuvchilar') : t('Ofitsantlar')}</h2></div>${hbars(r.waiters.map((w) => ({ label: `${w.name} (${w.orders})`, value: w.total })))}</div>
@@ -544,6 +547,298 @@ Views.attendance = {
   },
 };
 
+// ---------- Pro: customers and debts ----------
+UI.cust = UI.cust || { tab: 'all', q: '' };
+const MOVE_KINDS = () => ({ cashback: [t('Keshbek'), 'green'], redeem: [t('Bonus ishlatildi'), ''], debt: [t('Qarzga yozildi'), 'red'], debt_pay: [t("Qarz to'landi"), 'green'] });
+Views.customers = {
+  title: () => t('Mijozlar'), icon: () => 'book-user', roles: ['owner', 'admin', 'cashier'], module: 'customers', refreshOn: ['finance'],
+  async load() { return GET(`/api/customers?q=${encodeURIComponent(UI.cust.q)}${UI.cust.tab === 'debt' ? '&debt=1' : ''}`); },
+  render(d) {
+    const tt = d.totals;
+    return `<div class="page-head"><a class="btn sm" href="#/money">${icon('arrow-left', 16)}</a><h1>${t('Mijozlar')}</h1>
+        <input type="search" id="cust-q" placeholder="${esc(t('Ism yoki telefon'))}" value="${esc(UI.cust.q)}" style="max-width:240px">
+        <button class="btn primary" id="cust-add">${icon('plus', 18)} ${t('Mijoz')}</button></div>
+      <div class="kpis">
+        ${kpi(t('Mijozlar'), num(tt.count), '', '', 'book-user')}
+        ${moduleOn('debts') ? kpi(t('Umumiy qarz'), money(tt.debt), t('mijozlar choyxonaga qarz'), tt.debt ? 'warn' : '', 'notebook-pen') : ''}
+        ${moduleOn('customers') ? kpi(t('Bonuslar'), money(tt.bonus), t('Keshbek: chekning {0}%', App.settings.cashback_pct), '', 'gift') : ''}
+      </div>
+      ${moduleOn('debts') ? `<div class="seg" style="margin:4px 0 14px">${[['all', t('Hammasi')], ['debt', t('Qarzdorlar')]].map(([k, n]) => `<button class="${UI.cust.tab === k ? 'active' : ''}" data-ctab="${k}">${n}</button>`).join('')}</div>` : ''}
+      <div class="card">${d.rows.length ? `<div class="table-wrap"><table>
+        <tr><th>${t('Mijoz')}</th><th>${t('Telefon')}</th><th class="right">${t('Tashrif')}</th><th class="right">${t('Jami xarid')}</th>
+          ${moduleOn('customers') ? `<th class="right">${t('Bonus')}</th>` : ''}${moduleOn('debts') ? `<th class="right">${t('Qarz')}</th>` : ''}<th>${t('Oxirgi tashrif')}</th></tr>
+        ${d.rows.map((c) => `<tr class="clickable" data-cust="${c.id}"><td><b>${esc(c.name)}</b>${c.note ? `<br><span class="small muted">${esc(c.note)}</span>` : ''}</td>
+          <td>${esc(c.phone || '—')}</td><td class="right">${c.visits}</td><td class="right num">${money(c.spent)}</td>
+          ${moduleOn('customers') ? `<td class="right num">${c.bonus ? money(c.bonus) : '—'}</td>` : ''}
+          ${moduleOn('debts') ? `<td class="right num">${c.debt ? `<b class="red">${money(c.debt)}</b>` : '—'}</td>` : ''}
+          <td class="small muted">${c.last_visit ? fmtDateTime(c.last_visit) : '—'}</td></tr>`).join('')}
+      </table></div>` : emptyState('book-user', UI.cust.tab === 'debt' ? t("Qarzdor mijoz yo'q") : t("Hali mijoz yo'q. Kassada to'lov oynasida mijozni tanlang yoki shu yerdan qo'shing."))}</div>`;
+  },
+  bind(root, d) {
+    const qi = root.querySelector('#cust-q');
+    let tm = null;
+    qi.oninput = () => { clearTimeout(tm); tm = setTimeout(() => { UI.cust.q = qi.value; refreshView(); }, 350); };
+    root.querySelectorAll('[data-ctab]').forEach((b) => b.onclick = () => { UI.cust.tab = b.dataset.ctab; refreshView(); });
+    root.querySelector('#cust-add').onclick = () => customerForm();
+    root.querySelectorAll('[data-cust]').forEach((r) => r.onclick = () => customerCard(Number(r.dataset.cust)));
+  },
+};
+
+function customerForm(c = {}) {
+  openModal({
+    title: `${icon('book-user')} ${c.id ? esc(c.name) : t('Yangi mijoz')}`,
+    body: `<div class="form-grid"><label class="field">${t('Ism')}<input name="name" value="${esc(c.name || '')}" required></label>
+      <label class="field">${t('Telefon')}<input name="phone" type="tel" value="${esc(c.phone || '+998 ')}"></label></div>
+      <label class="field" style="margin-top:12px">${t('Izoh')}<input name="note" value="${esc(c.note || '')}"></label>`,
+    actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: 'primary', onClick: async (f) => {
+      const x = formData(f);
+      if (x.phone.trim() === '+998') x.phone = '';
+      await (c.id ? PUT(`/api/customers/${c.id}`, x) : POST('/api/customers', x));
+      toast(t('Saqlandi'), 'ok'); refreshView();
+    } }],
+  });
+}
+
+async function customerCard(id) {
+  let c;
+  try { c = await GET(`/api/customers/${id}`); } catch (e) { return toastError(e); }
+  const K = MOVE_KINDS();
+  const form = openModal({
+    title: `${icon('book-user')} ${esc(c.name)}`, size: 'wide',
+    body: `<div class="kpis">
+        ${kpi(t('Tashrif'), c.visits, c.last_visit ? fmtDateTime(c.last_visit) : '', '', 'calendar')}
+        ${kpi(t('Jami xarid'), money(c.spent), '', '', 'wallet')}
+        ${moduleOn('customers') ? kpi(t('Bonus'), money(c.bonus), '', '', 'gift') : ''}
+        ${moduleOn('debts') ? kpi(t('Qarz'), money(c.debt), '', c.debt ? 'bad' : 'good', 'notebook-pen') : ''}</div>
+      <p class="muted">${icon('smartphone', 15)} ${esc(c.phone || '—')}${c.note ? ` · ${esc(c.note)}` : ''}</p>
+      ${c.moves.length ? `<div class="table-wrap"><table><tr><th>${t('Sana')}</th><th>${t('Turi')}</th><th class="right">${t('Summa')}</th><th>${t('Chek')}</th><th>${t('Kim')}</th></tr>
+        ${c.moves.map((m) => `<tr><td class="small">${fmtDateTime(m.created_at)}</td><td><span class="chip ${(K[m.kind] || [])[1] || ''}">${esc((K[m.kind] || [m.kind])[0])}</span>${m.note ? ` <span class="small muted">${esc(m.note)}</span>` : ''}</td>
+          <td class="right num">${money(m.amount)}</td><td>${m.order_id ? `#${m.order_id}` : (m.method ? methodName(m.method) : '')}</td><td class="small muted">${esc(m.user_name || '')}</td></tr>`).join('')}
+      </table></div>` : `<p class="muted">${t("Hali harakat yo'q")}</p>`}`,
+    actions: [{ label: t('Yopish') }, { label: t('Tahrirlash'), cls: '', icon: 'pencil', onClick: () => { customerForm(c); return false; } },
+      ...(moduleOn('debts') && c.debt > 0 ? [{ label: t("Qarz to'lovi"), cls: 'ok', icon: 'banknote', onClick: () => { debtPayment(c); return false; } }] : [])],
+  });
+  return form;
+}
+
+function debtPayment(c) {
+  openModal({
+    title: `${icon('banknote')} ${esc(c.name)} — ${t("qarz to'lovi")}`,
+    body: `<p class="lead">${t('Qarzi')}: <b class="red">${money(c.debt)}</b></p>
+      <div class="form-grid"><label class="field">${t('Summa')}<input type="number" name="amount" min="1" max="${c.debt}" value="${c.debt}"></label>
+        <label class="field">${t("To'lov turi")}<select name="method">${['cash', 'card', 'transfer'].map((m) => `<option value="${m}">${methodName(m)}</option>`).join('')}</select></label></div>
+      <label class="field" style="margin-top:12px">${t('Izoh')}<input name="note"></label>
+      <p class="small muted" style="margin-top:10px">${t("Pul kassaga \"Qarz to'lovi\" bo'lib tushadi. Savdo chek yopilgan kuni hisoblangan, shuning uchun foydaga qayta qo'shilmaydi.")}</p>`,
+    actions: [{ label: t('Bekor') }, { label: t('Qabul qilish'), cls: 'ok', icon: 'check', onClick: async (f) => {
+      const x = formData(f);
+      await POST(`/api/customers/${c.id}/pay`, { amount: Number(x.amount), method: x.method, note: x.note });
+      toast(t('Saqlandi'), 'ok'); refreshView();
+    } }],
+  });
+}
+
+// ---------- Pro: ingredients, stock and recipes ----------
+UI.inv = UI.inv || { tab: 'items' };
+const UNIT_NAMES = () => ({ kg: t('kg'), g: t('g'), l: t('litr'), ml: t('ml'), dona: t('dona') });
+const qtyText = (v, unit) => `${Math.round(v * 1000) / 1000} ${UNIT_NAMES()[unit] || unit}`;
+const STOCK_MOVES = () => ({ in: [t('Kirim'), 'green'], sale: [t('Sotuv'), ''], writeoff: [t('Hisobdan chiqarildi'), 'red'], count: [t('Sanoq'), 'orange'], refund: [t('Qaytarildi'), 'green'] });
+Views.inventory = {
+  title: () => t('Ombor'), icon: () => 'warehouse', roles: ['owner', 'admin', 'cashier', 'chef'], module: 'inventory', refreshOn: ['inventory', 'finance', 'menu'],
+  async load() {
+    const list = await GET('/api/ingredients');
+    if (UI.inv.tab === 'moves' && can('owner', 'admin')) list.moves = await GET('/api/inventory/moves');
+    return list;
+  },
+  render(d) {
+    const manage = can('owner', 'admin');
+    const tabs = manage ? `<div class="seg" style="margin-bottom:14px">${[['items', t('Masalliqlar')], ['moves', t('Harakatlar')]].map(([k, n]) => `<button class="${UI.inv.tab === k ? 'active' : ''}" data-itab="${k}">${n}</button>`).join('')}</div>` : '';
+    const low = d.rows.filter((r) => r.low);
+    const head = `<div class="page-head">${can('owner', 'admin', 'cashier') ? `<a class="btn sm" href="#/money">${icon('arrow-left', 16)}</a>` : ''}<h1>${t('Ombor')}</h1>
+        ${can('owner', 'admin', 'cashier') ? `<button class="btn ok" id="inv-in">${icon('package-plus', 18)} ${t('Kirim')}</button>` : ''}
+        ${manage ? `<button class="btn primary" id="inv-add">${icon('plus', 18)} ${t('Masalliq')}</button>` : ''}</div>`;
+    if (UI.inv.tab === 'moves' && d.moves) {
+      const M = STOCK_MOVES();
+      return `${head}${tabs}<div class="card">${d.moves.length ? `<div class="table-wrap"><table>
+        <tr><th>${t('Sana')}</th><th>${t('Masalliq')}</th><th>${t('Turi')}</th><th class="right">${t('Miqdor')}</th><th class="right">${t('Summa')}</th><th>${t('Izoh')}</th><th>${t('Kim')}</th></tr>
+        ${d.moves.map((m) => `<tr><td class="small">${fmtDateTime(m.created_at)}</td><td><b>${esc(m.ingredient)}</b></td>
+          <td><span class="chip ${(M[m.kind] || [])[1] || ''}">${esc((M[m.kind] || [m.kind])[0])}</span>${m.order_id ? ` <span class="small muted">#${m.order_id}</span>` : ''}</td>
+          <td class="right num ${m.qty < 0 ? 'red' : ''}">${m.qty > 0 ? '+' : ''}${qtyText(m.qty, m.unit)}</td><td class="right num">${m.amount ? money(Math.abs(m.amount)) : '—'}</td>
+          <td class="small">${esc(m.note || '')}</td><td class="small muted">${esc(m.user_name || '')}</td></tr>`).join('')}</table></div>` : emptyState('warehouse', t("Hali harakat yo'q"))}</div>`;
+    }
+    return `${head}${tabs}
+      <div class="kpis">
+        ${kpi(t('Masalliqlar'), d.rows.length, '', '', 'warehouse')}
+        ${kpi(t('Ombordagi qiymat'), money(d.value), t('qoldiq × oxirgi narx'), '', 'coins')}
+        ${kpi(t('Kam qolgan'), d.low, low.map((r) => esc(r.name)).join(', '), d.low ? 'bad' : 'good', 'triangle-alert')}</div>
+      <div class="card">${d.rows.length ? `<div class="table-wrap"><table>
+        <tr><th>${t('Masalliq')}</th><th class="right">${t('Qoldiq')}</th><th class="right">${t('Minimal')}</th><th class="right">${t('Narx (1 birlik)')}</th><th class="right">${t('Qiymat')}</th><th class="right">${t('Taomlarda')}</th><th></th></tr>
+        ${d.rows.map((r) => `<tr><td><b>${esc(r.name)}</b></td>
+          <td class="right num ${r.low ? 'red' : ''}"><b>${qtyText(r.stock, r.unit)}</b>${r.low ? ` ${icon('triangle-alert', 14)}` : ''}</td>
+          <td class="right num">${r.min_stock ? qtyText(r.min_stock, r.unit) : '—'}</td><td class="right num">${money(r.cost)}</td><td class="right num">${money(Math.max(0, r.value))}</td>
+          <td class="right">${r.dishes || '—'}</td>
+          <td class="actions">${can('owner', 'admin', 'chef') ? `<button class="btn sm" data-wo="${r.id}">${icon('trash-2', 15)} ${t('Chiqarish')}</button><button class="btn sm" data-cnt="${r.id}">${icon('list', 15)} ${t('Sanoq')}</button>` : ''}
+            ${manage ? `<button class="icon-btn" data-ied="${r.id}">${icon('pencil', 18)}</button><button class="icon-btn danger" data-idel="${r.id}">${icon('x', 18)}</button>` : ''}</td></tr>`).join('')}
+      </table></div>` : emptyState('warehouse', t("Masalliq qo'shing (guruch, go'sht, yog'…), so'ng Menyu bo'limida har taomga tex-karta yozing — sotilganda ombordan o'zi ayiriladi."))}</div>`;
+  },
+  bind(root, d) {
+    const byId = (id) => d.rows.find((r) => r.id === Number(id));
+    root.querySelectorAll('[data-itab]').forEach((b) => b.onclick = () => { UI.inv.tab = b.dataset.itab; refreshView(); });
+    const add = root.querySelector('#inv-add'); if (add) add.onclick = () => ingredientForm({}, d.units);
+    const inb = root.querySelector('#inv-in'); if (inb) inb.onclick = () => receiveForm(d.rows);
+    root.querySelectorAll('[data-ied]').forEach((b) => b.onclick = () => ingredientForm(byId(b.dataset.ied), d.units));
+    root.querySelectorAll('[data-wo]').forEach((b) => b.onclick = () => adjustForm(byId(b.dataset.wo), 'writeoff'));
+    root.querySelectorAll('[data-cnt]').forEach((b) => b.onclick = () => adjustForm(byId(b.dataset.cnt), 'count'));
+    root.querySelectorAll('[data-idel]').forEach((b) => b.onclick = async () => {
+      const r = byId(b.dataset.idel);
+      if (!(await confirmModal(t("O'chirish"), t('"{0}" o\'chirilsinmi? U tex-kartalardan ham olib tashlanadi.', esc(r.name)), t("O'chirish")))) return;
+      try { await DEL(`/api/ingredients/${r.id}`); refreshView(); } catch (e) { toastError(e); }
+    });
+  },
+};
+
+function ingredientForm(r = {}, units = ['kg', 'g', 'l', 'ml', 'dona']) {
+  openModal({
+    title: `${icon('warehouse')} ${r.id ? esc(r.name) : t('Yangi masalliq')}`,
+    body: `<div class="form-grid"><label class="field">${t('Nomi')}<input name="name" value="${esc(r.name || '')}" required placeholder="${esc(t('Masalan: Guruch'))}"></label>
+      <label class="field">${t("O'lchov")}<select name="unit">${units.map((u) => `<option value="${u}" ${r.unit === u ? 'selected' : ''}>${UNIT_NAMES()[u] || u}</option>`).join('')}</select></label>
+      <label class="field">${t('Narx (1 birlik uchun)')}<input type="number" name="cost" min="0" value="${r.cost ?? ''}"></label>
+      <label class="field">${t('Minimal qoldiq (ogohlantirish)')}<input type="number" name="min_stock" min="0" step="0.001" value="${r.min_stock ?? ''}"></label>
+      ${r.id ? '' : `<label class="field">${t('Hozirgi qoldiq')}<input type="number" name="stock" min="0" step="0.001"></label>`}</div>`,
+    actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: 'primary', onClick: async (f) => {
+      const x = formData(f);
+      await (r.id ? PUT(`/api/ingredients/${r.id}`, x) : POST('/api/ingredients', x));
+      toast(t('Saqlandi'), 'ok'); refreshView();
+    } }],
+  });
+}
+
+function receiveForm(rows) {
+  if (!rows.length) return toast(t("Avval masalliq qo'shing"), 'warn');
+  const line = (first) => `<div class="recv-line form-grid" style="grid-template-columns:2fr 1fr 1fr auto;align-items:end">
+      <label class="field">${first ? t('Masalliq') : ''}<select name="ing">${rows.map((r) => `<option value="${r.id}">${esc(r.name)} (${UNIT_NAMES()[r.unit] || r.unit})</option>`).join('')}</select></label>
+      <label class="field">${first ? t('Miqdor') : ''}<input type="number" name="qty" min="0" step="0.001" placeholder="${esc(t('Miqdor'))}"></label>
+      <label class="field">${first ? t('Narx (1 birlik)') : ''}<input type="number" name="price" min="0"></label>
+      <button type="button" class="icon-btn danger" data-rm>${icon('x', 18)}</button></div>`;
+  const form = openModal({
+    title: `${icon('package-plus')} ${t('Omborga kirim')}`, size: 'wide',
+    body: `<div id="recv-lines" class="stack">${line(true)}</div>
+      <button type="button" class="btn sm" id="recv-more" style="margin-top:10px">${icon('plus', 16)} ${t('Yana masalliq')}</button>
+      <div id="recv-sum" class="lead" style="margin-top:12px"></div>
+      <label class="check" style="margin-top:8px"><input type="checkbox" name="paid" checked> ${t('Kassadan to\'landi ("Mahsulotlar" xarajati bo\'lib yoziladi)')}</label>
+      <div class="form-grid" style="margin-top:8px"><label class="field">${t("To'lov turi")}<select name="method">${['cash', 'card', 'transfer'].map((m) => `<option value="${m}">${methodName(m)}</option>`).join('')}</select></label>
+        <label class="field">${t('Izoh (yetkazib beruvchi)')}<input name="note"></label></div>`,
+    actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: 'ok', icon: 'check', onClick: async (f) => {
+      const items = [...f.querySelectorAll('.recv-line')].map((l) => ({ ingredient_id: Number(l.querySelector('[name=ing]').value), qty: l.querySelector('[name=qty]').value, price: l.querySelector('[name=price]').value }))
+        .filter((x) => Number(x.qty) > 0);
+      if (!items.length) { toast(t('Miqdorni kiriting'), 'warn'); return false; }
+      const r = await POST('/api/inventory/receive', { items, paid: f.paid.checked, method: f.method.value, note: f.note.value });
+      toast(`${t('Saqlandi')} · ${moneyText(r.total)}`, 'ok'); refreshView();
+    } }],
+  });
+  const fill = (l) => {
+    const sel = l.querySelector('[name=ing]');
+    const set = () => { const r = rows.find((x) => x.id === Number(sel.value)); l.querySelector('[name=price]').value = r ? r.cost : ''; };
+    sel.onchange = () => { set(); sum(); }; set();
+    l.querySelector('[data-rm]').onclick = () => { if (form.querySelectorAll('.recv-line').length > 1) { l.remove(); sum(); } };
+  };
+  const sum = () => {
+    const total = [...form.querySelectorAll('.recv-line')].reduce((s, l) => s + (Number(l.querySelector('[name=qty]').value) || 0) * (Number(l.querySelector('[name=price]').value) || 0), 0);
+    form.querySelector('#recv-sum').innerHTML = `${t('Jami')}: <b>${money(Math.round(total))}</b>`;
+  };
+  form.querySelectorAll('.recv-line').forEach(fill);
+  form.querySelector('#recv-more').onclick = () => { form.querySelector('#recv-lines').insertAdjacentHTML('beforeend', line()); fill(form.querySelector('.recv-line:last-child')); };
+  form.addEventListener('input', sum);
+  sum();
+}
+
+function adjustForm(r, kind) {
+  openModal({
+    title: `${icon(kind === 'count' ? 'list' : 'trash-2')} ${esc(r.name)} — ${kind === 'count' ? t('sanoq') : t('hisobdan chiqarish')}`,
+    body: `<p class="muted">${t('Dasturda')}: <b>${qtyText(r.stock, r.unit)}</b></p>
+      <label class="field">${kind === 'count' ? t('Haqiqatda qancha bor') : t('Qancha chiqariladi')} (${UNIT_NAMES()[r.unit] || r.unit})<input type="number" name="qty" min="0" step="0.001" required></label>
+      <label class="field" style="margin-top:12px">${kind === 'count' ? t('Izoh') : t('Sabab (majburiy)')}<input name="note" ${kind === 'count' ? '' : 'required'} placeholder="${esc(kind === 'count' ? '' : t("Masalan: buzilgan, to'kilgan"))}"></label>`,
+    actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: kind === 'count' ? 'primary' : 'danger', onClick: async (f) => {
+      await POST('/api/inventory/adjust', { ingredient_id: r.id, kind, qty: f.qty.value, note: f.note.value });
+      toast(t('Saqlandi'), 'ok'); refreshView();
+    } }],
+  });
+}
+
+// Recipe (tex-karta) of a dish: ingredients for one portion; the dish's cost follows it.
+async function recipeDialog(dish) {
+  let ings; let rec;
+  try { [ings, rec] = await Promise.all([GET('/api/ingredients'), GET(`/api/dishes/${dish.id}/recipe`)]); } catch (e) { return toastError(e); }
+  const rows = ings.rows;
+  if (!rows.length) return toast(t("Avval Ombor bo'limida masalliq qo'shing"), 'warn');
+  const line = (it = {}, i = 1) => `<div class="rec-line form-grid" style="grid-template-columns:2fr 1fr auto auto;align-items:end">
+      <label class="field">${i ? '' : t('Masalliq')}<select name="ing">${rows.map((r) => `<option value="${r.id}" ${it.ingredient_id === r.id ? 'selected' : ''}>${esc(r.name)} (${UNIT_NAMES()[r.unit] || r.unit})</option>`).join('')}</select></label>
+      <label class="field">${i ? '' : t('1 porsiyaga')}<input type="number" name="qty" min="0" step="0.001" value="${it.qty ?? ''}" placeholder="${esc(t('1 porsiyaga'))}"></label>
+      <span class="rec-cost small muted" style="min-width:90px;padding-bottom:12px"></span>
+      <button type="button" class="icon-btn danger" data-rm>${icon('x', 18)}</button></div>`;
+  const form = openModal({
+    title: `${icon('chef-hat')} ${esc(dish.name)} — ${t('tex-karta')}`, size: 'wide',
+    body: `<p class="small muted" style="margin-top:0">${t("Bir porsiya uchun masalliqlar. Masalan, 1 osh: guruch 0.15 kg, go'sht 0.1 kg. Chek yopilganda ombordan o'zi ayiriladi, taomning tannarxi shu yerdan hisoblanadi.")}</p>
+      <div id="rec-lines" class="stack">${(rec.items.length ? rec.items : [{}]).map(line).join('')}</div>
+      <button type="button" class="btn sm" id="rec-more" style="margin-top:10px">${icon('plus', 16)} ${t('Yana masalliq')}</button>
+      <div id="rec-sum" class="sum-rows num" style="margin-top:14px"></div>`,
+    actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: 'primary', onClick: async (f) => {
+      const items = [...f.querySelectorAll('.rec-line')].map((l) => ({ ingredient_id: Number(l.querySelector('[name=ing]').value), qty: l.querySelector('[name=qty]').value }))
+        .filter((x) => Number(x.qty) > 0);
+      const r = await PUT(`/api/dishes/${dish.id}/recipe`, { items });
+      toast(`${t('Saqlandi')} · ${t('Tannarx')}: ${moneyText(r.cost)}`, 'ok'); refreshView();
+    } }],
+  });
+  const calc = () => {
+    let cost = 0;
+    form.querySelectorAll('.rec-line').forEach((l) => {
+      const r = rows.find((x) => x.id === Number(l.querySelector('[name=ing]').value));
+      const c = r ? (Number(l.querySelector('[name=qty]').value) || 0) * r.cost : 0;
+      cost += c;
+      l.querySelector('.rec-cost').textContent = c ? `${num(Math.round(c))}` : '';
+    });
+    cost = Math.round(cost);
+    const margin = dish.price ? Math.round(((dish.price - cost) / dish.price) * 100) : 0;
+    form.querySelector('#rec-sum').innerHTML = `<span>${t('Tannarx')}</span><span class="right"><b>${money(cost)}</b></span>
+      <span>${t('Narxi')}</span><span class="right">${money(dish.price)}</span>
+      <span>${t('Foyda (ustama)')}</span><span class="right ${margin < 30 ? 'red' : ''}"><b>${money(dish.price - cost)} · ${margin}%</b></span>`;
+  };
+  const wire = (l) => { l.querySelector('[data-rm]').onclick = () => { l.remove(); calc(); }; };
+  form.querySelectorAll('.rec-line').forEach(wire);
+  form.querySelector('#rec-more').onclick = () => { form.querySelector('#rec-lines').insertAdjacentHTML('beforeend', line()); wire(form.querySelector('.rec-line:last-child')); calc(); };
+  form.addEventListener('input', calc);
+  form.addEventListener('change', calc);
+  calc();
+}
+
+// ---------- Pro: branches side by side ----------
+Views.branches = {
+  title: () => t('Filiallar'), icon: () => 'network', roles: ['owner'], module: 'branches', on: () => (App.branchCount || 0) > 0,
+  async load() { const r = periodRange(); return GET(`/api/branches?from=${r.from}&to=${r.to}`); },
+  render(d) {
+    const T = d.total;
+    const best = Math.max(1, ...d.rows.map((r) => r.total));
+    return `<div class="page-head"><a class="btn sm" href="#/money">${icon('arrow-left', 16)}</a><h1>${t('Filiallar')}</h1></div>
+      ${periodPicker()}
+      <div class="kpis">
+        ${kpi(t('Jami savdo'), money(T.total), t('{0} chek · o\'rtacha {1}', T.orders, money(T.avg_check)), 'good', 'trending-up')}
+        ${kpi(t('Chiqim'), money(T.expense), '', '', 'arrow-right-left')}
+        ${kpi(t('Foyda'), money(T.profit), '', T.profit >= 0 ? 'good' : 'bad', 'coins')}
+        ${kpi(t('Mehmonlar'), num(T.guests), T.open_orders ? t('{0} ta ochiq chek', T.open_orders) : '', '', 'users')}</div>
+      <div class="card"><div class="table-wrap"><table>
+        <tr><th>${t('Filial')}</th><th class="right">${t('Savdo')}</th><th></th><th class="right">${t('Cheklar')}</th><th class="right">${t("O'rtacha chek")}</th>
+          <th class="right">${t('Naqd')}</th><th class="right">${t('Karta')}</th><th class="right">${t('Qarzga')}</th><th class="right">${t('Chiqim')}</th><th class="right">${t('Foyda')}</th></tr>
+        ${d.rows.map((r) => `<tr><td><b>${esc(r.name)}</b>${r.main ? ` <span class="chip">${t('asosiy')}</span>` : ''}${r.open_orders ? `<br><span class="small muted">${t('{0} ta ochiq chek', r.open_orders)}</span>` : ''}</td>
+          <td class="right num"><b>${money(r.total)}</b></td><td style="width:18%;min-width:80px"><span class="track br-track"><span class="fill" style="width:${(r.total / best) * 100}%"></span></span></td>
+          <td class="right">${r.orders}</td><td class="right num">${money(r.avg_check)}</td><td class="right num">${money(r.cash)}</td><td class="right num">${money(r.card + r.transfer)}</td>
+          <td class="right num">${r.debt ? money(r.debt) : '—'}</td><td class="right num">${money(r.expense)}</td><td class="right num ${r.profit < 0 ? 'red' : ''}"><b>${money(r.profit)}</b></td></tr>`).join('')}
+        <tr style="background:var(--panel-2)"><td><b>${t('Jami')}</b></td><td class="right num"><b>${money(T.total)}</b></td><td></td><td class="right"><b>${T.orders}</b></td><td class="right num">${money(T.avg_check)}</td>
+          <td class="right num">${money(T.cash)}</td><td class="right num">${money(T.card + T.transfer)}</td><td class="right num">${T.debt ? money(T.debt) : '—'}</td><td class="right num">${money(T.expense)}</td><td class="right num"><b>${money(T.profit)}</b></td></tr>
+      </table></div></div>
+      <p class="small muted" style="margin-top:10px">${icon('info', 14)} ${t("Har bir filialning batafsil hisobotini o'sha filial dasturida ko'rasiz. Filiallarni platforma egasi bog'laydi.")}</p>`;
+  },
+  bind(root) { bindPeriod(root); },
+};
+
 // ---------- Reservations ----------
 Views.reservations = {
   title: () => t('Bronlar'), icon: () => 'calendar', roles: ['owner', 'admin', 'cashier'], refreshOn: ['rooms'], module: 'reservations',
@@ -611,7 +906,7 @@ Views.menuadmin = {
             <span class="small muted">${shop ? `${d.barcode ? `${icon('scan-barcode', 13)} ${esc(d.barcode)} · ` : ''}${icon('package', 13)} ${d.stock ?? '∞'} ${esc(d.unit)}`
               : d.needs_kitchen ? `${icon('chef-hat', 13)} ${d.prep_minutes} ${t('daq')}` : `${icon('check', 13)} ${t('Darhol')}`}</span></td>
           <td class="right num"><b>${money(d.price)}</b>${shop && d.cost ? `<br><span class="small muted">${money(d.cost)}</span>` : ''}</td>
-          <td class="actions">${shop ? `<button class="btn sm" data-receive="${d.id}" title="${esc(t('Kirim qilish'))}">${icon('package-plus', 16)} ${t('Kirim')}</button>` : ''}${d.available ? `<button class="btn sm" data-stop="${d.id}" title="${esc(t('Tugadi'))}">${icon('ban', 16)}</button>` : `<button class="btn sm danger" data-start="${d.id}">${icon('ban', 16)} ${t('Tugadi')}</button>`}
+          <td class="actions">${shop ? `<button class="btn sm" data-receive="${d.id}" title="${esc(t('Kirim qilish'))}">${icon('package-plus', 16)} ${t('Kirim')}</button>` : ''}${!shop && moduleOn('inventory') && can('owner', 'admin') ? `<button class="btn sm" data-recipe="${d.id}" title="${esc(t('Tex-karta'))}">${icon('chef-hat', 16)} ${t('Tex-karta')}</button>` : ''}${d.available ? `<button class="btn sm" data-stop="${d.id}" title="${esc(t('Tugadi'))}">${icon('ban', 16)}</button>` : `<button class="btn sm danger" data-start="${d.id}">${icon('ban', 16)} ${t('Tugadi')}</button>`}
             <button class="icon-btn" data-edit="${d.id}">${icon('pencil', 18)}</button><button class="icon-btn danger" data-del="${d.id}">${icon('trash-2', 18)}</button></td></tr>`).join('')}
         </table></div>` : `<p class="muted">${W("Bu bo'limda taom yo'q")}</p>`}</div>`).join('')}`;
   },
@@ -668,6 +963,7 @@ Views.menuadmin = {
     root.querySelector('#add-dish').onclick = () => editDish();
     root.querySelectorAll('[data-edit-cat]').forEach((b) => b.onclick = () => editCat(categories.find((c) => c.id === Number(b.dataset.editCat))));
     root.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => editDish(dishes.find((d) => d.id === Number(b.dataset.edit))));
+    root.querySelectorAll('[data-recipe]').forEach((b) => b.onclick = () => recipeDialog(dishes.find((d) => d.id === Number(b.dataset.recipe))));
     const avail = async (id, available) => { try { await POST(`/api/dishes/${id}/availability`, { available }); refreshView(); } catch (e) { toastError(e); } };
     root.querySelectorAll('[data-stop]').forEach((b) => b.onclick = () => avail(b.dataset.stop, false));
     root.querySelectorAll('[data-start]').forEach((b) => b.onclick = () => avail(b.dataset.start, true));
@@ -773,6 +1069,8 @@ const AUDIT_NAMES = () => ({
   shift_open: t('Smena ochdi'), shift_close: t('Smena yopdi'), settings_update: t("Sozlamalarni o'zgartirdi"), room_create: t("Xona qo'shdi"), room_update: t('Xonani tahrirladi'),
   reservation_create: t('Bron qildi'), reservation_update: t('Bronni tahrirladi'), reservation_status: t('Bron holati'), password_change: t("Parolini o'zgartirdi"), pin_change: t("PIN o'zgartirdi"),
   session_kicked: t('Boshqa qurilmadan kirdi (avvalgisi chiqarildi)'), device_add: t('Qurilma uladi'), device_remove: t('Qurilmani uzdi'), pay_payment: t("Ish haqi to'ladi"), pay_bonus: t('Bonus yozdi'), pay_fine: t('Jarima yozdi'),
+  customer_create: t("Mijoz qo'shdi"), customer_update: t('Mijozni tahrirladi'), debt_pay: t("Qarz to'lovini oldi"), ingredient_save: t('Masalliqni saqladi'), ingredient_delete: t("Masalliqni o'chirdi"),
+  stock_in: t('Omborga kirim qildi'), stock_receive: t('Omborga kirim qildi'), stock_count: t('Ombor sanog\'i'), stock_writeoff: t('Hisobdan chiqardi'), recipe_set: t('Tex-kartani saqladi'), staff_meal: t('Xodim hisobiga yopdi'),
 });
 const SETTINGS_TABS = () => [
   ['general', 'store', t('Muassasa'), ['owner', 'admin']],
@@ -836,6 +1134,9 @@ Views.settings = {
       <div class="form-grid"><label class="field">${t('Kassada "Xodim hisobiga" yopilgan chek ish haqidan qaysi narxda ushlanadi')}<select name="staff_meal_price">
         <option value="menu" ${s.staff_meal_price !== 'cost' ? 'selected' : ''}>${t('Menyu narxida')}</option>
         <option value="cost" ${s.staff_meal_price === 'cost' ? 'selected' : ''}>${t('Tannarxda (taomga kiritilgan tannarx)')}</option></select></label></div>` : ''}
+      ${moduleOn('customers') ? `<h3 style="margin:18px 0 10px">${icon('gift', 18)} ${t('Keshbek')}</h3>
+      <div class="form-grid"><label class="field">${t("Mijozga to'lagan pulining necha foizi bonus bo'lib qaytadi, %")}<input type="number" name="cashback_pct" min="0" max="30" step="0.5" value="${s.cashback_pct ?? 3}"></label></div>
+      <p class="small muted" style="margin-top:8px">${t("Bonus keyingi tashrifda chekdan ayiriladi. 0 qo'ysangiz keshbek o'chadi.")}</p>` : ''}
       <h3 style="margin:18px 0 10px">${icon('list', 18)} ${t('Kategoriyalar')}</h3>
       <div class="form-grid">
         <label class="field">${t('Xarajat kategoriyalari (har biri yangi qatorda)')}<textarea name="expense_categories" rows="6">${esc(s.expense_categories.join('\n'))}</textarea></label>

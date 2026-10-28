@@ -58,11 +58,14 @@ const CODE_RE = /^[a-z0-9][a-z0-9-]{1,30}$/;
  */
 const PLAN_KEYS = ['start', 'biznes', 'pro'];
 const BIZ_MODULES = ['stoplist', 'reports', 'finance', 'payroll', 'reservations', 'history', 'audit', 'export'];
+const PRO_MODULES = [...BIZ_MODULES, 'customers', 'debts', 'inventory', 'branches'];
 const DEFAULT_PLANS = {
   start: { name: 'Start', price: 199000, max_staff: 5, devices_per_staff: 1, modules: ['stoplist', 'reports', 'history'] },
   biznes: { name: 'Biznes', price: 349000, max_staff: 15, devices_per_staff: 1, modules: BIZ_MODULES },
-  pro: { name: 'Pro', price: 599000, max_staff: 0, devices_per_staff: 0, modules: BIZ_MODULES },
+  pro: { name: 'Pro', price: 599000, max_staff: 0, devices_per_staff: 0, modules: PRO_MODULES },
 };
+// Sections that existed when plans were first saved; a section added later goes to the plans that have it by default.
+const FIRST_MODULES = BIZ_MODULES;
 // branch_price: a second (third…) place of the same owner; yearly_months: a year is paid as this many months;
 // grace_days: days after the paid term ends before the business becomes read-only; trial_days: free start.
 const DEFAULT_TERMS = { branch_price: 149000, yearly_months: 10, grace_days: 3, trial_days: 14 };
@@ -88,6 +91,8 @@ function createPlatform(dataDir) {
   // Businesses that existed before plans keep everything they had: they start on "Biznes".
   if (!tcols.includes('plan')) pdb.exec("ALTER TABLE tenants ADD COLUMN plan TEXT NOT NULL DEFAULT 'biznes'");
   if (!tcols.includes('is_branch')) pdb.exec('ALTER TABLE tenants ADD COLUMN is_branch INTEGER NOT NULL DEFAULT 0');
+  // A branch points to its main business; the main business's owner sees all of them in one report.
+  if (!tcols.includes('parent_id')) pdb.exec('ALTER TABLE tenants ADD COLUMN parent_id INTEGER');
   const q = (sql) => pdb.prepare(sql);
   const now = () => Date.now();
 
@@ -122,9 +127,19 @@ function createPlatform(dataDir) {
     const db = open(file);
     const hub = createHub();
     ctx = { id, db, hub, row, file };
-    ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row, plan: () => planFor(ctx.row), file });
+    ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row, plan: () => planFor(ctx.row), branches: () => branchesOf(id), file });
     contexts.set(id, ctx);
     return ctx;
+  }
+
+  // A main business and its branches (empty when this business has none or is itself a branch).
+  function branchesOf(id) {
+    const kids = q('SELECT id FROM tenants WHERE parent_id = ? ORDER BY id').all(id);
+    if (!kids.length) return [];
+    return [id, ...kids.map((k) => k.id)].map((tid) => {
+      const c = context(tid);
+      return c && { code: c.row.code, name: c.api.settings().name || c.row.name, main: tid === id, api: c.api };
+    }).filter(Boolean);
   }
 
   function refresh(id) {
@@ -178,7 +193,15 @@ function createPlatform(dataDir) {
   }
   function getPlans() {
     const saved = readJson('plans', {});
-    return Object.fromEntries(PLAN_KEYS.map((k) => [k, { ...DEFAULT_PLANS[k], ...(saved[k] || {}) }]));
+    const known = readJson('plan_modules_known', null) || FIRST_MODULES;
+    return Object.fromEntries(PLAN_KEYS.map((k) => {
+      const p = { ...DEFAULT_PLANS[k], ...(saved[k] || {}) };
+      if (saved[k]) {
+        const added = DEFAULT_PLANS[k].modules.filter((m) => !known.includes(m) && !p.modules.includes(m));
+        if (added.length) p.modules = [...p.modules, ...added];
+      }
+      return [k, p];
+    }));
   }
   function getTerms() { return { ...DEFAULT_TERMS, ...readJson('plan_terms', {}) }; }
 
@@ -217,9 +240,19 @@ function createPlatform(dataDir) {
       trial_days: int(t.trial_days, 'Sinov kunlari', { required: true, min: 0, max: 365 }),
     };
     pset('plans', JSON.stringify(plans));
+    pset('plan_modules_known', JSON.stringify(Object.keys(MODULES)));
     pset('plan_terms', JSON.stringify(terms));
     for (const c of contexts.values()) c.hub.publish('settings');
     return { plans: getPlans(), terms: getTerms() };
+  }
+  // A branch hangs under one main business; a main business with branches cannot itself become a branch.
+  function parentInput(t, v) {
+    if (!v) return null;
+    const p = tenantRow(int(v, 'Asosiy biznes', { min: 1 }));
+    if (!p || p.id === t.id) throw new HttpError(400, "Asosiy biznes noto'g'ri");
+    if (p.parent_id) throw new HttpError(400, "Filialga filial bog'lab bo'lmaydi — asosiy biznesni tanlang");
+    if (q('SELECT 1 FROM tenants WHERE parent_id = ?').get(t.id)) throw new HttpError(400, "Bu biznesning o'z filiallari bor — u filial bo'la olmaydi");
+    return p.id;
   }
   function planKeyInput(v) {
     if (!PLAN_KEYS.includes(v)) throw new HttpError(400, "Tarif noto'g'ri");
@@ -375,9 +408,10 @@ function createPlatform(dataDir) {
     const t = tenantRow(params.id);
     if (!t) throw new HttpError(404, 'Choyxona topilmadi');
     const status = body.status !== undefined ? str(body.status, 'Holat') : t.status;
+    const parentId = body.parent_id === undefined ? undefined : parentInput(t, body.parent_id);
     if (!['active', 'blocked'].includes(status)) throw new HttpError(400, "Holat noto'g'ri");
     q(`UPDATE tenants SET name = ?, contact_name = ?, phone = ?, status = ?, paid_until = ?, monthly_fee = ?, notes = ?, disabled_modules = ?, kitchen_mode = ?,
-      business_type = ?, support = ?, plan = ?, is_branch = ? WHERE id = ?`).run(
+      business_type = ?, support = ?, plan = ?, is_branch = ?, parent_id = ? WHERE id = ?`).run(
       body.name !== undefined ? str(body.name, 'Nomi', { required: true, max: 80 }) : t.name,
       body.contact_name !== undefined ? str(body.contact_name, 'Boshliq', { max: 80 }) : t.contact_name,
       body.phone !== undefined ? str(body.phone, 'Telefon', { max: 30 }) : t.phone,
@@ -390,7 +424,8 @@ function createPlatform(dataDir) {
       body.business_type !== undefined ? typeInput(body.business_type) : t.business_type,
       body.support !== undefined ? JSON.stringify(supportInput(body.support)) : t.support,
       body.plan !== undefined ? planKeyInput(body.plan) : t.plan,
-      body.is_branch !== undefined ? (body.is_branch ? 1 : 0) : t.is_branch,
+      parentId !== undefined ? (parentId ? 1 : body.is_branch ? 1 : 0) : body.is_branch !== undefined ? (body.is_branch ? 1 : 0) : t.is_branch,
+      parentId !== undefined ? parentId : t.parent_id,
       t.id
     );
     refresh(t.id);

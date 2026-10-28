@@ -9,10 +9,10 @@ function navOrder(role) {
     admin: [...home, 'kitchen', 'history', 'reservations', 'menuadmin', 'staff', 'settings', 'money'],
     cashier: [...home, 'history', 'reservations', 'stoplist', 'settings', 'money'],
     waiter: [...home, 'ready', 'settings'],
-    chef: ['kitchen', 'stoplist', 'settings'],
+    chef: ['kitchen', 'stoplist', 'inventory', 'settings'],
   }[role];
 }
-const CHILD_OF = { room: 'rooms', order: 'rooms', soboy: 'rooms', reports: 'money', finance: 'money', payroll: 'money', attendance: 'staff' };
+const CHILD_OF = { room: 'rooms', order: 'rooms', soboy: 'rooms', reports: 'money', finance: 'money', payroll: 'money', attendance: 'staff', customers: 'money', inventory: 'money', branches: 'money' };
 let currentView = null;
 let currentParams = [];
 let currentData = null;
@@ -38,9 +38,12 @@ function parseHash() {
   return { name: parts[0] || '', params: parts.slice(1) };
 }
 
+// A child page lights up its parent tab, unless the role has no such tab (chef opens Ombor directly).
+const parentOf = (name) => (CHILD_OF[name] && Views[CHILD_OF[name]].roles.includes(App.user?.role) ? CHILD_OF[name] : name);
+
 function navHtml() {
   const { name } = parseHash();
-  const active = CHILD_OF[name] || name;
+  const active = parentOf(name);
   return navKeys().map((k) => {
     const v = Views[k];
     const b = v.badge && App.badges[v.badge] ? `<span class="badge">${App.badges[v.badge]}</span>` : '';
@@ -124,7 +127,7 @@ async function render() {
     }
     return;
   }
-  const navName = CHILD_OF[name] || name;
+  const navName = parentOf(name);
   if (!Views[name] || !viewOn(navName) || !viewOn(name)) { location.hash = homeRoute(); return; }
   const view = Views[name];
   if (!document.getElementById('view')) {
@@ -230,6 +233,7 @@ async function afterLogin() {
   App.biz = me.business_type || 'choyxona';
   App.money = me.money || {};
   App.plan = me.plan || null;
+  App.branchCount = me.branches || 0;
   App.modulesAll = me.modules || {};
   App.platformSession = !!me.platform_session;
   if (!App.info || App.info.code !== me.tenant.code) await loadInfo(me.tenant.code);
@@ -266,7 +270,7 @@ Live.on('settings', async () => {
     App.settings = me.settings; App.disabled = me.disabled || []; App.kitchenMode = me.kitchen_mode; App.user = me.user;
     App.biz = me.business_type || 'choyxona'; App.money = me.money || {};
     const termChanged = JSON.stringify([me.tenant, me.plan && { ...me.plan, staff_used: 0 }]) !== JSON.stringify([App.tenant, App.plan && { ...App.plan, staff_used: 0 }]);
-    App.tenant = me.tenant; App.plan = me.plan || null;
+    App.tenant = me.tenant; App.plan = me.plan || null; App.branchCount = me.branches || 0;
     await loadInfo(me.tenant.code);
     if (changed || termChanged) { document.getElementById('app').innerHTML = ''; render(); } else updateNav();
   } catch { /* ignore */ }

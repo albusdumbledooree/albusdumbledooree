@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { hashPassword, verifyPassword, newToken, HttpError, str, int } = require('./util');
+const { createPro } = require('./pro');
 const { createPayroll } = require('./payroll');
 const { snapshot } = require('./backup');
 
@@ -30,6 +31,10 @@ const MODULES = {
   history: 'Cheklar tarixi',
   audit: 'Amallar tarixi',
   export: 'Excelga yuklab olish',
+  customers: 'Mijozlar va keshbek',
+  debts: 'Qarz daftari (nasiya)',
+  inventory: 'Masalliq ombori va tex-karta',
+  branches: 'Filiallar hisoboti',
 };
 function routeModule(pattern) {
   if (/^\/api\/(kitchen|items\/:id\/(accept|ready))$/.test(pattern)) return 'kitchen';
@@ -40,6 +45,8 @@ function routeModule(pattern) {
   if (/^\/api\/reservations/.test(pattern)) return 'reservations';
   if (pattern === '/api/audit') return 'audit';
   if (pattern === '/api/checks/export') return 'export';
+  if (/^\/api\/(ingredients|inventory)/.test(pattern) || pattern === '/api/dishes/:id/recipe') return 'inventory';
+  if (pattern === '/api/branches') return 'branches';
   if (/^\/api\/checks/.test(pattern)) return 'history';
   return null;
 }
@@ -47,13 +54,14 @@ function routeModule(pattern) {
 // opts.hub: live-event hub of this choyxona; opts.tokenPrefix marks which choyxona a session token belongs to;
 // opts.tenant(): the choyxona's platform record (code, name, paid_until); opts.plan(): its plan (sections, staff limit);
 // opts.file: its database file.
-function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () => null, file = null } = {}) {
+function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () => null, branches = () => [], file = null } = {}) {
   const events = hub;
   // Shared devices (the staff-list screen) get tokens of their own: "d<choyxona>_…".
   const devicePrefix = tokenPrefix.replace(/^t/, 'd');
   const q = (sql) => db.prepare(sql);
   const now = () => Date.now();
   const payroll = createPayroll(db, { audit, events: hub, now });
+  const pro = createPro(db, { audit, events: hub, now, moduleOn: (m) => moduleOn(m), settings: () => settings() });
 
   function tx(fn) {
     db.exec('BEGIN');
@@ -93,6 +101,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     out.receipt_logo = out.receipt_logo !== '0';
     out.receipt_logo_id = out.receipt_logo_id ? Number(out.receipt_logo_id) : null;
     out.staff_meal_price = out.staff_meal_price === 'cost' ? 'cost' : 'menu';
+    out.cashback_pct = Number(out.cashback_pct ?? 3) || 0;
     out.pin_lock_attempts = Number(out.pin_lock_attempts ?? 5);
     out.pin_lock_minutes = Number(out.pin_lock_minutes) || 5;
     try { out.room_types = JSON.parse(out.room_types || '[]'); } catch { out.room_types = []; }
@@ -318,7 +327,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const session = q('SELECT via FROM sessions WHERE token = ?').get(token);
     return { user: publicUser(user), settings: s, modules: MODULES, disabled: disabledModules(), kitchen_mode: kitchenMode(),
       business_type: businessType(), money: moneyAccess(user, s), platform_session: !!(session && session.via === 'platform'),
-      tenant: t && { code: t.code, name: t.name, paid_until: t.paid_until }, plan: planInfo() };
+      tenant: t && { code: t.code, name: t.name, paid_until: t.paid_until }, plan: planInfo(),
+      branches: user.role === 'owner' ? branches().length : 0 };
   }
 
   function changeOwnPassword({ user, body }) {
@@ -335,7 +345,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   function updateSettings({ user, body }) {
     const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width',
       'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo',
-      'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', ...OWNER_SETTINGS];
+      'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', 'cashback_pct', ...OWNER_SETTINGS];
     if (user.role !== 'owner' && OWNER_SETTINGS.some((k) => body[k] !== undefined)) throw new HttpError(403, "Moliya huquqlarini faqat boshliq o'zgartiradi");
     const set = q('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     for (const k of allowed) {
@@ -355,6 +365,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       if (k === 'pin_lock_minutes') v = int(v, 'Daqiqalar', { min: 1, max: 1440 });
       if (k === 'room_types') v = JSON.stringify(roomTypesInput(v));
       if (k === 'staff_meal_price') v = v === 'cost' ? 'cost' : 'menu';
+      if (k === 'cashback_pct') {
+        v = Number(v);
+        if (!(v >= 0 && v <= 30)) throw new HttpError(400, "Keshbek 0–30% oralig'ida bo'lsin");
+      }
       if (k === 'lock_bg') v = JSON.stringify(lockBgInput(v));
       if (k === 'service_pct') {
         v = Number(v);
@@ -1070,9 +1084,13 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     // The service charge always comes from the boss's settings; it cannot be changed per check.
     const discount = int(body.discount, 'Chegirma');
     if (discount && !['owner', 'admin', 'cashier'].includes(user.role)) throw new HttpError(403, "Chegirma berish huquqi yo'q");
-    const t = totals(o, items, { discount });
+    const base = totals(o, items, { discount });
+    // Pro: a customer's bonus works as a discount; part of the check may stay on credit (no money now).
+    const cp = pro.preparePayment(body, base.total);
+    const t = cp.bonus ? totals(o, items, { discount: discount + cp.bonus }) : base;
+    if (cp.debt > t.total) throw new HttpError(400, "Qarzga yoziladigan summa chekdan ko'p");
     const paid = { cash: int(body.paid_cash, 'Naqd'), card: int(body.paid_card, 'Karta'), transfer: int(body.paid_transfer, "O'tkazma") };
-    const sumPaid = paid.cash + paid.card + paid.transfer;
+    const sumPaid = paid.cash + paid.card + paid.transfer + cp.debt;
     if (sumPaid < t.total) throw new HttpError(400, `To'lov yetarli emas: ${t.total - sumPaid} kam`);
     // Change (qaytim) is given from cash, so the recorded cash is reduced by any overpayment.
     const change = sumPaid - t.total;
@@ -1081,12 +1099,15 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const ts = now();
     if (serveAll) q("UPDATE order_items SET status = 'served', served_at = ? WHERE order_id = ? AND status IN ('new', 'cooking', 'ready')").run(ts, o.id);
     q(`UPDATE orders SET status = 'closed', closed_at = ?, cashier_id = ?, subtotal = ?, service_type = ?, service_pct = ?, service_amount = ?,
-      discount = ?, total = ?, paid_cash = ?, paid_card = ?, paid_transfer = ?, bill_requested = 0 WHERE id = ?`).run(
-      ts, user.id, t.subtotal, t.service_type, t.service_pct, t.service_amount, t.discount, t.total, paid.cash, paid.card, paid.transfer, o.id
+      discount = ?, total = ?, paid_cash = ?, paid_card = ?, paid_transfer = ?, customer_id = ?, paid_debt = ?, bonus_used = ?, bill_requested = 0 WHERE id = ?`).run(
+      ts, user.id, t.subtotal, t.service_type, t.service_pct, t.service_amount, t.discount, t.total, paid.cash, paid.card, paid.transfer,
+      cp.customer ? cp.customer.id : null, cp.debt, cp.bonus, o.id
     );
     const ins = q("INSERT INTO transactions (type, category, amount, method, note, order_id, user_id, created_at) VALUES ('income', 'Savdo', ?, ?, ?, ?, ?, ?)");
     for (const m of METHODS) if (paid[m] > 0) ins.run(paid[m], m, `Chek #${o.id}`, o.id, user.id, ts);
-    return { ...t, change };
+    const extra = pro.afterPayment(user, { id: o.id, total: t.total }, cp, paid.cash + paid.card + paid.transfer);
+    pro.consume(o.id, items.filter((i) => i.status !== 'cancelled'), -1, user.id);
+    return { ...t, change, cashback: extra ? extra.cashback : 0 };
   }
 
   /*
@@ -1118,6 +1139,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       q("INSERT INTO payroll (user_id, type, amount, method, note, day, transaction_id, created_by, created_at) VALUES (?, 'deduction', ?, 'cash', ?, ?, NULL, ?, ?)")
         .run(staff.id, t.total, `Ovqat: chek #${o.id}${priceNote} — ${what}`, payroll.today(), user.id, ts);
     }
+    pro.consume(o.id, live, -1, user.id);
     audit(user, 'staff_meal', `#${o.id} ${staff.name}: ${t.total}`);
     events.publish('payroll', { type: 'deduction', amount: t.total, name: staff.name }, { userIds: [staff.id] });
     return { ...t, change: 0, staff: staff.name };
@@ -1165,6 +1187,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
         if (it.dish_id) q('UPDATE dishes SET stock = stock + ?, available = 1 WHERE id = ? AND stock IS NOT NULL').run(qty, it.dish_id);
         amount += it.price * qty;
         lines.push(`${it.name}×${qty}`);
+        pro.consume(o.id, [{ dish_id: it.dish_id, qty }], 1, user.id);
       }
       const already = q("SELECT COALESCE(SUM(amount), 0) s FROM transactions WHERE category = 'Qaytarish' AND order_id = ?").get(o.id).s;
       amount = Math.min(amount, o.total - already);
@@ -1364,11 +1387,14 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       card: sum(orders, (o) => o.paid_card),
       transfer: sum(orders, (o) => o.paid_transfer),
       staff: sum(orders, (o) => o.paid_staff || 0),
+      debt: sum(orders, (o) => o.paid_debt || 0),
+      bonus: sum(orders, (o) => o.bonus_used || 0),
       food_cost: sum(items, (i) => i.cost * i.qty),
     };
     sales.avg_check = sales.orders ? Math.round(sales.total / sales.orders) : 0;
 
-    const otherIncome = txs.filter((t) => t.type === 'income' && !t.order_id);
+    // A debt paid back is money for the till, not new income: the sale was counted when the check was closed.
+    const otherIncome = txs.filter((t) => t.type === 'income' && !t.order_id && t.category !== pro.DEBT_PAYMENT);
     const expenses = txs.filter((t) => t.type === 'expense');
     const group = (arr, keyFn, valFn) => {
       const m = new Map();
@@ -1575,6 +1601,29 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return payroll.addEntry({ user, body: { ...body, user_id: uid, type: 'payment', note: body.note || 'Kunlik ish haqi' } });
   }
 
+  // One business's totals for a period (used by the owner's branch report across businesses).
+  function summary(from, to) {
+    const o = q(`SELECT COUNT(*) orders, COALESCE(SUM(total), 0) total, COALESCE(SUM(guests), 0) guests, COALESCE(SUM(paid_cash), 0) cash,
+      COALESCE(SUM(paid_card), 0) card, COALESCE(SUM(paid_transfer), 0) transfer, COALESCE(SUM(paid_debt), 0) debt
+      FROM orders WHERE status = 'closed' AND closed_at >= ? AND closed_at < ?`).get(from, to);
+    const exp = q("SELECT COALESCE(SUM(amount), 0) s FROM transactions WHERE type = 'expense' AND created_at >= ? AND created_at < ?").get(from, to).s;
+    const open = q("SELECT COUNT(*) c, COALESCE(SUM(0), 0) z FROM orders WHERE status = 'open'").get().c;
+    return { ...o, expense: exp, profit: o.total - exp, open_orders: open, avg_check: o.orders ? Math.round(o.total / o.orders) : 0 };
+  }
+  // The owner of a business with branches sees every branch side by side.
+  function branchReport({ query }) {
+    const from = Number(query.from);
+    const to = Number(query.to);
+    if (!from || !to || to <= from) throw new HttpError(400, "Davr noto'g'ri");
+    const list = branches();
+    if (!list.length) throw new HttpError(404, "Filiallar yo'q. Ularni platforma egasi bog'laydi");
+    const rows = list.map((b) => ({ code: b.code, name: b.name, main: b.main, ...b.api.summary(from, to) }));
+    const sumKey = (k) => rows.reduce((s, r) => s + r[k], 0);
+    const total = Object.fromEntries(['orders', 'total', 'guests', 'cash', 'card', 'transfer', 'debt', 'expense', 'profit', 'open_orders'].map((k) => [k, sumKey(k)]));
+    total.avg_check = total.orders ? Math.round(total.total / total.orders) : 0;
+    return { from, to, rows, total };
+  }
+
   function financeUnlock({ user, body }) {
     const key = `finance|${user.id}`;
     const f = pinFailures.get(key);
@@ -1710,6 +1759,21 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['GET', '/api/payroll/users/:id', ['owner'], payroll.userLedger],
     ['GET', '/api/my/payroll', ALL, payroll.myPayroll],
     ['GET', '/api/attendance', MANAGERS, attendanceDay],
+    ['GET', '/api/customers', MONEY, pro.listCustomers],
+    ['POST', '/api/customers', MONEY, pro.saveCustomer],
+    ['GET', '/api/customers/:id', MONEY, pro.customerDetail],
+    ['PUT', '/api/customers/:id', MONEY, pro.saveCustomer],
+    ['POST', '/api/customers/:id/pay', MONEY, pro.payDebt],
+    ['GET', '/api/ingredients', [...MANAGERS, 'cashier', 'chef'], pro.listIngredients],
+    ['POST', '/api/ingredients', MANAGERS, pro.saveIngredient],
+    ['PUT', '/api/ingredients/:id', MANAGERS, pro.saveIngredient],
+    ['DELETE', '/api/ingredients/:id', MANAGERS, pro.deleteIngredient],
+    ['POST', '/api/inventory/receive', [...MANAGERS, 'cashier'], pro.receive],
+    ['POST', '/api/inventory/adjust', [...MANAGERS, 'chef'], pro.adjust],
+    ['GET', '/api/inventory/moves', MANAGERS, pro.listMoves],
+    ['GET', '/api/dishes/:id/recipe', MANAGERS, pro.getRecipe],
+    ['PUT', '/api/dishes/:id/recipe', MANAGERS, pro.setRecipe],
+    ['GET', '/api/branches', ['owner'], branchReport],
     ['GET', '/api/staff-list', ['owner', 'admin', 'cashier'], () => q("SELECT id, name, role FROM users WHERE active = 1 AND role != 'owner' ORDER BY name").all()],
     ['POST', '/api/attendance', MANAGERS, payroll.setAttendance],
     ['POST', '/api/attendance/pay', MANAGERS, payDaily],
@@ -1738,7 +1802,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return null;
   }
 
-  return { match, guard, authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, planInfo, wasKicked, ROLES };
+  return { match, guard, authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, planInfo, wasKicked, summary, ROLES };
 }
 
 module.exports = { createApi, MODULES, BUSINESS_TYPES, SHOP_TYPES };

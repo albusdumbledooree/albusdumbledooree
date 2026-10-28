@@ -232,6 +232,8 @@ const DEFAULT_SETTINGS = {
   room_types: '[]',
   // A worker's own meal closed "on the worker": charged at the menu price or at cost, taken from their pay.
   staff_meal_price: 'menu',
+  // Pro: share of each paid check returned to the customer as bonus (0 = no cashback).
+  cashback_pct: '3',
 };
 
 function seedSettings(db, name) {
@@ -421,6 +423,68 @@ function migrate(db) {
     } catch (e) { db.exec('ROLLBACK'); throw e; }
   }
   addCol('orders', 'staff_id', 'INTEGER');
+  // Pro: the customer of a check, the part left on credit, the bonus spent on it.
+  addCol('orders', 'customer_id', 'INTEGER');
+  addCol('orders', 'paid_debt', 'INTEGER NOT NULL DEFAULT 0');
+  addCol('orders', 'bonus_used', 'INTEGER NOT NULL DEFAULT 0');
+  db.exec(`
+CREATE TABLE IF NOT EXISTS customers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  bonus INTEGER NOT NULL DEFAULT 0,
+  debt INTEGER NOT NULL DEFAULT 0,
+  visits INTEGER NOT NULL DEFAULT 0,
+  spent INTEGER NOT NULL DEFAULT 0,
+  last_visit INTEGER,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+CREATE TABLE IF NOT EXISTS customer_moves (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  kind TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  method TEXT,
+  order_id INTEGER,
+  transaction_id INTEGER,
+  note TEXT NOT NULL DEFAULT '',
+  user_id INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cmoves_customer ON customer_moves(customer_id);
+CREATE TABLE IF NOT EXISTS ingredients (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  unit TEXT NOT NULL DEFAULT 'kg',
+  stock REAL NOT NULL DEFAULT 0,
+  min_stock REAL NOT NULL DEFAULT 0,
+  cost INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS dish_ingredients (
+  dish_id INTEGER NOT NULL REFERENCES dishes(id),
+  ingredient_id INTEGER NOT NULL REFERENCES ingredients(id),
+  qty REAL NOT NULL,
+  PRIMARY KEY (dish_id, ingredient_id)
+);
+CREATE TABLE IF NOT EXISTS ingredient_moves (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ingredient_id INTEGER NOT NULL REFERENCES ingredients(id),
+  kind TEXT NOT NULL,
+  qty REAL NOT NULL,
+  cost INTEGER NOT NULL DEFAULT 0,
+  amount INTEGER NOT NULL DEFAULT 0,
+  note TEXT NOT NULL DEFAULT '',
+  order_id INTEGER,
+  user_id INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_imoves_ing ON ingredient_moves(ingredient_id);
+`);
   addCol('sessions', 'last_seen', 'INTEGER');
   const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
   if (!orderCols.includes('service_type')) db.exec("ALTER TABLE orders ADD COLUMN service_type TEXT NOT NULL DEFAULT 'percent'");

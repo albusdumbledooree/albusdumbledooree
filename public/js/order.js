@@ -450,6 +450,7 @@ function openPayment(order) {
         <div class="stack">
           <div class="sum-rows num" id="pay-sums"></div>
           ${canDiscount ? `<label class="field">${t('Chegirma')} (${esc(App.settings.currency)})<input type="number" name="discount" min="0" value="" placeholder="0"></label>` : ''}
+          ${customerPayHtml()}
           <div class="methods">${['cash', 'card', 'transfer'].map((m) => `<button type="button" class="method" data-m="${m}">${icon(METHOD_ICONS[m], 26)}${methodName(m)}</button>`).join('')}${staffPayButton()}</div>
           ${staffPayBox()}
           <div class="form-grid" style="grid-template-columns:repeat(3,1fr)">${['cash', 'card', 'transfer'].map((m) => `<label class="field">${methodName(m)}<input type="number" name="paid_${m}" min="0" placeholder="0"></label>`).join('')}</div>
@@ -460,11 +461,13 @@ function openPayment(order) {
     actions: [{ label: t('Bekor') }, { label: t("To'lovni yakunlash"), cls: 'ok', icon: 'circle-check', onClick: async (f) => {
       const d = formData(f);
       if (staffPay.on && !d.staff_id) { toast(t('Xodimni tanlang'), 'warn'); return false; }
+      const m = money3();
       const r = await POST(`/api/orders/${order.id}/close`, staffPay.on ? { staff_id: Number(d.staff_id) } : {
         discount: Number(d.discount) || 0, paid_cash: Number(d.paid_cash) || 0, paid_card: Number(d.paid_card) || 0, paid_transfer: Number(d.paid_transfer) || 0,
+        ...(cust.customer ? { customer_id: cust.customer.id, bonus: m.bonus, paid_debt: m.debt } : {}),
       });
       LocalBackup.save(r);
-      toast(`${t('Chek #{0} yopildi', r.id)}${r.change ? ` · ${t('Qaytim')}: ${moneyText(r.change)}` : ''}`, 'ok', 8000);
+      toast(`${t('Chek #{0} yopildi', r.id)}${r.change ? ` · ${t('Qaytim')}: ${moneyText(r.change)}` : ''}${r.cashback ? ` · ${t('Keshbek')}: +${moneyText(r.cashback)}` : ''}`, 'ok', 8000);
       if (d.print) printCheck(r.id);
       if (location.hash.startsWith('#/room/') || location.hash.startsWith('#/order/')) location.hash = '#/rooms';
       else refreshView();
@@ -473,6 +476,17 @@ function openPayment(order) {
   // A worker's own meal: no service charge; at cost if the boss chose so (no cost entered = menu price).
   const staffTotal = () => (App.settings.staff_meal_price === 'cost'
     ? live.reduce((sum, i) => sum + (i.cost > 0 ? i.cost : i.price) * i.qty, 0) : order.subtotal);
+  // Discount, the customer's bonus, what is paid now and what stays on credit.
+  const money3 = () => {
+    const d = formData(form);
+    const discount = Number(d.discount) || 0;
+    const before = Math.max(0, order.subtotal + order.service_amount - discount);
+    const bonus = cust.customer ? Math.min(cust.bonus, before) : 0;
+    const total = before - bonus;
+    const paid = (Number(d.paid_cash) || 0) + (Number(d.paid_card) || 0) + (Number(d.paid_transfer) || 0);
+    const debt = cust.customer && cust.debt ? Math.max(0, total - paid) : 0;
+    return { discount, bonus, total, paid, debt };
+  };
   const calc = () => {
     const d = formData(form);
     if (staffPay.on) {
@@ -480,15 +494,16 @@ function openPayment(order) {
         <span style="grid-column:1/-1" class="big-total">${money(staffTotal())}</span>`;
       return staffTotal();
     }
-    const discount = Number(d.discount) || 0;
-    const total = Math.max(0, order.subtotal + order.service_amount - discount);
-    const paid = (Number(d.paid_cash) || 0) + (Number(d.paid_card) || 0) + (Number(d.paid_transfer) || 0);
+    const { discount, bonus, total, paid, debt } = money3();
     const share = order.guests > 1 ? Math.round(total / order.guests) : 0;
     form.querySelector('#pay-sums').innerHTML = `<span>${t('Taomlar')}</span><span class="right">${money(order.subtotal)}</span>
       ${order.service_amount ? `<span>${esc(serviceLabel(order))}</span><span class="right">${money(order.service_amount)}</span>` : ''}
       ${discount ? `<span>${t('Chegirma')}</span><span class="right">−${money(discount)}</span>` : ''}
+      ${bonus ? `<span>${t('Bonusdan')}</span><span class="right">−${money(bonus)}</span>` : ''}
       <span style="grid-column:1/-1" class="big-total">${money(total)}</span>
+      ${debt ? `<span class="red">${t('Qarzga')}</span><span class="right red">${money(debt)}</span>` : ''}
       ${share ? `<span class="share">${t('{0} kishi — har biriga', order.guests)}</span><span class="share right">${money(share)}</span>` : ''}`;
+    if (debt) { form.querySelector('#pay-change').innerHTML = `<span class="red">${icon('notebook-pen', 20)} ${t('{0} qarzga yoziladi', esc(cust.customer.name))}</span>`; return total; }
     form.querySelector('#pay-change').innerHTML = !paid ? '' : paid >= total
       ? `<span style="color:var(--green)">${icon('circle-check', 20)} ${t('Qaytim')}: ${money(paid - total)}</span>`
       : `<span style="color:var(--red)">${icon('triangle-alert', 20)} ${t('Yetishmaydi')}: ${money(total - paid)}</span>`;
@@ -497,6 +512,7 @@ function openPayment(order) {
   form.addEventListener('input', calc);
   form.addEventListener('change', calc);
   const staffPay = bindStaffPay(form, calc);
+  const cust = bindCustomerPay(form, calc);
   form.querySelectorAll('[data-m]').forEach((b) => b.onclick = () => {
     staffPay.on = false;
     const total = calc();

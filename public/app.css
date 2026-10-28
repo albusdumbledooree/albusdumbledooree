@@ -708,3 +708,19 @@ body.kb-open .statusbar, body.kb-open .tabbar { display: none; }
   .att-row { grid-template-columns: 1fr; }
   .att-money { justify-content: flex-start; text-align: left; }
 }
+
+/* Pro: customer picker in the payment dialog */
+.cust-pay { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; background: var(--panel-2); }
+.cust-pick { position: relative; }
+.cust-pick input { width: 100%; }
+.cust-results { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.15); max-height: 260px; overflow: auto; }
+.cust-row { display: flex; gap: 8px; align-items: center; width: 100%; text-align: left; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--line); background: none; color: inherit; font: inherit; cursor: pointer; }
+.cust-row:last-child { border-bottom: 0; }
+.cust-row:hover { background: var(--panel-2); }
+.cust-row.add { color: var(--primary); }
+.recv-line .field, .rec-line .field { margin: 0; }
+@media (max-width: 640px) { .recv-line, .rec-line { grid-template-columns: 1fr 1fr !important; } .recv-line .field:first-child, .rec-line .field:first-child { grid-column: 1 / -1; } }
+.br-track { display: block; background: var(--panel-2); border-radius: 6px; height: 10px; overflow: hidden; }
+.br-track .fill { display: block; height: 100%; background: var(--primary); border-radius: 6px; }
+#recv-lines.stack, #rec-lines.stack { gap: 8px; }
+:is(b, span, td, strong, p).red:not(.chip):not(.notice):not(.pay-notice) { color: var(--red); }

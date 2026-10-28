@@ -84,7 +84,7 @@ function tenantCard(t) {
     <div class="tc-rows">
       <span>${icon('link', 15)}</span><span><span class="chip">${esc(t.code)}</span> <a href="${esc(siteUrl(t.code))}" target="_blank" rel="noopener">ochish ${icon('external-link', 13)}</a></span>
       <span>${icon('user-round', 15)}</span><span>${esc(t.contact_name || '—')} ${t.phone ? `· ${esc(t.phone)}` : ''}<br><span class="small muted">Login: ${(t.owners || []).map(esc).join(', ') || '—'}</span></span>
-      <span>${icon('star', 15)}</span><span><span class="chip plan-${esc(t.plan_info.key)}">${esc(t.plan_info.name)}</span>${t.is_branch ? ' <span class="chip">Filial</span>' : ''}
+      <span>${icon('star', 15)}</span><span><span class="chip plan-${esc(t.plan_info.key)}">${esc(t.plan_info.name)}</span>${t.is_branch ? ' <span class="chip">Filial</span>' : ''}${branchNote(t)}
         · <b>${money(t.plan_info.fee)}</b>/oy${t.monthly_fee ? ' <span class="small muted">(maxsus narx)</span>' : ''}
         ${t.plan_info.max_staff > 0 && !t.error ? `<br><span class="small ${t.staff - (t.owners || []).length >= t.plan_info.max_staff ? 'warn' : 'muted'}">Xodimlar: ${t.staff - (t.owners || []).length}/${t.plan_info.max_staff}</span>` : ''}</span>
       ${t.shared && t.shared.length ? `<span>${icon('triangle-alert', 15)}</span><span class="small warn" title="Oxirgi 7 kunda bu hisoblar band paytida boshqa qurilmadan ochilgan">Hisob almashib ishlatilyapti: ${t.shared.map((x) => `${esc(x.name)} (${x.c} marta)`).join(', ')}</span>` : ''}
@@ -161,7 +161,15 @@ function planFields(t = {}) {
   const cur = t.plan || 'biznes';
   return `<label class="field">Tarif<select name="plan">${PLAN_KEYS.map((k) => `<option value="${k}" ${cur === k ? 'selected' : ''}>${esc(planName(k))} — ${money(P.plans[k].price)}/oy · xodim ${staffLimit(P.plans[k].max_staff)}</option>`).join('')}</select></label>
     <label class="field">Maxsus oylik narx (0 = tarif narxi)<input type="number" name="monthly_fee" min="0" value="${t.monthly_fee || 0}"></label>
-    <label class="check" style="align-self:end"><input type="checkbox" name="is_branch" ${t.is_branch ? 'checked' : ''}> Qo'shimcha filial (${money(P.terms.branch_price)}/oy)</label>`;
+    <label class="check" style="align-self:end"><input type="checkbox" name="is_branch" ${t.is_branch ? 'checked' : ''}> Qo'shimcha filial (${money(P.terms.branch_price)}/oy)</label>
+    ${t.id ? parentField(t) : ''}`;
+}
+// A branch points at its main business; the main owner then sees all branches side by side (Pro).
+function parentField(t) {
+  const hasKids = P.tenants.some((x) => x.parent_id === t.id);
+  const mains = P.tenants.filter((x) => x.id !== t.id && !x.parent_id);
+  return `<label class="field">Asosiy biznes (bu filial bo'lsa)<select name="parent_id" ${hasKids ? 'disabled title="Bu biznesning o\'z filiallari bor"' : ''}>
+    <option value="">— Mustaqil biznes —</option>${mains.map((x) => `<option value="${x.id}" ${t.parent_id === x.id ? 'selected' : ''}>${esc(x.name)} (${esc(x.code)})</option>`).join('')}</select></label>`;
 }
 // Sections outside the chosen plan are shown greyed out: they are closed by the plan itself.
 function syncPlanModules(form) {
@@ -208,7 +216,15 @@ function readForm(d, form) {
   d.paid_until = dateEndTs(d.paid_until);
   d.monthly_fee = Number(d.monthly_fee) || 0;
   d.is_branch = !!d.is_branch;
+  if ('parent_id' in d) d.parent_id = Number(d.parent_id) || null;
   return d;
+}
+
+function branchNote(t) {
+  const main = t.parent_id && P.tenants.find((x) => x.id === t.parent_id);
+  if (main) return ` <span class="small muted">← ${esc(main.name)}</span>`;
+  const kids = P.tenants.filter((x) => x.parent_id === t.id).length;
+  return kids ? ` <span class="chip">${icon('network', 12)} ${kids} filial</span>` : '';
 }
 
 // ---------- Render ----------

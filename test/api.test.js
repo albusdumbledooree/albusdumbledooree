@@ -289,7 +289,8 @@ test('platform owner switches sections off per choyxona', async () => {
   await call('PUT', `/api/platform/tenants/${demo.id}`, admin, { disabled_modules: ['payroll', 'history'], kitchen_mode: 'off' });
 
   const me = (await call('GET', '/api/me', boss)).data;
-  assert.deepEqual(me.disabled.sort(), ['history', 'payroll']);
+  // (Pro-only sections are closed on this plan anyway.)
+  assert.deepEqual(me.disabled.filter((m) => !['customers', 'debts', 'inventory', 'branches'].includes(m)).sort(), ['history', 'payroll']);
   assert.equal(me.kitchen_mode, 'off');
   assert.equal((await call('GET', '/api/kitchen', boss)).status, 403);
   const r = await call('GET', '/api/payroll', boss);
@@ -937,4 +938,107 @@ test('a business page installs as its own app (iPhone home screen opens the busi
   // Unknown code or none: the general manifest.
   assert.equal((await (await fetch(`${base}/manifest.webmanifest?code=yoq-biznes`)).json()).start_url, '/app');
   assert.equal((await (await fetch(`${base}/manifest.webmanifest`)).json()).start_url, '/app');
+});
+
+test('Pro: customers with cashback, debts paid back later, ingredients taken by recipes, branch report', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  const main = (await call('POST', '/api/platform/tenants', admin, { name: 'Pro bosh', code: 'probosh', owner_name: 'E', owner_username: 'ega', owner_password: 'ega12345', plan: 'pro', kitchen_mode: 'off' })).data;
+  const boss = await login('ega', 'ega12345', 'probosh');
+  const room = (await call('POST', '/api/rooms', boss, { number: '1', name: 'Xona' })).data;
+
+  // Biznes plan has none of it.
+  const bizC = (await call('POST', '/api/platform/tenants', admin, { name: 'Biz', code: 'bizfirma', owner_name: 'E', owner_username: 'ega', owner_password: 'ega12345', plan: 'biznes' })).data;
+  const bizBoss = await login('ega', 'ega12345', 'bizfirma');
+  assert.equal((await call('GET', '/api/customers', bizBoss)).status, 403);
+  assert.equal((await call('GET', '/api/ingredients', bizBoss)).status, 403);
+
+  // Ingredients and a recipe: 1 osh = 0.15 kg guruch + 0.1 kg go'sht. The dish's cost follows the recipe.
+  const guruch = (await call('POST', '/api/ingredients', boss, { name: 'Guruch', unit: 'kg', stock: 10, min_stock: 2, cost: 16000 })).data;
+  const gosht = (await call('POST', '/api/ingredients', boss, { name: "Go'sht", unit: 'kg', stock: 3, min_stock: 1, cost: 120000 })).data;
+  const osh = (await call('POST', '/api/dishes', boss, { name: 'Osh', price: 45000, needs_kitchen: false })).data;
+  const rc = await call('PUT', `/api/dishes/${osh.id}/recipe`, boss, { items: [{ ingredient_id: guruch.id, qty: 0.15 }, { ingredient_id: gosht.id, qty: 0.1 }] });
+  assert.equal(rc.status, 200, JSON.stringify(rc.data));
+  assert.equal(rc.data.cost, Math.round(0.15 * 16000 + 0.1 * 120000));
+  assert.equal((await call('GET', '/api/menu', boss)).data.dishes.find((d) => d.id === osh.id).cost, 14400);
+
+  // A customer; check of 4 osh (180 000 + 10% service = 198 000): 100 000 cash now, 98 000 on credit.
+  const ali = (await call('POST', '/api/customers', boss, { name: 'Ali aka', phone: '+998 90 123-45-67' })).data;
+  assert.equal(ali.phone, '+998901234567');
+  assert.equal((await call('POST', '/api/customers', boss, { name: 'Boshqa', phone: '+998901234567' })).status, 409);
+  let o = (await call('POST', '/api/orders', boss, { room_id: room.id })).data;
+  await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: osh.id, qty: 4 }] });
+  assert.equal((await call('POST', `/api/orders/${o.id}/close`, boss, { paid_debt: 1000, paid_cash: 197000 })).status, 400, 'credit needs a customer');
+  let c = await call('POST', `/api/orders/${o.id}/close`, boss, { customer_id: ali.id, paid_cash: 100000, paid_debt: 98000 });
+  assert.equal(c.status, 200, JSON.stringify(c.data));
+  assert.equal(c.data.total, 198000);
+  assert.equal(c.data.paid_debt, 98000);
+  let a = (await call('GET', `/api/customers/${ali.id}`, boss)).data;
+  assert.equal(a.debt, 98000);
+  assert.equal(a.bonus, 3000, '3% cashback of the money paid now');
+  assert.equal(a.visits, 1);
+
+  // Stock went down by the recipe.
+  let ing = (await call('GET', '/api/ingredients', boss)).data.rows;
+  assert.equal(ing.find((r) => r.id === guruch.id).stock, 10 - 0.6);
+  assert.equal(ing.find((r) => r.id === gosht.id).stock, 2.6);
+
+  // Next visit: bonus spent as a discount, the rest paid by card.
+  o = (await call('POST', '/api/orders', boss, { room_id: room.id })).data;
+  await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: osh.id, qty: 1 }] });
+  assert.equal((await call('POST', `/api/orders/${o.id}/close`, boss, { customer_id: ali.id, bonus: 5000, paid_card: 49500 })).status, 400, 'more bonus than he has');
+  c = await call('POST', `/api/orders/${o.id}/close`, boss, { customer_id: ali.id, bonus: 3000, paid_card: 46500 });
+  assert.equal(c.status, 200, JSON.stringify(c.data));
+  assert.equal(c.data.total, 49500 - 3000);
+  a = (await call('GET', `/api/customers/${ali.id}`, boss)).data;
+  assert.equal(a.bonus, Math.floor(46500 * 0.03));
+
+  // He pays back part of the debt in cash: it enters the till and the cash book, not the income again.
+  const kas = (await call('POST', '/api/users', boss, { name: 'K', username: 'kas', password: 'kas1', role: 'cashier' })).data;
+  const kasT = await login('kas', 'kas1', 'probosh');
+  assert.equal((await call('POST', `/api/customers/${ali.id}/pay`, kasT, { amount: 99000 })).status, 400);
+  assert.equal((await call('POST', `/api/customers/${ali.id}/pay`, kasT, { amount: 50000, method: 'cash' })).status, 200);
+  assert.equal((await call('GET', `/api/customers/${ali.id}`, boss)).data.debt, 48000);
+  assert.equal((await call('GET', '/api/customers?debt=1', boss)).data.totals.debt, 48000);
+  const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+  const rep = (await call('GET', `/api/reports?from=${d0.getTime()}&to=${d0.getTime() + 864e5}`, boss)).data;
+  assert.equal(rep.sales.total, 198000 + 46500);
+  assert.equal(rep.sales.debt, 98000);
+  assert.equal(rep.other_income, 0, 'debt paid back is not new income');
+  assert.equal(rep.cash_flow.cash_in, 100000 + 50000);
+
+  // Receiving goods (paid from the till), a write-off, a count; low-stock flag.
+  assert.equal((await call('POST', '/api/inventory/receive', boss, { items: [{ ingredient_id: gosht.id, qty: 5, price: 125000 }], paid: true, method: 'cash' })).status, 200);
+  assert.equal((await call('POST', '/api/inventory/adjust', boss, { ingredient_id: guruch.id, kind: 'writeoff', qty: 1 })).status, 400, 'a reason is required');
+  assert.equal((await call('POST', '/api/inventory/adjust', boss, { ingredient_id: guruch.id, kind: 'writeoff', qty: 1, note: "Namlanib qoldi" })).status, 200);
+  assert.equal((await call('POST', '/api/inventory/adjust', boss, { ingredient_id: guruch.id, kind: 'count', qty: 1.5 })).status, 200);
+  ing = (await call('GET', '/api/ingredients', boss)).data;
+  const g = ing.rows.find((r) => r.id === gosht.id);
+  assert.equal(g.stock, 7.5);
+  assert.equal(g.cost, 125000);
+  assert.equal(ing.rows.find((r) => r.id === guruch.id).low, true);
+  assert.equal((await call('GET', '/api/menu', boss)).data.dishes.find((d) => d.id === osh.id).cost, Math.round(0.15 * 16000 + 0.1 * 125000), 'cost follows the new price');
+  const tx = (await call('GET', '/api/transactions?type=expense', boss)).data;
+  assert.ok(tx.some((x) => x.category === 'Mahsulotlar' && x.amount === 625000));
+  const moves = (await call('GET', `/api/inventory/moves?ingredient_id=${guruch.id}`, boss)).data;
+  assert.deepEqual([...new Set(moves.map((m) => m.kind))].sort(), ['count', 'sale', 'writeoff']);
+
+  // Branches: the platform ties a second business to this one; the main owner sees both.
+  assert.equal((await call('GET', `/api/branches?from=${d0.getTime()}&to=${d0.getTime() + 864e5}`, boss)).status, 404);
+  const fil = (await call('POST', '/api/platform/tenants', admin, { name: 'Pro filial', code: 'profilial', owner_name: 'F', owner_username: 'fil', owner_password: 'fil12345', plan: 'pro', kitchen_mode: 'off' })).data;
+  assert.equal((await call('PUT', `/api/platform/tenants/${fil.id}`, admin, { parent_id: main.id })).status, 200);
+  assert.equal((await call('PUT', `/api/platform/tenants/${main.id}`, admin, { parent_id: fil.id })).status, 400, 'no loops');
+  assert.equal((await call('PUT', `/api/platform/tenants/${bizC.id}`, admin, { parent_id: fil.id })).status, 400, 'no branch of a branch');
+  const filBoss = await login('fil', 'fil12345', 'profilial');
+  const fr = (await call('POST', '/api/rooms', filBoss, { number: '1', name: 'X' })).data;
+  const choy = (await call('POST', '/api/dishes', filBoss, { name: 'Choy', price: 5000, needs_kitchen: false })).data;
+  const fo = (await call('POST', '/api/orders', filBoss, { room_id: fr.id })).data;
+  await call('POST', `/api/orders/${fo.id}/items`, filBoss, { items: [{ dish_id: choy.id, qty: 2 }] });
+  assert.equal((await call('POST', `/api/orders/${fo.id}/close`, filBoss, { paid_cash: 11000 })).status, 200);
+  assert.equal((await call('GET', '/api/me', boss)).data.branches, 2);
+  const br = (await call('GET', `/api/branches?from=${d0.getTime()}&to=${d0.getTime() + 864e5}`, boss)).data;
+  assert.equal(br.rows.length, 2);
+  assert.equal(br.rows.find((r) => r.code === 'profilial').total, 11000);
+  assert.equal(br.total.total, 198000 + 46500 + 11000);
+  // The branch's own boss does not see the others.
+  assert.equal((await call('GET', `/api/branches?from=${d0.getTime()}&to=${d0.getTime() + 864e5}`, filBoss)).status, 404);
 });

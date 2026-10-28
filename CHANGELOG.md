@@ -2,6 +2,24 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.9.0 — Pro: qarz daftari, mijozlar va keshbek, ombor va tex-karta, filiallar
+- **Qarz daftari**: to'lov oynasida mijozni tanlab, "Qolganini qarzga yozish" — chek yopiladi, qolgan summa mijoz qarziga
+  yoziladi. Moliya → Mijozlar → Qarzdorlar: kim qancha qarz, har bir chek va to'lov tarixi. Qarz qaytarilganda
+  "Qarz to'lovi" tugmasi — pul kassaga tushadi (foydaga ikki marta qo'shilmaydi).
+- **Mijozlar bazasi va keshbek**: mijoz telefon yoki ism bilan topiladi yoki shu yerning o'zida qo'shiladi. Har to'lovdan
+  bonus yig'iladi (Sozlamalar → Muassasa → Keshbek, standart 3%); keyingi tashrifda "Bonusdan foydalanish" bilan chekdan ayiriladi.
+  Tashriflar soni, jami xarid, oxirgi tashrif ko'rinadi.
+- **Masalliq ombori va tex-karta**: Moliya → Ombor — guruch, go'sht, yog' kabi masalliqlar, qoldiq, minimal qoldiq, qiymat.
+  Kirim (bir nechta masalliq birdan, xohlasa "Mahsulotlar" xarajati bo'lib yoziladi), hisobdan chiqarish (sabab bilan),
+  sanoq (inventarizatsiya), harakatlar tarixi. Menyu → taom → **Tex-karta**: bir porsiyaga masalliqlar; tannarx va foyda
+  foizi o'zi hisoblanadi. Chek yopilganda masalliqlar ombordan o'zi ayiriladi, qaytarilganda qaytadi; kam qolsa ogohlantiradi.
+  Oshpaz ham Ombor bo'limini ko'radi (kirim va hisobdan chiqarish).
+- **Filiallar hisoboti**: platformada filialni asosiy biznesga bog'lang (tahrirlash → "Asosiy biznes"). Asosiy biznes
+  egasi Moliya → Filiallar sahifasida hamma filial savdosi, cheklar, naqd/karta, qarz, chiqim va foydani bitta jadvalda ko'radi.
+- Hisobot → To'lov turlari: "Qarzga", "Bonus bilan", "Xodim hisobiga" ham ko'rsatiladi.
+- Bu to'rt bo'lim Pro tarifida. Ilgari saqlangan tariflarga yangi bo'limlar o'zi qo'shiladi; mavjud ma'lumot o'zgarmaydi,
+  yangi jadvallar avtomatik yaratiladi.
+
 ## 1.8.3
 - Telefonga o'rnatilgan FLOWI belgisi qaysi biznesniki ekanini bilmasa (iPhone'da bo'lishi mumkin), endi bosh sahifaga
   o'tib ketmaydi — qurilmani ulash oynasi biznes kodi bilan ochiladi; kod bir marta kiritiladi.

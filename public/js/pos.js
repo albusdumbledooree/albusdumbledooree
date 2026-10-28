@@ -122,6 +122,7 @@ function posPayment() {
         <div class="stack">
           <div class="sum-rows num" id="pay-sums"></div>
           ${canDiscount ? `<label class="field">${t('Chegirma')} (${esc(App.settings.currency)})<input type="number" name="discount" min="0" placeholder="0"></label>` : ''}
+          ${customerPayHtml()}
           <div class="methods">${['cash', 'card', 'transfer'].map((m) => `<button type="button" class="method" data-m="${m}">${icon(METHOD_ICONS[m], 26)}${methodName(m)}</button>`).join('')}${staffPayButton()}</div>
           ${staffPayBox()}
           <div class="form-grid" style="grid-template-columns:repeat(3,1fr)">${['cash', 'card', 'transfer'].map((m) => `<label class="field">${methodName(m)}<input type="number" name="paid_${m}" min="0" placeholder="0"></label>`).join('')}</div>
@@ -134,7 +135,8 @@ function posPayment() {
       const r = await POST('/api/sales', {
         items: PosCart.lines.map(({ dish_id, qty }) => ({ dish_id, qty })), label: PosCart.label,
         ...(staffPay.on ? { staff_id: Number(x.staff_id) } : {
-          discount: Number(x.discount) || 0, paid_cash: Number(x.paid_cash) || 0, paid_card: Number(x.paid_card) || 0, paid_transfer: Number(x.paid_transfer) || 0 }),
+          discount: Number(x.discount) || 0, paid_cash: Number(x.paid_cash) || 0, paid_card: Number(x.paid_card) || 0, paid_transfer: Number(x.paid_transfer) || 0,
+          ...(cust.customer ? { customer_id: cust.customer.id, bonus: sums().bonus, paid_debt: sums().debt } : {}) }),
       });
       if ('print' in x) store('cp_pos_print', !!x.print);
       PosCart.lines = []; PosCart.label = ''; UI.drawer = false;
@@ -150,6 +152,16 @@ function posPayment() {
       toast(`${t('Sotildi')}: ${moneyText(r.total)}${r.change ? ` · ${t('Qaytim')}: ${moneyText(r.change)}` : ''}`, 'ok', 8000);
     } }],
   });
+  // Discount, the customer's bonus, what is paid now and what stays on credit.
+  const sums = () => {
+    const x = formData(form);
+    const discount = Math.min(Number(x.discount) || 0, subtotal);
+    const bonus = cust.customer ? Math.min(cust.bonus, subtotal - discount) : 0;
+    const total = subtotal - discount - bonus;
+    const paid = (Number(x.paid_cash) || 0) + (Number(x.paid_card) || 0) + (Number(x.paid_transfer) || 0);
+    const debt = cust.customer && cust.debt ? Math.max(0, total - paid) : 0;
+    return { discount, bonus, total, paid, debt };
+  };
   const calc = () => {
     const x = formData(form);
     if (staffPay.on) {
@@ -157,11 +169,13 @@ function posPayment() {
         <span style="grid-column:1/-1" class="big-total">${money(subtotal)}</span>`;
       return subtotal;
     }
-    const discount = Math.min(Number(x.discount) || 0, subtotal);
-    const total = subtotal - discount;
-    const paid = (Number(x.paid_cash) || 0) + (Number(x.paid_card) || 0) + (Number(x.paid_transfer) || 0);
-    form.querySelector('#pay-sums').innerHTML = `${discount ? `<span>${W('Taomlar')}</span><span class="right">${money(subtotal)}</span><span>${t('Chegirma')}</span><span class="right">−${money(discount)}</span>` : ''}
-      <span style="grid-column:1/-1" class="big-total">${money(total)}</span>`;
+    const { discount, bonus, total, paid, debt } = sums();
+    form.querySelector('#pay-sums').innerHTML = `${discount || bonus ? `<span>${W('Taomlar')}</span><span class="right">${money(subtotal)}</span>` : ''}
+      ${discount ? `<span>${t('Chegirma')}</span><span class="right">−${money(discount)}</span>` : ''}
+      ${bonus ? `<span>${t('Bonusdan')}</span><span class="right">−${money(bonus)}</span>` : ''}
+      <span style="grid-column:1/-1" class="big-total">${money(total)}</span>
+      ${debt ? `<span class="red">${t('Qarzga')}</span><span class="right red">${money(debt)}</span>` : ''}`;
+    if (debt) { form.querySelector('#pay-change').innerHTML = `<span class="red">${icon('notebook-pen', 20)} ${t('{0} qarzga yoziladi', esc(cust.customer.name))}</span>`; return total; }
     form.querySelector('#pay-change').innerHTML = !paid ? '' : paid >= total
       ? `<span style="color:var(--green)">${icon('circle-check', 20)} ${t('Qaytim')}: ${money(paid - total)}</span>`
       : `<span style="color:var(--red)">${icon('triangle-alert', 20)} ${t('Yetishmaydi')}: ${money(total - paid)}</span>`;
@@ -170,6 +184,7 @@ function posPayment() {
   form.addEventListener('input', calc);
   form.addEventListener('change', calc);
   const staffPay = bindStaffPay(form, calc);
+  const cust = bindCustomerPay(form, calc);
   form.querySelectorAll('[data-m]').forEach((b) => b.onclick = () => {
     staffPay.on = false;
     const total = calc();

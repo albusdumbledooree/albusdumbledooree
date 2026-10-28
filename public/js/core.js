@@ -364,6 +364,67 @@ function bindStaffPay(form, onChange) {
   return state;
 }
 
+/*
+ * Pro: a customer on the check — search by name or phone (or add a new one), spend their bonus as a discount,
+ * leave part of the check on credit ("Qarzga"). customerPayHtml() goes into the pay dialog; bindCustomerPay() wires it
+ * and returns the live state { customer, bonus, debt } the dialog reads when it computes and sends the payment.
+ */
+function canCustomers() { return moduleOn('customers') || moduleOn('debts'); }
+function customerPayHtml() {
+  if (!canCustomers()) return '';
+  return `<div class="cust-pay"><div class="cust-pick"><input type="search" name="cust_q" autocomplete="off" placeholder="${esc(t('Mijoz: ism yoki telefon'))}">
+      <div class="cust-results" hidden></div></div>
+    <div class="cust-chosen" hidden></div></div>`;
+}
+function bindCustomerPay(form, onChange) {
+  const state = { customer: null, bonus: 0, debt: false };
+  const box = form.querySelector('.cust-pay');
+  if (!box) return state;
+  const input = form.cust_q;
+  const results = box.querySelector('.cust-results');
+  const chosen = box.querySelector('.cust-chosen');
+  let timer = null;
+  const draw = () => {
+    const c = state.customer;
+    box.querySelector('.cust-pick').hidden = !!c;
+    chosen.hidden = !c;
+    if (!c) { chosen.innerHTML = ''; return; }
+    chosen.innerHTML = `<div class="row" style="gap:8px;align-items:center">${icon('user-round', 18)}<b>${esc(c.name)}</b><span class="small muted">${esc(c.phone || '')}</span>
+        <span class="grow"></span><button type="button" class="icon-btn" data-cust-clear title="${esc(t('Olib tashlash'))}">${icon('x', 16)}</button></div>
+      <div class="row small" style="gap:12px;margin-top:4px">${moduleOn('customers') ? `<span>${t('Bonus')}: <b>${money(c.bonus)}</b></span>` : ''}
+        ${c.debt ? `<span class="red">${t('Qarzi')}: <b>${money(c.debt)}</b></span>` : ''}</div>
+      ${moduleOn('customers') && c.bonus > 0 ? `<label class="check" style="margin-top:6px"><input type="checkbox" name="use_bonus" ${state.bonus ? 'checked' : ''}> ${t('Bonusdan foydalanish')}</label>` : ''}
+      ${moduleOn('debts') ? `<label class="check" style="margin-top:6px"><input type="checkbox" name="on_debt" ${state.debt ? 'checked' : ''}> ${icon('notebook-pen', 16)} ${t('Qolganini qarzga yozish')}</label>` : ''}`;
+    const ub = chosen.querySelector('[name=use_bonus]');
+    if (ub) ub.onchange = () => { state.bonus = ub.checked ? c.bonus : 0; onChange(); };
+    const od = chosen.querySelector('[name=on_debt]');
+    if (od) od.onchange = () => { state.debt = od.checked; onChange(); };
+    chosen.querySelector('[data-cust-clear]').onclick = () => { state.customer = null; state.bonus = 0; state.debt = false; draw(); onChange(); };
+  };
+  const pick = (c) => { state.customer = c; state.bonus = 0; state.debt = false; results.hidden = true; input.value = ''; draw(); onChange(); };
+  const search = async () => {
+    const v = input.value.trim();
+    if (!v) { results.hidden = true; return; }
+    let rows = [];
+    try { rows = (await GET(`/api/customers?q=${encodeURIComponent(v)}&limit=8`)).rows; } catch (e) { return toastError(e); }
+    const looksPhone = /^[+\d\s()-]{7,}$/.test(v);
+    results.innerHTML = rows.map((c) => `<button type="button" class="cust-row" data-cid="${c.id}"><b>${esc(c.name)}</b> <span class="small muted">${esc(c.phone || '')}</span>
+        ${c.debt ? `<span class="small red">${t('qarz')} ${num(c.debt)}</span>` : ''}</button>`).join('')
+      + `<button type="button" class="cust-row add" data-cadd>${icon('plus', 16)} ${t('Yangi mijoz')}: <b>${esc(v)}</b></button>`;
+    results.hidden = false;
+    results.querySelectorAll('[data-cid]').forEach((b) => b.onclick = () => pick(rows.find((c) => c.id === Number(b.dataset.cid))));
+    results.querySelector('[data-cadd]').onclick = async () => {
+      // A phone typed in the search is the phone; a name is the name (the phone can be added later).
+      const name = looksPhone ? (prompt(t('Mijozning ismi'), '') || '').trim() : v;
+      if (!name) return;
+      try { pick(await POST('/api/customers', { name, phone: looksPhone ? v : '' })); } catch (e) { toastError(e); }
+    };
+  };
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 250); });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timer); search(); } });
+  return state;
+}
+
 function toastError(e) { if (e && e.silent) return; toast(e && e.message ? e.message : String(e), 'error', 6000); }
 
 function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
