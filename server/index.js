@@ -13,7 +13,7 @@ const { HttpError, readJson, readRaw } = require('./util');
 
 const PUBLIC = path.join(__dirname, '..', 'public');
 // The platform panel lives at an address only the site owner knows (set PLATFORM_PATH, e.g. /x7k-boshqaruv).
-const PLATFORM_PATH = '/' + String(process.env.PLATFORM_PATH || 'platform').replace(/^\/+|\/+$/g, '');
+const PLATFORM_PATH = '/' + String(process.env.PLATFORM_PATH || 'planeta').replace(/^\/+|\/+$/g, '');
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',

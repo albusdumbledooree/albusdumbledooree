@@ -921,3 +921,8 @@ test('attendance, worker meals taken from pay, daily pay in the evening, advance
   assert.equal(rep.sales.staff, 85000);
   assert.equal(rep.sales.cash, 0);
 });
+
+test('the platform panel lives at /planeta; the old /platform address shows the front page', async () => {
+  assert.match(await (await fetch(`${base}/planeta`)).text(), /js\/platform\.js/);
+  assert.doesNotMatch(await (await fetch(`${base}/platform`)).text(), /js\/platform\.js/);
+});

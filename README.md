@@ -5,15 +5,15 @@ Biznes turlari: **choyxona, restoran/kafe, fast food, do'kon (oziq-ovqat), kiyim
 Telefon, planshet va kompyuterda brauzer orqali ishlaydi (ish stoli va telefonga ilova sifatida o'rnatiladi — PWA).
 Tillar: **o'zbekcha** (asosiy), **русский**, **English**.
 
-**Bitta sayt — ko'p choyxona.** Sayt egasi `/platform` sahifasida choyxonalarni qo'shadi va har biriga boshliq login-parolini beradi.
+**Bitta sayt — ko'p choyxona.** Sayt egasi `/planeta` sahifasida choyxonalarni qo'shadi va har biriga boshliq login-parolini beradi.
 Boshliq o'z choyxonasiga xodimlarni o'zi qo'shadi. Har bir choyxonaning ma'lumotlari alohida faylda saqlanadi va boshqalariga ko'rinmaydi.
 
 ## Platforma (sayt egasi uchun)
 
 Platforma manzili faqat sizga ma'lum bo'lsin: serverda `PLATFORM_PATH=/maxfiy-manzil` deb o'rnating
-(standart `/platform`). Choyxona sahifalarida platformaga hech qanday havola yo'q.
+(standart `/planeta`). Choyxona sahifalarida platformaga hech qanday havola yo'q.
 
-1. `https://sayt/platform` ni oching. Birinchi kirish: `superadmin` / `super123` → **darhol parolni o'zgartiring** (kalit tugmasi).
+1. `https://sayt/planeta` ni oching. Birinchi kirish: `superadmin` / `super123` → **darhol parolni o'zgartiring** (kalit tugmasi).
 2. **Yangi biznes**: biznes turi, nomi, kodi (masalan `navruz`), boshliq ismi, login va parol, to'langan muddat, oylik narx.
    "Namuna ma'lumotlar" belgilansa, tayyor menyu (yoki do'kon uchun mahsulotlar) bilan ochiladi.
 3. Chiqqan matnni (havola + kod + login + parol) **Nusxa olish** bilan Telegram orqali boshliqqa yuboring.
@@ -92,7 +92,7 @@ Ma'lumotlar `data/` papkasida saqlanadi (zaxira: `npm run backup`). Eski versiya
 | `PORT` | Port (standart 3000) |
 | `DATA_DIR` | Bazalar papkasi (standart `data/`: `platform.db` va `tenants/<kod>.db`) |
 | `TZ` | Vaqt mintaqasi (standart `Asia/Tashkent`) |
-| `PLATFORM_PATH` | Platforma panelining maxfiy manzili (standart `/platform`) |
+| `PLATFORM_PATH` | Platforma panelining maxfiy manzili (standart `/planeta`) |
 | `PLATFORM_USER`, `PLATFORM_PASSWORD` | Birinchi ishga tushishda platforma administratori (standart `superadmin` / `super123`) |
 | `SEED_DEMO=0` | `demo` kodli sinov choyxonasi yaratilmasin |
 | `TRUST_PROXY=1` | Caddy/Nginx orqasida ishlaganda mijozning haqiqiy IP manzilini olish |
@@ -113,7 +113,7 @@ Shundan keyin ekranda soat va xodimlar ro'yxati turadi, xodim ismini bosib PIN k
 | Ofitsant Bobur | `2222` | `bobur` / `1234` |
 | Oshpaz Rustam | `3333` | `oshpaz` / `1234` |
 
-Platforma: `http://localhost:3000/platform` — `superadmin` / `super123`.
+Platforma: `http://localhost:3000/planeta` — `superadmin` / `super123`.
 
 > ⚠️ Haqiqiy ishga tushirishda `SEED_DEMO=0` ishlating va platforma parolini o'zgartiring.
 
@@ -286,7 +286,7 @@ Tavsiya: kichik VPS server (1 CPU, 1 GB RAM, Ubuntu 24.04 — oyiga ~5$) + domen
    sudo cp /opt/choyxona/deploy/Caddyfile /etc/caddy/Caddyfile
    sudo systemctl reload caddy
    ```
-3. `https://domeningiz/platform` ni oching, `superadmin` / `super123` bilan kiring va **darhol parolni o'zgartiring**.
+3. `https://domeningiz/planeta` ni oching, `superadmin` / `super123` bilan kiring va **darhol parolni o'zgartiring**.
    Xizmat `SEED_DEMO=0` bilan ishlaydi — sinov choyxonasi yaratilmaydi. Keyin "Yangi choyxona" bilan mijozlarni qo'shing.
 4. Kunlik zaxira nusxani server o'zi oladi (`data/backups/`, oxirgi 30 kun). Boshqa joyga ham nusxa uchun
    xizmat faylida `BACKUP_COPY_DIR` yoki `BACKUP_HOOK` ni yozing (yuqoridagi "Zaxira nusxa" bo'limi).
@@ -295,7 +295,7 @@ Tavsiya: kichik VPS server (1 CPU, 1 GB RAM, Ubuntu 24.04 — oyiga ~5$) + domen
    Biror qadam xato bo'lsa, o'zi eski versiyaga qaytadi. Ochiq kompyuter va telefonlar yangi versiyani o'zi yuklaydi
    (yuborilmagan buyurtma yoki ochiq oyna bo'lsa — kutib turadi, hech narsa yo'qolmaydi).
 
-**Faqat choyxona ichida ishlatish** (internetsiz): bitta kompyuterda `npm start` (yoki `start.bat`), so'ng `/platform` da choyxona yarating, xodimlar shu Wi-Fi orqali
+**Faqat choyxona ichida ishlatish** (internetsiz): bitta kompyuterda `npm start` (yoki `start.bat`), so'ng `/planeta` da choyxona yarating, xodimlar shu Wi-Fi orqali
 `http://<kompyuter-IP>:3000` ga kiradi. Bu holda ega uydan hisobotni ko'ra olmaydi va bildirishnomalar (HTTPS talab qiladi) ishlamaydi.
 
 Xavfsizlik: login 8 marta xato kiritilsa 10 daqiqaga bloklanadi (platformada 5 marta — 15 daqiqa); parollar scrypt bilan shifrlangan; ishdan ketgan xodimni

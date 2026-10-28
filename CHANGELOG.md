@@ -2,6 +2,10 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.8.1
+- Platforma paneli endi `/planeta` manzilida (masalan, flowi.uz/planeta). Eski `/platform` manzili bosh sahifani ochadi.
+  Serverda `PLATFORM_PATH` o'rnatilsa, o'sha manzil ishlatiladi.
+
 ## 1.8.0 — Davomat, xodim xarajatlari, kunlik to'lov va avans
 - **Davomat** sahifasi (Xodimlar → Davomat, yoki Moliya → Davomat): har bir xodim uchun katta tugmalar —
   Keldi / Kelmadi / Dam olish / Kasal; kun tanlab o'tgan kunlarni ham to'g'rilash mumkin. Dasturga kirgan xodim o'zi "Keldi" bo'ladi.
