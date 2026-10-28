@@ -10,20 +10,20 @@ APP_DIR="${APP_DIR:-/opt/choyxona}"
 APP_USER="${APP_USER:-choyxona}"
 SERVICE="${SERVICE:-choyxona}"
 PORT="${PORT:-3000}"
-BRANCH="${BRANCH:-$(git -C "$APP_DIR" rev-parse --abbrev-ref HEAD)}"
-
+# Every git command runs as the app user, who owns the folder (git refuses a folder owned by someone else).
 as_app() { sudo -u "$APP_USER" -H "$@"; }
 say() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 
 cd "$APP_DIR"
-PREV="$(git rev-parse HEAD)"
+BRANCH="${BRANCH:-$(as_app git rev-parse --abbrev-ref HEAD)}"
+PREV="$(as_app git rev-parse HEAD)"
 
 say "1/6 Zaxira nusxa olinmoqda"
 as_app node --no-warnings scripts/backup.js
 
 say "2/6 Yangi versiya yuklanmoqda ($BRANCH)"
 as_app git fetch --quiet origin "$BRANCH"
-NEXT="$(git rev-parse "origin/$BRANCH")"
+NEXT="$(as_app git rev-parse "origin/$BRANCH")"
 if [ "$PREV" = "$NEXT" ]; then
   echo "Yangi versiya yo'q — hammasi joyida."
   exit 0
@@ -52,5 +52,5 @@ for _ in $(seq 1 20); do
 done
 [ "$ok" = 1 ] || rollback
 
-say "6/6 Tayyor: FLOWI v$(node -p "require('./package.json').version") — $(git log -1 --format='%h %s')"
+say "6/6 Tayyor: FLOWI v$(node -p "require('./package.json').version") — $(as_app git log -1 --format='%h %s')"
 echo "Ochiq qurilmalar bo'sh paytida o'zi yangilanadi (yuborilmagan buyurtma yo'qolmaydi)."
