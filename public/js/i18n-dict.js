@@ -661,6 +661,9 @@
     "Tex-karta noto'g'ri": ["Неверная техкарта", "Invalid recipe"],
     "Qarz {0} so'm, undan ko'p qabul qilib bo'lmaydi": ["Долг {0} сум, больше принять нельзя", "The debt is {0} so'm; you cannot take more"],
     "Mijozda {0} so'm bonus bor": ["У клиента {0} сум бонусов", "The customer has {0} so'm of bonus"],
+    "Dasturni telefon ekraniga qo'shing": ['Добавьте программу на экран телефона', 'Add the app to your home screen'],
+    'Pastdagi "Ulashish" tugmasi': ['Кнопка «Поделиться» внизу', 'The "Share" button below'],
+    'Keyin dastur belgidan ochiladi.': ['Потом программа будет открываться со значка.', 'Then the app opens from its icon.'],
   };
   for (const [uz, [ru, en]] of Object.entries(T)) {
     I18N.ru[uz] = ru;

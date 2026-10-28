@@ -11,16 +11,6 @@
   <meta property="og:image" content="/landing/rooms.jpg">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <script>
-    // A connected cash desk or tablet that opens the site address goes straight into its program.
-    (function () {
-      try {
-        var dev = JSON.parse(localStorage.getItem('cp_device') || 'null');
-        var code = (dev && dev.code) || JSON.parse(localStorage.getItem('cp_code') || 'null');
-        if (code && /^[a-z0-9-]+$/.test(code) && !/[?&]site\b/.test(location.search)) location.replace('/c/' + code + location.hash);
-      } catch (e) { /* stay on the page */ }
-    }());
-  </script>
   <style>
     :root {
       --navy: #071726; --navy-2: #0d2238; --blue: #2156e8; --blue-2: #1a46c4; --blue-soft: #e8eefd;

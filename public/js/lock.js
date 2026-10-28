@@ -48,6 +48,19 @@ function lockPayNotice() {
   return `<div class="pay-notice ${n.cls}">${icon('triangle-alert', 22)}<div><b>${n.text}</b>${contact ? `<div class="small">${contact}</div>` : ''}</div></div>`;
 }
 
+// iPhone/iPad Safari has no install prompt: say once how to put the program on the home screen,
+// so the icon is added from this business's own page (not from flowi.uz).
+function isIosBrowser() {
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (/macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+  return ios && !Screen.standalone();
+}
+function iosHintHtml() {
+  if (!isIosBrowser() || store('cp_ios_hint')) return '';
+  return `<div class="ios-hint">${icon('smartphone', 22)}<div class="grow"><b>${t("Dasturni telefon ekraniga qo'shing")}</b>
+      <div class="small">${t('Pastdagi "Ulashish" tugmasi')} (□↑) → <b>«На экран "Домой"»</b> / <b>«Add to Home Screen»</b>. ${t('Keyin dastur belgidan ochiladi.')}</div></div>
+    <button type="button" class="icon-btn" id="ios-hint-x" aria-label="${esc(t('Yopish'))}">${icon('x', 18)}</button></div>`;
+}
+
 // ---------- First screen: the boss connects this computer, tablet or phone once ----------
 Views.setup = {
   public: true,
@@ -129,6 +142,7 @@ Views.lock = {
       <div class="lock-head">${venueLogo('lock-logo')}${name ? `<div class="lock-venue">${esc(name)}</div>` : ''}
         ${names ? '' : `<div class="date">${esc(longDate())}</div><div class="big" data-clock>${fmtTime(Date.now())}</div>`}</div>
       ${lockPayNotice()}
+      ${iosHintHtml()}
       ${backup.state === 'prompt' ? `<div class="lock-note"><button class="btn sm" id="allow-backup">${icon('folder-open', 16)} ${t('Zaxira papkasiga ruxsat bering')}</button></div>` : ''}
       ${names ? `<div class="staff-grid">${staff.map((u) => `<button class="staff-tile ${u.role} ${u.has_pin ? '' : 'nopin'}" data-staff="${u.id}">
           <span class="role">${roleName(u.role)}</span><b>${esc(u.name)}</b></button>`).join('')}</div>`
@@ -141,6 +155,8 @@ Views.lock = {
     Screen.keepAwake();
     App.biz = (App.info && App.info.business_type) || App.biz;
     root.querySelector('#lock-full').onclick = () => Screen.toggleFull();
+    const iosX = root.querySelector('#ios-hint-x');
+    if (iosX) iosX.onclick = () => { store('cp_ios_hint', 1); iosX.closest('.ios-hint').remove(); };
     const allow = root.querySelector('#allow-backup');
     if (allow) allow.onclick = async () => {
       try { if (await FolderBackup.allow()) { toast(t('Zaxira saqlandi'), 'ok'); render(); } } catch (e) { toastError(e); }

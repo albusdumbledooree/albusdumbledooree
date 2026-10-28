@@ -724,3 +724,5 @@ body.kb-open .statusbar, body.kb-open .tabbar { display: none; }
 .br-track .fill { display: block; height: 100%; background: var(--primary); border-radius: 6px; }
 #recv-lines.stack, #rec-lines.stack { gap: 8px; }
 :is(b, span, td, strong, p).red:not(.chip):not(.notice):not(.pay-notice) { color: var(--red); }
+.ios-hint { display: flex; gap: 12px; align-items: flex-start; width: calc(100% - 32px); max-width: 520px; margin: 0 auto 14px; box-sizing: border-box; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,.94); color: #0b1f33; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+.ios-hint .icon-btn { flex: none; }

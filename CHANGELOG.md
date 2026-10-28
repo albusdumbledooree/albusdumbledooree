@@ -2,6 +2,12 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.9.1
+- flowi.uz bosh sahifasi endi doim ochiladi: shu brauzerda dasturga kirilgan bo'lsa ham avtomatik dasturga o'tkazib yubormaydi.
+  Dastur o'z havolasidan (flowi.uz/c/kod) yoki telefondagi belgidan ochiladi.
+- iPhone/iPad (Safari): kirish ekranida bir marta maslahat chiqadi — "Ulashish" (□↑) → "Bosh ekranga". Belgi to'g'ri
+  biznes sahifasidan qo'shiladi. × bosilsa boshqa chiqmaydi; Android va kompyuterda ko'rinmaydi.
+
 ## 1.9.0 — Pro: qarz daftari, mijozlar va keshbek, ombor va tex-karta, filiallar
 - **Qarz daftari**: to'lov oynasida mijozni tanlab, "Qolganini qarzga yozish" — chek yopiladi, qolgan summa mijoz qarziga
   yoziladi. Moliya → Mijozlar → Qarzdorlar: kim qancha qarz, har bir chek va to'lov tarixi. Qarz qaytarilganda
