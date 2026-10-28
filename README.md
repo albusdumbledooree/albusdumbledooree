@@ -276,12 +276,17 @@ Tavsiya: kichik VPS server (1 CPU, 1 GB RAM, Ubuntu 24.04 — oyiga ~5$) + domen
    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash -
    sudo apt install -y nodejs caddy git
    # Dastur
-   sudo useradd -r -m -d /opt/choyxona choyxona
+   # Dastur o'z foydalanuvchisi nomidan ishlaydi; papka bo'sh bo'lishi kerak (git clone uchun)
+   sudo useradd -r -M -d /opt/choyxona -s /usr/sbin/nologin choyxona
+   sudo mkdir -p /opt/choyxona && sudo chown choyxona:choyxona /opt/choyxona
    sudo -u choyxona git clone -b claude/restaurant-management-system-0i70j3 \
      https://github.com/albusdumbledooree/albusdumbledooree.git /opt/choyxona
    # Xizmat (avtomatik ishga tushadi, qulasa qayta yonadi)
    sudo cp /opt/choyxona/deploy/choyxona.service /etc/systemd/system/
-   sudo systemctl enable --now choyxona
+   # Platformaning maxfiy manzili (o'zingiz o'ylab topgan so'z)
+   sudo mkdir -p /etc/systemd/system/choyxona.service.d
+   printf '[Service]\nEnvironment=PLATFORM_PATH=/maxfiy-soz\n' | sudo tee /etc/systemd/system/choyxona.service.d/manzil.conf
+   sudo systemctl daemon-reload && sudo systemctl enable --now choyxona
    # HTTPS: deploy/Caddyfile ichida domeningizni yozing
    sudo cp /opt/choyxona/deploy/Caddyfile /etc/caddy/Caddyfile
    sudo systemctl reload caddy
