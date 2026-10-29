@@ -988,7 +988,7 @@ Views.menuadmin = {
         <label class="field">${t("Bo'lim")}<select name="category_id"><option value="">—</option>${categories.map((c) => `<option value="${c.id}" ${c.id === d.category_id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
         <label class="field">${t('Narxi')}<input type="number" name="price" min="0" value="${d.price ?? ''}" required></label>
         <label class="field">${t('Tannarxi')}<input type="number" name="cost" min="0" value="${d.cost ?? 0}"></label>
-        ${shop ? `<label class="field">${t('Shtrix-kod')}<input name="barcode" value="${esc(d.barcode || '')}" placeholder="${esc(t('Skanerlang yoki yozing'))}"></label>
+        ${shop ? `<label class="field">${t('Shtrix-kod')}<span class="input-btn"><input name="barcode" value="${esc(d.barcode || '')}" placeholder="${esc(t('Skanerlang yoki yozing'))}">${camOk() ? `<button type="button" class="icon-btn" data-cam title="${esc(t('Kamera bilan skanerlash'))}">${icon('camera', 18)}</button>` : ''}</span></label>
           ${App.biz === 'clothing' ? `<label class="field">${t("O'lcham")}<input name="size" value="${esc(d.size || '')}" placeholder="S, M, L, 42"></label>
           <label class="field">${t('Rang')}<input name="color" value="${esc(d.color || '')}"></label>` : ''}
           ${isDoors() ? `<label class="field">${t("O'lcham")}<input name="size" value="${esc(d.size || '')}" placeholder="2000×800" list="dl-sizes"></label>
@@ -1013,6 +1013,8 @@ Views.menuadmin = {
             <span class="small muted">${t("Mijoz telefonida ko'rinadi. Kvadrat, yorug' rasm yaxshi chiqadi.")}</span></div></div>
         <label class="field" style="margin-top:12px">${t('Qisqa tavsif (mijozga)')}<textarea name="description" rows="2" maxlength="300" placeholder="${esc(t("Masalan: mol go'shti, sabzi, no'xat — 400 g"))}">${esc(d.description || '')}</textarea></label>` : ''}`,
       onMount: (f) => {
+        const camBtn = f.querySelector('[data-cam]');
+        if (camBtn) camBtn.onclick = () => Scanner.open({ title: t('Shtrix-kodni skanerlang'), once: true, onCode: (code) => { f.barcode.value = code; return { ok: true, text: code }; } });
         const file = f.querySelector('#dp-file');
         if (!file) return;
         const prev = f.querySelector('#dp-prev');
@@ -1044,6 +1046,8 @@ Views.menuadmin = {
     root.querySelector('#add-dish').onclick = () => editDish();
     root.querySelectorAll('[data-edit-cat]').forEach((b) => b.onclick = () => editCat(categories.find((c) => c.id === Number(b.dataset.editCat))));
     root.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => editDish(dishes.find((d) => d.id === Number(b.dataset.edit))));
+    // A code read at the till that matched nothing: open a new product with it.
+    if (UI.pendingBarcode) { const code = UI.pendingBarcode; UI.pendingBarcode = null; setTimeout(() => editDish({ barcode: code }), 0); }
     root.querySelectorAll('[data-recipe]').forEach((b) => b.onclick = () => recipeDialog(dishes.find((d) => d.id === Number(b.dataset.recipe))));
     const avail = async (id, available) => { try { await POST(`/api/dishes/${id}/availability`, { available }); refreshView(); } catch (e) { toastError(e); } };
     root.querySelectorAll('[data-stop]').forEach((b) => b.onclick = () => avail(b.dataset.stop, false));

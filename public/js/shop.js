@@ -196,7 +196,8 @@ async function purchaseDialog(preset = null) {
         <div class="field">&nbsp;<button type="button" class="btn sm" id="sup-new">${icon('plus', 16)} ${t('Yangi yetkazib beruvchi')}</button></div></div>
       <h3 style="margin:14px 0 8px">${t('Nima keldi')}</h3>
       <div id="pin-lines" class="stack" style="gap:8px">${line(preset)}</div>
-      <button type="button" class="btn sm" id="pin-more" style="margin-top:8px">${icon('plus', 16)} ${t('Yana mol')}</button>
+      <div class="row" style="gap:8px;margin-top:8px"><button type="button" class="btn sm" id="pin-more">${icon('plus', 16)} ${t('Yana mol')}</button>
+        ${camOk() ? `<button type="button" class="btn sm" id="pin-cam">${icon('camera', 16)} ${t('Kamera bilan qo\'shish')}</button>` : ''}</div>
       <div class="form-grid" style="margin-top:14px">
         <label class="field">${t("Yo'lkira (mashina, yuk tushirish)")} ${tip(t("Yo'lkira mollarga narxiga qarab bo'lib qo'shiladi — har bir eshikning haqiqiy tannarxi chiqadi."))}<input type="number" name="freight" min="0" placeholder="0"></label>
         <label class="field">${t('Yetkazib beruvchiga hozir berildi')}<input type="number" name="paid" min="0"></label>
@@ -242,6 +243,22 @@ async function purchaseDialog(preset = null) {
   form.querySelectorAll('.pin-line').forEach(fill);
   form.querySelector('#pin-more').onclick = () => { form.querySelector('#pin-lines').insertAdjacentHTML('beforeend', line()); fill(form.querySelector('.pin-line:last-child')); sum(); };
   form.querySelector('#sup-new').onclick = () => supplierForm(null, () => purchaseDialog(preset));
+  // Scanning goods as they are unloaded: a known code adds a line or one more of it.
+  let untouched = !preset;
+  form.querySelector('#pin-lines').addEventListener('input', () => { untouched = false; });
+  const pc = form.querySelector('#pin-cam');
+  if (pc) pc.onclick = () => Scanner.open({ title: t('Mol keldi — kamera'), onCode: (code) => {
+    const d = goods.find((x) => x.barcode && x.barcode === code);
+    if (!d) return { ok: false, text: t('Topilmadi: {0}', code) };
+    let l = [...form.querySelectorAll('.pin-line')].find((x) => Number(x.querySelector('[name=dish]').value) === d.id);
+    if (l && !untouched) l.querySelector('[name=qty]').value = (Number(l.querySelector('[name=qty]').value) || 0) + 1;
+    else {
+      if (untouched) { l = form.querySelector('.pin-line'); untouched = false; } else { form.querySelector('#pin-lines').insertAdjacentHTML('beforeend', line(d.id)); l = form.querySelector('.pin-line:last-child'); fill(l); }
+      l.querySelector('[name=dish]').value = d.id; l.querySelector('[name=qty]').value = 1; l.querySelector('[name=price]').value = d.cost || '';
+    }
+    sum();
+    return { ok: true, html: `${icon('check', 16)} <b>${esc(d.name)}</b> ${esc(variantOf(d))} — ${l.querySelector('[name=qty]').value} ${t('ta')}` };
+  } });
   form.addEventListener('input', sum);
   form.addEventListener('change', sum);
   bindTips(form);

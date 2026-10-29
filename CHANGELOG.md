@@ -2,6 +2,16 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.13.0 — Kamera bilan skanerlash
+- Telefon, planshet yoki noutbuk **kamerasi skaner bo'lib ishlaydi** — alohida skaner sotib olish shart emas.
+  - **Sotuv**: 📷 Kamera tugmasi — kodga tutilgan mol darhol savatga tushadi ("pip" ovozi, telefon titraydi), kamera ochiq qoladi,
+    keyingi molni ham skanerlash mumkin. Topilmagan kod — "Yangi mahsulot" tugmasi bilan shu kodda mahsulot ochiladi.
+  - **Mahsulot qo'shish/tahrirlash**: shtrix-kod maydoni yonida 📷 — qutidagi kod o'qiladi va yoziladi.
+  - **Mol keldi**: "Kamera bilan qo'shish" — skanerlangan mol ro'yxatga qo'shiladi yoki soni ortadi.
+- EAN-13, EAN-8, UPC, Code-128, Code-39, ITF va QR kodlar o'qiladi. Android va kompyuterda brauzerning o'z o'qigichi,
+  iPhone'da esa kerak bo'lganda yuklanadigan o'qish kutubxonasi ishlatiladi. Qorong'ida — chiroq tugmasi (telefon ruxsat bersa).
+- Birinchi marta brauzer kameraga ruxsat so'raydi.
+
 ## 1.12.1 — Shtrix-kod yorliqlari
 - Mahsulotlar → **Yorliq**: tanlangan mollarga shtrix-kod yorliqlari chop etiladi — do'kon nomi, mol nomi, o'lcham · rang · tur · tomon,
   narx va shtrix-kod. O'lchamlar: termo yorliq 58×40 yoki 40×30 mm, yoki A4 varaq (24 ta, 70×37 mm).

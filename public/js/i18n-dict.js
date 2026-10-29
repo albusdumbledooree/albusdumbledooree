@@ -946,6 +946,20 @@
     "Yorliq sonini kiriting": ["Введите количество этикеток", "Enter the number of labels"],
     "Jami: {0} ta yorliq": ["Всего: {0} этикеток", "Total: {0} labels"],
     "Yorliqlar": ["Этикетки", "Labels"],
+    // ---------- Camera scanner ----------
+    "Kamera bilan skanerlash": ["Сканировать камерой", "Scan with the camera"],
+    "Shtrix-kodni skanerlang": ["Отсканируйте штрихкод", "Scan the barcode"],
+    "Kamera": ["Камера", "Camera"],
+    "Sotuv — kamera": ["Продажа — камера", "Sale — camera"],
+    "savatda {0} ta": ["в корзине {0} шт", "{0} in the cart"],
+    "Kamera bilan qo'shish": ["Добавить камерой", "Add with the camera"],
+    "Mol keldi — kamera": ["Приход — камера", "Goods arrived — camera"],
+    "Skaner kutubxonasi yuklanmadi. Internetni tekshiring": ["Сканер не загрузился. Проверьте интернет", "The scanner did not load. Check the internet"],
+    "Bu brauzerda kamera ishlamaydi (https manzil va zamonaviy brauzer kerak)": ["В этом браузере камера не работает (нужен https и современный браузер)", "The camera does not work in this browser (https and a modern browser are needed)"],
+    "Chiroq": ["Фонарик", "Flashlight"],
+    "Shtrix-kodni ramka ichiga tuting": ["Наведите штрихкод в рамку", "Hold the barcode inside the frame"],
+    "Kameraga ruxsat berilmadi. Brauzer sozlamalarida ruxsat bering": ["Нет доступа к камере. Разрешите его в настройках браузера", "No camera access. Allow it in the browser settings"],
+    "Kamera topilmadi": ["Камера не найдена", "No camera found"],
   };
   for (const [uz, [ru, en]] of Object.entries(T)) {
     I18N.ru[uz] = ru;

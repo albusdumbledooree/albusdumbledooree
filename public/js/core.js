@@ -73,6 +73,8 @@ const BIZ_ICONS = { choyxona: 'house', restoran: 'utensils', fastfood: 'sandwich
 function isShop() { return App.biz === 'market' || App.biz === 'clothing' || App.biz === 'doors'; }
 // A door shop: goods with size, colour, material and side; installation and delivery on a sale.
 function isDoors() { return App.biz === 'doors'; }
+// The camera can be used as a scanner (a secure page in a modern browser).
+function camOk() { return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) && window.isSecureContext; }
 // Fast food and shops sell at the counter (the "Sotuv" screen).
 function sellsAtCounter() { return App.biz === 'fastfood' || isShop(); }
 // Words that differ in a shop: "Menyu" is "Mahsulotlar", "Taom" is "Mahsulot".

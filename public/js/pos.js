@@ -65,6 +65,7 @@ Views.pos = {
         <div class="dish-area">
           <div class="menu-bar">
             <div class="scan">${icon(isShop() ? 'scan-barcode' : 'search', 20)}<input type="search" id="pos-scan" autocomplete="off" placeholder="${esc(isShop() ? t('Shtrix-kod yoki nomi') : W('Taom qidirish'))}" value="${esc(UI.search)}"></div>
+            ${isShop() && camOk() ? `<button class="btn cam-btn" id="pos-cam" title="${esc(t('Kamera bilan skanerlash'))}">${icon('camera', 20)}<span class="hide-xs"> ${t('Kamera')}</span></button>` : ''}
             ${showShift ? `<button class="btn ${shift ? '' : 'primary'}" id="shift">${icon(shift ? 'lock' : 'circle-plus', 16)} ${shift ? t('Smenani yopish') : t('Smenani ochish')}</button>` : ''}</div>
           ${filters}
           <div class="dishes">${list.map((x) => dishTile(menu, x, { qty: (PosCart.lines.find((c) => c.dish_id === x.id) || {}).qty, sub: productSub(x) })).join('') || emptyState('search', W('Taom topilmadi'))}</div>
@@ -97,6 +98,21 @@ Views.pos = {
       rerender();
     };
     if (window.matchMedia('(max-width: 1000px)').matches) root.querySelector('#cp-close').style.display = '';
+    // The phone's camera as a scanner: each code read goes into the cart; an unknown code can become a new product.
+    const cam = root.querySelector('#pos-cam');
+    if (cam) cam.onclick = () => Scanner.open({ title: t('Sotuv — kamera'), onCode: (code) => {
+      const found = menu.dishes.find((x) => x.barcode && x.barcode === code);
+      if (!found) {
+        return { ok: false, html: `${icon('triangle-alert', 16)} ${t('Topilmadi: {0}', esc(code))}${can('owner', 'admin') ? ` <button class="btn sm" data-newp>${icon('plus', 14)} ${t("Yangi mahsulot")}</button>` : ''}`,
+          bind: (m) => { const b = m.querySelector('[data-newp]'); if (b) b.onclick = () => { Scanner.close(); UI.pendingBarcode = code; location.hash = '#/menuadmin'; }; } };
+      }
+      const before = (PosCart.lines.find((c) => c.dish_id === found.id) || {}).qty || 0;
+      posAdd(found);
+      const now = (PosCart.lines.find((c) => c.dish_id === found.id) || {}).qty || 0;
+      rerender();
+      if (now === before) return { ok: false, text: t('"{0}" tugagan', found.name) };
+      return { ok: true, html: `${icon('check', 16)} <b>${esc(found.name)}</b>${variantOf(found) ? ` <span class="small">${esc(variantOf(found))}</span>` : ''} — ${t('savatda {0} ta', now)} · ${t('Jami')}: ${moneyText(posTotal())}` };
+    } });
     root.querySelector('#fab').onclick = () => { UI.drawer = true; rerender(); };
     root.querySelector('#cp-close').onclick = () => { UI.drawer = false; rerender(); };
     const back = root.querySelector('#drawer-back');
