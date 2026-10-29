@@ -2,6 +2,19 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.13.1 — Bosh sahifa yangilandi
+- flowi.uz bosh sahifasi oxirgi o'zgarishlar bilan yangilandi:
+  - tepada **"Yangi: QR-menyu va eshik do'konlari uchun bo'lim"** belgisi, menyuda "QR-menyu" va "Do'konlar" havolalari;
+  - "Tanish holatmi?" bo'limiga 2 ta yangi muammo: **ish esdan chiqishi** (→ "Bugun" va Telegram eslatma) va **nasiya qarzlar** (→ qarz daftari);
+  - yangi **QR-menyu** bo'limi: 4 qadam (skanerlash → tanlash → ofitsant tasdiqlaydi → oshxona) va mehmon telefoni rasmlari;
+  - yangi **"Do'konlar uchun"** bo'limi: Bugun sahifasi, Mol keldi (yo'lkira bilan tannarx), kamera skaner va yorliqlar,
+    o'rnatish/yetkazish ustalar bilan, sof foyda hisoboti — haqiqiy ekran rasmlari bilan;
+  - Imkoniyatlar 6 tadan 15 taga: Bugun va ishlar, Telegram eslatma, QR-menyu, qarz daftari, mijozlar va keshbek, masalliq ombori, filiallar, davomat, yetkazib beruvchilar;
+  - "Kimlar uchun"ga **Eshik do'koni**, ariza formasiga "Eshik do'koni" turi qo'shildi; 3 ta yangi savol-javob (skaner, QR xato buyurtma, Telegram eslatma);
+  - Biznes tarifida "Qarz daftari" ko'rsatiladi; hamma yangi matnlar rus tilida ham bor.
+- QR-menyu: mehmon telefonida pastki "Savat" tugmasi tor ekranda summani kesmaydigan qilindi.
+- Brak (hisobdan chiqarish) ombordagi sonidan ko'p bo'lishi mumkin emas — qoldiq minusga tushmaydi.
+
 ## 1.13.0 — Kamera bilan skanerlash
 - Telefon, planshet yoki noutbuk **kamerasi skaner bo'lib ishlaydi** — alohida skaner sotib olish shart emas.
   - **Sotuv**: 📷 Kamera tugmasi — kodga tutilgan mol darhol savatga tushadi ("pip" ovozi, telefon titraydi), kamera ochiq qoladi,

@@ -1336,6 +1336,7 @@ test('door shop: goods in with freight, sale with installation and credit, damag
   // A damaged door, a lock short at the count, a lock brought back.
   assert.equal((await call('POST', `/api/dishes/${door.id}/writeoff`, boss, { qty: 1 })).status, 400, 'reason needed');
   assert.equal((await call('POST', `/api/dishes/${door.id}/writeoff`, boss, { qty: 1, reason: 'Singan' })).data.stock, 8);
+  assert.equal((await call('POST', `/api/dishes/${door.id}/writeoff`, boss, { qty: 9, reason: 'Singan' })).status, 400, 'no more than in stock');
   const ref = await call('POST', `/api/orders/${sale.data.id}/refund`, boss, { items: [{ item_id: sale.data.items.find((i) => i.dish_id === lock.id).id, qty: 1 }], reason: 'Mos kelmadi' });
   assert.equal(ref.status, 200, JSON.stringify(ref.data));
   const cnt = (await call('POST', `/api/dishes/${lock.id}/count`, boss, { qty: 24 })).data;

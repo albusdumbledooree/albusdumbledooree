@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#071726">
   <title>FLOWI — choyxona, restoran va do'kon uchun boshqaruv tizimi</title>
-  <meta name="description" content="FLOWI: ofitsant buyurtmani telefondan yuboradi, oshxona darhol ko'radi, kassa chekni bir bosishda yopadi. Foyda, xarajat va ish haqi — bitta dasturda. 14 kun bepul.">
+  <meta name="description" content="FLOWI: choyxona, restoran, fast food, do'kon va eshik do'konlari uchun. Buyurtma, QR-menyu, oshxona, kassa, ombor, qarz daftari, sof foyda va kunlik eslatmalar — bitta dasturda. 14 kun bepul.">
   <meta property="og:title" content="FLOWI — choyxona, restoran va do'kon uchun boshqaruv tizimi">
   <meta property="og:description" content="Buyurtma, oshxona, kassa, hisobot va ish haqi — bitta dasturda. 14 kun bepul sinab ko'ring.">
   <meta property="og:image" content="/landing/rooms.jpg">
@@ -62,6 +62,32 @@
     .frame .bar i { width: 10px; height: 10px; border-radius: 50%; background: #d3d7de; }
     .phone { position: absolute; right: 2%; bottom: -40px; width: clamp(150px, 21%, 250px); border-radius: 32px; overflow: hidden; border: 8px solid #0b0f14; box-shadow: 0 30px 60px -20px rgba(0,0,0,.7); background: #0b0f14; }
 
+    .new-badge { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 18px; padding: 6px 14px 6px 6px; border-radius: 999px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18); color: #fff; text-decoration: none; font-size: 14px; font-weight: 600; }
+    .new-badge b { background: #22c55e; color: #052e16; border-radius: 999px; padding: 3px 10px; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+    .new-badge:hover { background: rgba(255,255,255,.14); }
+
+    /* Showcase rows (QR menu, shops) */
+    .rows { display: grid; gap: clamp(56px, 8vw, 96px); margin-top: 56px; }
+    .row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 44px; align-items: center; }
+    .row.rev > .media { order: 2; }
+    .row h3 { font-size: clamp(24px, 3vw, 30px); margin-bottom: 12px; }
+    .row p { color: var(--muted); margin: 0 0 16px; }
+    .row .tag { display: inline-block; font-size: 12.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--green); background: #dcfce7; padding: 4px 10px; border-radius: 999px; margin-bottom: 12px; }
+    .row ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+    .row li { display: flex; gap: 10px; font-weight: 550; }
+    .row li::before { content: ""; flex: none; width: 20px; height: 20px; margin-top: 2px; border-radius: 50%; background: var(--blue-soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232156e8' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center/12px no-repeat; }
+    .row .frame { border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 30px 60px -30px rgba(15, 23, 42, .35); }
+    .row .media { position: relative; }
+    .row .media .phone { right: -2%; bottom: -30px; width: 30%; }
+    .phones { display: flex; gap: 18px; justify-content: center; }
+    .phones img { width: 46%; max-width: 280px; border-radius: 28px; border: 7px solid #0b0f14; box-shadow: 0 30px 60px -30px rgba(15, 23, 42, .5); }
+    .phones.one img { width: 50%; max-width: 260px; }
+    .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 40px; counter-reset: st; }
+    .steps div { padding: 20px; border-radius: var(--radius); background: #fff; border: 1px solid var(--line); counter-increment: st; }
+    .steps div::before { content: counter(st); display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--blue); color: #fff; font-weight: 800; font-size: 14px; margin-bottom: 10px; }
+    .steps b { display: block; margin-bottom: 4px; } .steps span { color: var(--muted); font-size: 14.5px; }
+    .shops { background: var(--bg-2); }
+
     /* Trust strip */
     .strip { background: var(--bg-2); border-bottom: 1px solid var(--line); padding: 26px 0; }
     .strip .wrap { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
@@ -69,7 +95,7 @@
     .strip svg { flex: none; color: var(--blue); }
 
     /* Problems */
-    .pain { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 44px; }
+    .pain { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 44px; }
     .pain .card { padding: 24px; border-radius: var(--radius); border: 1px solid var(--line); background: #fff; }
     .pain .card b { display: block; font-size: 18px; margin-bottom: 6px; }
     .pain .card .no { color: #b91c1c; font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; gap: 6px; align-items: center; }
@@ -111,7 +137,7 @@
     .safe-grid svg { color: #5eead4; }
 
     /* Who */
-    .who { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-top: 40px; }
+    .who { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-top: 40px; }
     .who div { padding: 22px 18px; border-radius: var(--radius); border: 1px solid var(--line); text-align: center; background: #fff; }
     .who .ic { width: 56px; height: 56px; margin: 0 auto 12px; border-radius: 18px; display: grid; place-items: center; background: var(--bg-2); color: var(--navy); }
     .who b { display: block; } .who span { font-size: 14px; color: var(--muted); }
@@ -182,7 +208,9 @@
     @media (max-width: 960px) {
       header.top nav { display: none; }
       .strip .wrap, .pain { grid-template-columns: 1fr 1fr; }
-      .stage { grid-template-columns: 1fr; }
+      .stage, .row { grid-template-columns: 1fr; }
+      .row.rev > .media { order: 0; }
+      .steps { grid-template-columns: 1fr 1fr; }
       .feats, .safe-grid, .plans { grid-template-columns: 1fr 1fr; }
       .who { grid-template-columns: repeat(3, 1fr); }
       .final { grid-template-columns: 1fr; }
@@ -192,7 +220,9 @@
       body { font-size: 16px; }
       header.top .wrap { gap: 12px; }
       header.top .btn { display: none; }
-      .strip .wrap, .pain, .feats, .safe-grid, .plans { grid-template-columns: 1fr; }
+      .strip .wrap, .pain, .feats, .safe-grid, .plans, .steps { grid-template-columns: 1fr; }
+      .row .media .phone { width: 34%; bottom: -16px; }
+      .phones img { border-width: 5px; border-radius: 22px; }
       .who { grid-template-columns: 1fr 1fr; }
       .phone { width: 34%; right: 0; bottom: -20px; border-width: 5px; border-radius: 20px; }
       .hero .ctas .btn { width: 100%; }
@@ -206,6 +236,8 @@
     <a href="/" aria-label="FLOWI"><img src="/brand/flowi-white.svg" alt="FLOWI" style="height:22px"></a>
     <nav>
       <a href="#ishlash" data-t="nav_how">Qanday ishlaydi</a>
+      <a href="#qr-menyu" data-t="nav_qr">QR-menyu</a>
+      <a href="#dokon" data-t="nav_shop">Do'konlar</a>
       <a href="#imkoniyatlar" data-t="nav_feat">Imkoniyatlar</a>
       <a href="#narxlar" data-t="nav_price">Narxlar</a>
       <a href="#savollar" data-t="nav_faq">Savollar</a>
@@ -218,9 +250,10 @@
 
 <section class="hero">
   <div class="wrap">
-    <span class="eyebrow" style="color:#7aa2ff" data-t="hero_eyebrow">Choyxona · Restoran · Fast food · Do'kon</span>
+    <a class="new-badge" href="#qr-menyu"><b data-t="new_b">Yangi</b><span data-t="new_t">QR-menyu va eshik do'konlari uchun bo'lim</span> →</a><br>
+    <span class="eyebrow" style="color:#7aa2ff" data-t="hero_eyebrow">Choyxona · Restoran · Fast food · Do'kon · Eshik do'koni</span>
     <h1 data-t="hero_title" data-html>Buyurtmadan foydagacha — <em>hammasi bitta dasturda</em></h1>
-    <p class="lead" data-t="hero_lead">Ofitsant buyurtmani telefondan yuboradi, oshxona uni darhol ko'radi, kassa chekni bir bosishda yopadi. Siz esa savdo, xarajat va foydani istalgan joydan ko'rib turasiz.</p>
+    <p class="lead" data-t="hero_lead">Ofitsant buyurtmani telefondan yuboradi, oshxona uni darhol ko'radi, kassa chekni bir bosishda yopadi. Siz esa savdo, xarajat va foydani istalgan joydan ko'rib turasiz. Dastur har kuni nima qilish kerakligini eslatadi va sof foydani o'zi hisoblaydi.</p>
     <div class="ctas">
       <a class="btn primary contact-link" href="#boglanish" data-t="hero_cta">14 kun bepul sinab ko'ring</a>
       <a class="btn ghost" href="#narxlar" data-t="hero_cta2">Narxlarni ko'rish</a>
@@ -252,6 +285,8 @@
     <div class="card"><div class="no">✕ <span data-t="p2_no">Kassada kamomad</span></div><b data-t="p2_t">Pul qayerga ketgani noma'lum</b><p data-t="p2_p">Taom "bekor qilingan", chegirma "berilgan" — kim, qachon?</p><div class="yes" data-t="p2_y">✓ Bekor qilish faqat ruxsat bilan, hammasi tarixga yoziladi</div></div>
     <div class="card"><div class="no">✕ <span data-t="p3_no">Oy oxiri</span></div><b data-t="p3_t">Foyda qancha — hech kim bilmaydi</b><p data-t="p3_p">Xarajat bir daftarda, savdo boshqasida, ish haqi uchinchisida.</p><div class="yes" data-t="p3_y">✓ Kirim, chiqim va foyda — bitta hisobotda, har kuni</div></div>
     <div class="card"><div class="no">✕ <span data-t="p4_no">Ish haqi</span></div><b data-t="p4_t">Hisob-kitob janjal bilan tugaydi</b><p data-t="p4_p">Kim necha kun ishladi, savdodan foizi qancha?</p><div class="yes" data-t="p4_y">✓ Davomat, foiz, bonus va jarima avtomatik hisoblanadi</div></div>
+    <div class="card"><div class="no">✕ <span data-t="p5_no">Esdan chiqdi</span></div><b data-t="p5_t">Ijara, o'lchov, qo'ng'iroq — unutildi</b><p data-t="p5_p">Kunlik va oylik ishlar boshda turadi, biri albatta esdan chiqadi.</p><div class="yes" data-t="p5_y">✓ "Bugun" sahifasi va Telegramga ertalabki ro'yxat</div></div>
+    <div class="card"><div class="no">✕ <span data-t="p6_no">Nasiya</span></div><b data-t="p6_t">Kim qancha qarz — daftarda yo'qoladi</b><p data-t="p6_p">Mijoz "keyin beraman" dedi, yetkazib beruvchiga qancha qarzmiz — noma'lum.</p><div class="yes" data-t="p6_y">✓ Qarz daftari: kim, qancha, qachon to'laydi — eslatma bilan</div></div>
   </div>
 </section>
 
@@ -291,6 +326,69 @@
   </div>
 </section>
 
+<section id="qr-menyu">
+  <div class="wrap center">
+    <span class="eyebrow" data-t="qr_eyebrow">Yangi · QR-menyu</span>
+    <h2 data-t="qr_title">Mehmon menyuni o'z telefonida ko'radi</h2>
+    <p class="lead" data-t="qr_lead">Har bir xona va stolga dastur o'zi QR kod yaratib beradi. Mehmon kamerani tutadi — rasmli menyu ochiladi. Ilova yuklash ham, ro'yxatdan o'tish ham shart emas.</p>
+  </div>
+  <div class="wrap">
+    <div class="steps">
+      <div><b data-t="qs1_t">QR kodni skanerlaydi</b><span data-t="qs1_p">Stol yoki xonadagi kartochkadan</span></div>
+      <div><b data-t="qs2_t">Taomni tanlaydi</b><span data-t="qs2_p">Rasm, tarkib, narx va tayyorlanish vaqti</span></div>
+      <div><b data-t="qs3_t">Ofitsant tasdiqlaydi</b><span data-t="qs3_p">Noto'g'ri buyurtma oshxonaga o'tmaydi</span></div>
+      <div><b data-t="qs4_t">Oshxona tayyorlaydi</b><span data-t="qs4_p">Buyurtma chekka va printerga tushadi</span></div>
+    </div>
+    <div class="rows">
+      <div class="row">
+        <div class="media phones"><img src="/landing/phone-qr.jpg" alt="" loading="lazy" width="780" height="1688"><img src="/landing/phone-qr-cart.jpg" alt="" loading="lazy" width="780" height="1688"></div>
+        <div><h3 data-t="qr1_t">Rasmli menyu — o'zbek va rus tilida</h3><p data-t="qr1_p">Tugagan taom menyuda ko'rinmaydi, narxlar har doim yangi. Mehmon kutib o'tirmaydi.</p>
+          <ul><li data-t="qr1_1">"Ofitsantni chaqirish" va "Hisob" tugmalari</li><li data-t="qr1_2">Har bir taomga izoh: "achchiq bo'lmasin", "piyozsiz"</li><li data-t="qr1_3">QR kodlarni bir bosishda chop etasiz</li></ul></div>
+      </div>
+      <div class="row rev">
+        <div class="media"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/qr-approve.jpg" alt="" loading="lazy" width="1280" height="800"></div></div>
+        <div><h3 data-t="qr2_t">Nazorat sizda qoladi</h3><p data-t="qr2_p">Mehmonning buyurtmasi avval ofitsant yoki kassirga keladi. Tasdiqlansa — chekka qo'shiladi, rad etilsa — mehmon sababini ko'radi.</p>
+          <ul><li data-t="qr2_1">Ovozli xabar: qaysi xonadan, nima so'raldi</li><li data-t="qr2_2">Faqat ish vaqtida qabul qilish mumkin</li><li data-t="qr2_3">Xohlasangiz — faqat menyu, buyurtmasiz</li></ul></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="shops" id="dokon">
+  <div class="wrap center">
+    <span class="eyebrow" data-t="sh_eyebrow">Do'konlar uchun</span>
+    <h2 data-t="sh_title">Do'kon va eshik do'koni: moldan sof foydagacha</h2>
+    <p class="lead" data-t="sh_lead">Sodda, lekin mukammal: mol keldi, sotildi, usta o'rnatdi — dastur tannarxni, qarzni va sof foydani o'zi hisoblaydi.</p>
+  </div>
+  <div class="wrap rows">
+    <div class="row">
+      <div class="media"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/today.jpg" alt="" loading="lazy" width="1600" height="960"></div><img class="phone" src="/landing/phone-today.jpg" alt="" loading="lazy" width="780" height="1688"></div>
+      <div><span class="tag" data-t="sh1_tag">Hech narsa esdan chiqmaydi</span><h3 data-t="sh1_t">"Bugun" — kirganda birinchi ko'rinadi</h3><p data-t="sh1_p">Bugungi ishlar, o'rnatish va o'lchovlar, kam qolgan mol, kassa va qarzlar — bitta sahifada.</p>
+        <ul><li data-t="sh1_1">Ijara, soliq kabi oylik ishlar o'zi takrorlanadi</li><li data-t="sh1_2">Ertalab 08:00 da Telegramga kunlik ro'yxat, vaqtli ishdan 1 soat oldin eslatma</li><li data-t="sh1_3">"Bajarildi" bosilsa — xarajat kassaga o'zi yoziladi</li></ul></div>
+    </div>
+    <div class="row rev">
+      <div class="media"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/purchase.jpg" alt="" loading="lazy" width="1600" height="960"></div></div>
+      <div><h3 data-t="sh2_t">Mol keldi — tannarx o'zi hisoblanadi</h3><p data-t="sh2_p">Yetkazib beruvchi, kelish narxi va yo'lkira kiritiladi. Yo'lkira mollarga taqsimlanadi, haqiqiy tannarx chiqadi.</p>
+        <ul><li data-t="sh2_1">Yetkazib beruvchiga qarz va to'lov kuni eslatmasi</li><li data-t="sh2_2">Brak, inventarizatsiya va har bir mol tarixi</li><li data-t="sh2_3">Excel'dan mollarni bir martada yuklash</li></ul></div>
+    </div>
+    <div class="row">
+      <div class="media phones one"><img src="/landing/phone-scan.jpg" alt="" loading="lazy" width="780" height="1688"></div>
+      <div><span class="tag" data-t="sh3_tag">Skaner shart emas</span><h3 data-t="sh3_t">Telefon kamerasi — shtrix-kod skaneri</h3><p data-t="sh3_p">Mahsulotni kameraga tuting — savatga tushadi. Shtrix-kodi yo'q mollarga dastur o'zi kod beradi va yorliq chop etadi.</p>
+        <ul><li data-t="sh3_1">Android va iPhone'da ishlaydi</li><li data-t="sh3_2">Yorliqlar: 58 mm, 40 mm termoprinter yoki A4 varaq</li><li data-t="sh3_3">Oddiy USB skaner ham ishlayveradi</li></ul></div>
+    </div>
+    <div class="row rev">
+      <div class="media"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/doors-pay.jpg" alt="" loading="lazy" width="1600" height="960"></div></div>
+      <div><span class="tag" data-t="sh4_tag">Eshik do'konlari uchun</span><h3 data-t="sh4_t">O'rnatish va yetkazish — sotuv ichida</h3><p data-t="sh4_p">Mijozdan qancha olinadi, ustaga qancha beriladi, qachon va qayerga — bitta oynada. Usta ishi "Bugun"ga o'zi tushadi.</p>
+        <ul><li data-t="sh4_1">O'lcham, rang, material, ochilish tomoni bo'yicha qidirish</li><li data-t="sh4_2">Avans, nasiya va to'lov kuni</li><li data-t="sh4_3">Ustalar hisobi va nakladnoy chop etish</li></ul></div>
+    </div>
+    <div class="row">
+      <div class="media"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/profit.jpg" alt="" loading="lazy" width="1600" height="960"></div></div>
+      <div><h3 data-t="sh5_t">Sof foyda — bir qarashda</h3><p data-t="sh5_p">Savdo − tannarx − xarajatlar = sof foyda. Murakkab hisobotlarsiz, oddiy tilda.</p>
+        <ul><li data-t="sh5_1">Eng ko'p foyda keltirgan mollar</li><li data-t="sh5_2">Uzoq vaqt sotilmay yotgan mollar ("o'lik mol")</li><li data-t="sh5_3">Kunlik, haftalik va oylik solishtirish</li></ul></div>
+    </div>
+  </div>
+</section>
+
 <section id="imkoniyatlar">
   <div class="wrap center">
     <span class="eyebrow" data-t="feat_eyebrow">Imkoniyatlar</span>
@@ -301,8 +399,17 @@
     <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></div><b data-t="x2_t">Bronlar</b><p data-t="x2_p">To'y, banket va oddiy bron — vaqt to'qnashsa, dastur ogohlantiradi.</p></div>
     <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><b data-t="x3_t">Xodimlar va huquqlar</b><p data-t="x3_p">Ega, admin, kassir, ofitsant, oshpaz — har biri faqat o'ziga kerakli narsani ko'radi.</p></div>
     <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 15h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 17"/><path d="m7 21 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9"/><path d="m2 16 6 6"/><circle cx="16" cy="9" r="2.9"/><circle cx="6" cy="5" r="3"/></svg></div><b data-t="x4_t">Ish haqi</b><p data-t="x4_p">Oylik, kunlik, savdodan foiz, bonus va jarima. Kim qancha olishi kerak — tayyor.</p></div>
-    <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14"/></svg></div><b data-t="x5_t">Ombor va shtrix-kod</b><p data-t="x5_p">Do'konlar uchun: qoldiq, kam qolgan mahsulot, kirim va qaytarish.</p></div>
+    <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14"/></svg></div><b data-t="x5_t">Ombor va shtrix-kod</b><p data-t="x5_p">Qoldiq, kam qolgan mol, kirim va qaytarish. Telefon kamerasi bilan skanerlash va yorliq chop etish.</p></div>
     <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg></div><b data-t="x6_t">Sensorli kassa</b><p data-t="x6_p">Klaviaturasiz terminal uchun ekran klaviaturasi: raqamlar, lotin va kirill harflari.</p></div>
+    <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2m-7.07-14.07 1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></div><b data-t="x7_t">Bugun va ishlar</b><p data-t="x7_p">Kunlik, haftalik va oylik ishlar. Takrorlanadigan to'lovlar o'zi qayta qo'yiladi.</p></div>
+    <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.27 21a2 2 0 0 0 3.46 0M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/></svg></div><b data-t="x8_t">Telegram eslatma</b><p data-t="x8_p">Har kuni ertalab bugungi ishlar ro'yxati va vaqtli ishdan 1 soat oldin xabar.</p></div>
+    <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3M21 21v.01M12 7v3a2 2 0 0 1-2 2H7M3 12h.01M12 3h.01M12 16v.01M16 12h1M21 12v.01M12 21v-1"/></svg></div><b data-t="x9_t">QR-menyu</b><p data-t="x9_p">Mehmon menyuni telefonida ko'radi, buyurtma beradi va ofitsantni chaqiradi.</p></div>
+    <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6h4M2 10h4M2 14h4M2 18h4"/><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M16 2v20"/></svg></div><b data-t="x10_t">Qarz daftari</b><p data-t="x10_p">Mijoz va yetkazib beruvchi qarzlari, to'lov kuni va eslatmalar.</p></div>
+    <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><b data-t="x11_t">Mijozlar va keshbek</b><p data-t="x11_p">Doimiy mijozlar bazasi, xaridlar tarixi va keshbek ballari.</p></div>
+    <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-9"/><path d="M15.17 2.21a1.67 1.67 0 0 1 1.63 0L21 4.57a1.93 1.93 0 0 1 0 3.36L8.82 14.79a1.66 1.66 0 0 1-1.64 0L3 12.43a1.93 1.93 0 0 1 0-3.36z"/><path d="M20 13v3.87a2.06 2.06 0 0 1-1.11 1.83l-6 3.08a1.93 1.93 0 0 1-1.78 0l-6-3.08A2.06 2.06 0 0 1 4 16.87V13"/><path d="M21 12.43a1.93 1.93 0 0 0 0-3.36L8.83 2.2a1.64 1.64 0 0 0-1.63 0L3 4.57a1.93 1.93 0 0 0 0 3.36l12.18 6.86a1.64 1.64 0 0 0 1.63 0z"/></svg></div><b data-t="x12_t">Masalliq ombori va tex-karta</b><p data-t="x12_p">Go'sht, guruch, yog' — har bir taom sotilganda qoldiqdan o'zi ayriladi.</p></div>
+    <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/></svg></div><b data-t="x13_t">Filiallar</b><p data-t="x13_p">Bir nechta filial — har biri alohida, umumiy hisobot bitta joyda.</p></div>
+    <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18M9 16l2 2 4-4"/></svg></div><b data-t="x14_t">Davomat va avans</b><p data-t="x14_p">Kim keldi, kim kelmadi; kunlik to'lov, avans va xodim hisobiga olingan narsalar.</p></div>
+    <div class="feat"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2M15 18H9M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg></div><b data-t="x15_t">Yetkazib beruvchilar</b><p data-t="x15_p">Kimdan qancha mol keldi, qancha to'landi va qancha qarz qoldi.</p></div>
   </div>
 </section>
 
@@ -331,6 +438,7 @@
     <div><div class="ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v3a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3"/><path d="M12 19H4a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-3.83"/><path d="m3 11 7.77-6.04a2 2 0 0 1 2.46 0L21 11z"/></svg></div><b data-t="w3">Fast food</b><span data-t="w3s">Tez sotuv, olib ketish</span></div>
     <div><div class="ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg></div><b data-t="w4">Oziq-ovqat do'koni</b><span data-t="w4s">Shtrix-kod, ombor</span></div>
     <div><div class="ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg></div><b data-t="w5">Kiyim do'koni</b><span data-t="w5s">O'lcham, rang, qaytarish</span></div>
+    <div><div class="ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20H2"/><path d="M11 4.562v16.157a1 1 0 0 0 1.242.97L19 20V5.562a2 2 0 0 0-1.515-1.94l-4-1A2 2 0 0 0 11 4.561z"/><path d="M11 4H8a2 2 0 0 0-2 2v14"/><path d="M14 12h.01"/><path d="M22 20h-3"/></svg></div><b data-t="w6">Eshik do'koni</b><span data-t="w6s">O'rnatish, ustalar, nasiya</span></div>
   </div>
   <div class="wrap shop-shot"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/shop-pos.jpg" alt="" loading="lazy"></div><p class="caption" data-t="shop_cap">Do'kon kassasi: mahsulotni bosing yoki shtrix-kodni skanerlang</p></div>
 </section>
@@ -356,6 +464,9 @@
     <details><summary data-t="q3">Internet kerakmi?</summary><p data-t="a3">Ha, dastur internet orqali ishlaydi — shuning uchun egasi uyda ham, safarda ham hamma narsani ko'radi. Ma'lumotlar serverda saqlanadi va har kuni zaxiralanadi.</p></details>
     <details><summary data-t="q4">Ma'lumotlarim boshqalarga ko'rinmaydimi?</summary><p data-t="a4">Yo'q. Har bir biznes alohida faylda saqlanadi va faqat o'z havolasi orqali ochiladi. Xodimlar PIN kod bilan kiradi, moliyani faqat siz ruxsat berganlar ko'radi.</p></details>
     <details><summary data-t="q5">Xodimlarni o'rgatish qiyinmi?</summary><p data-t="a5">Yo'q. Ofitsant uchun 10 daqiqa yetadi: xonani bosadi, taomni tanlaydi, "Yuborish". Biz ulab beramiz va birinchi kunlarda yordam beramiz.</p></details>
+    <details><summary data-t="q7">Shtrix-kod skaneri sotib olishim shartmi?</summary><p data-t="a7">Shart emas. Telefon yoki planshet kamerasi skaner bo'lib ishlaydi. Ko'p sotuv bo'lsa, oddiy USB skaner ham ulanadi — u ham ishlaydi. Shtrix-kodi yo'q mollarga dastur o'zi kod beradi.</p></details>
+    <details><summary data-t="q8">Mehmon QR orqali noto'g'ri buyurtma bersa-chi?</summary><p data-t="a8">Buyurtma to'g'ridan-to'g'ri oshxonaga ketmaydi: avval ofitsant yoki kassir ko'radi va tasdiqlaydi. Rad etilsa, mehmon telefonida sababi chiqadi. Xohlasangiz, QR faqat menyu ko'rish uchun ishlaydi.</p></details>
+    <details><summary data-t="q9">Telegramga eslatma qanday keladi?</summary><p data-t="a9">Sozlamalarda "Telegram" bo'limidan botni bir bosishda ulaysiz. Shundan keyin har kuni ertalab 08:00 da bugungi ishlar ro'yxati, vaqti belgilangan ishdan 1 soat oldin esa eslatma keladi.</p></details>
     <details><summary data-t="q6">To'lov muddati o'tib ketsa nima bo'ladi?</summary><p data-t="a6">Bir necha kun ogohlantirish bilan ishlayveradi, keyin faqat ko'rish rejimiga o'tadi. Hech narsa o'chmaydi — to'lovdan keyin ish to'xtagan joyidan davom etadi.</p></details>
   </div>
 </section>
@@ -373,7 +484,7 @@
         <label><span data-t="ap_business">Biznes nomi</span><input name="business" maxlength="100"></label>
         <label><span data-t="ap_type">Biznes turi</span><select name="type">
           <option value="" data-t="ap_choose">Tanlang</option><option value="choyxona" data-t="ap_t_choyxona">Choyxona</option><option value="restoran" data-t="ap_t_restoran">Restoran / kafe</option>
-          <option value="fastfood" data-t="ap_t_fastfood">Fast food</option><option value="market" data-t="ap_t_market">Do'kon</option><option value="clothing" data-t="ap_t_clothing">Kiyim do'koni</option><option value="other" data-t="ap_t_other">Boshqa</option></select></label>
+          <option value="fastfood" data-t="ap_t_fastfood">Fast food</option><option value="market" data-t="ap_t_market">Do'kon</option><option value="clothing" data-t="ap_t_clothing">Kiyim do'koni</option><option value="doors" data-t="ap_t_doors">Eshik do'koni</option><option value="other" data-t="ap_t_other">Boshqa</option></select></label>
         <label><span data-t="ap_staff">Xodimlar soni</span><input name="staff" type="number" inputmode="numeric" min="0" max="10000"></label>
         <label><span data-t="ap_city">Shahar / tuman</span><input name="city" maxlength="80"></label>
         <label><span data-t="ap_time">Qo'ng'iroq uchun qulay vaqt</span><select name="call_time">
@@ -397,10 +508,11 @@
 (function () {
   'use strict';
   var RU = {
-    nav_how: 'Как работает', nav_feat: 'Возможности', nav_price: 'Цены', nav_faq: 'Вопросы', cta_try: 'Попробовать бесплатно',
-    hero_eyebrow: 'Чайхана · Ресторан · Фастфуд · Магазин',
+    nav_how: 'Как работает', nav_qr: 'QR-меню', nav_shop: 'Магазины', nav_feat: 'Возможности', nav_price: 'Цены', nav_faq: 'Вопросы', cta_try: 'Попробовать бесплатно',
+    hero_eyebrow: 'Чайхана · Ресторан · Фастфуд · Магазин · Магазин дверей',
+    new_b: 'Новое', new_t: 'QR-меню и раздел для магазинов дверей',
     hero_title: 'От заказа до прибыли — <em>всё в одной программе</em>',
-    hero_lead: 'Официант отправляет заказ с телефона, кухня видит его сразу, касса закрывает чек одним нажатием. А вы видите продажи, расходы и прибыль из любого места.',
+    hero_lead: 'Официант отправляет заказ с телефона, кухня видит его сразу, касса закрывает чек одним нажатием. А вы видите продажи, расходы и прибыль из любого места. Программа каждый день напоминает, что нужно сделать, и сама считает чистую прибыль.',
     hero_cta: '14 дней бесплатно', hero_cta2: 'Смотреть цены',
     hero_note: 'Без установки · Работает на компьютере, планшете и телефоне · На узбекском и русском',
     s1: 'Официант — на своём телефоне', s2: 'Принтер чеков и кухни', s3: 'Ежедневная резервная копия', s4: 'Каждое действие в истории',
@@ -409,6 +521,26 @@
     p2_no: 'Недостача в кассе', p2_t: 'Непонятно, куда ушли деньги', p2_p: 'Блюдо «отменили», скидку «дали» — кто и когда?', p2_y: '✓ Отмена только с разрешения, всё пишется в историю',
     p3_no: 'Конец месяца', p3_t: 'Сколько прибыли — никто не знает', p3_p: 'Расходы в одной тетради, продажи в другой, зарплата в третьей.', p3_y: '✓ Приход, расход и прибыль — в одном отчёте, каждый день',
     p4_no: 'Зарплата', p4_t: 'Расчёт заканчивается спором', p4_p: 'Кто сколько дней работал, какой процент с продаж?', p4_y: '✓ Посещаемость, процент, бонусы и штрафы считаются сами',
+    p5_no: 'Забыли', p5_t: 'Аренда, замер, звонок — вылетело из головы', p5_p: 'Ежедневные и ежемесячные дела в голове — что-то обязательно забудется.', p5_y: '✓ Страница «Сегодня» и утренний список в Telegram',
+    p6_no: 'В долг', p6_t: 'Кто сколько должен — теряется в тетради', p6_p: 'Клиент сказал «отдам потом», сколько должны поставщику — неизвестно.', p6_y: '✓ Долговая тетрадь: кто, сколько и когда платит — с напоминанием',
+    qr_eyebrow: 'Новое · QR-меню', qr_title: 'Гость смотрит меню на своём телефоне', qr_lead: 'Программа сама создаёт QR-код для каждой комнаты и стола. Гость наводит камеру — открывается меню с фото. Не нужно ни скачивать приложение, ни регистрироваться.',
+    qs1_t: 'Сканирует QR-код', qs1_p: 'С карточки на столе или в комнате', qs2_t: 'Выбирает блюда', qs2_p: 'Фото, состав, цена и время приготовления',
+    qs3_t: 'Официант подтверждает', qs3_p: 'Ошибочный заказ не попадёт на кухню', qs4_t: 'Кухня готовит', qs4_p: 'Заказ попадает в чек и на принтер',
+    qr1_t: 'Меню с фото — на узбекском и русском', qr1_p: 'Закончившееся блюдо в меню не видно, цены всегда актуальные. Гостю не нужно ждать.',
+    qr1_1: 'Кнопки «Позвать официанта» и «Счёт»', qr1_2: 'Комментарий к блюду: «не острое», «без лука»', qr1_3: 'QR-коды печатаются одним нажатием',
+    qr2_t: 'Контроль остаётся у вас', qr2_p: 'Заказ гостя сначала приходит официанту или кассиру. Подтвердили — добавляется в чек, отклонили — гость видит причину.',
+    qr2_1: 'Голосовое уведомление: из какой комнаты и что заказали', qr2_2: 'Приём заказов только в рабочее время', qr2_3: 'По желанию — только меню, без заказа',
+    sh_eyebrow: 'Для магазинов', sh_title: 'Магазин и магазин дверей: от товара до чистой прибыли', sh_lead: 'Просто, но полноценно: товар пришёл, продан, мастер установил — программа сама считает себестоимость, долги и чистую прибыль.',
+    sh1_tag: 'Ничего не забудется', sh1_t: '«Сегодня» — первое, что вы видите', sh1_p: 'Дела на сегодня, установки и замеры, заканчивающийся товар, касса и долги — на одной странице.',
+    sh1_1: 'Ежемесячные дела вроде аренды и налогов повторяются сами', sh1_2: 'В 08:00 список дел в Telegram, за 1 час до дела — напоминание', sh1_3: 'Нажали «Выполнено» — расход сам записывается в кассу',
+    sh2_t: 'Товар пришёл — себестоимость считается сама', sh2_p: 'Указываете поставщика, закупочную цену и доставку. Доставка распределяется на товары — получается реальная себестоимость.',
+    sh2_1: 'Долг поставщику и напоминание о дне оплаты', sh2_2: 'Брак, инвентаризация и история каждого товара', sh2_3: 'Загрузка товаров из Excel за один раз',
+    sh3_tag: 'Сканер не обязателен', sh3_t: 'Камера телефона — сканер штрих-кодов', sh3_p: 'Наведите камеру на товар — он попадёт в корзину. Товарам без штрих-кода программа сама присвоит код и напечатает этикетку.',
+    sh3_1: 'Работает на Android и iPhone', sh3_2: 'Этикетки: термопринтер 58 мм, 40 мм или лист A4', sh3_3: 'Обычный USB-сканер тоже работает',
+    sh4_tag: 'Для магазинов дверей', sh4_t: 'Установка и доставка — прямо в продаже', sh4_p: 'Сколько берём с клиента, сколько платим мастеру, когда и куда — в одном окне. Работа мастера сама попадает в «Сегодня».',
+    sh4_1: 'Поиск по размеру, цвету, материалу и стороне открывания', sh4_2: 'Аванс, рассрочка и день оплаты', sh4_3: 'Расчёт с мастерами и печать накладной',
+    sh5_t: 'Чистая прибыль — с первого взгляда', sh5_p: 'Продажи − себестоимость − расходы = чистая прибыль. Без сложных отчётов, простым языком.',
+    sh5_1: 'Товары, принёсшие больше всего прибыли', sh5_2: 'Товары, которые долго не продаются («мёртвый товар»)', sh5_3: 'Сравнение по дням, неделям и месяцам',
     flow_eyebrow: 'Как работает', flow_title: 'Путь одного заказа — 4 шага', flow_lead: 'Все видят одно и то же: официант, повар, кассир и вы. Ничего не теряется.',
     st1: 'Официант', st2: 'Кухня', st3: 'Касса', st4: 'Отчёт',
     f1_t: 'Заказ — с телефона', f1_p: 'Официант видит свои комнаты, выбирает блюда цветными кнопками и отправляет одним нажатием.',
@@ -424,15 +556,24 @@
     x2_t: 'Брони', x2_p: 'Свадьба, банкет или обычная бронь — программа предупредит о пересечении.',
     x3_t: 'Сотрудники и права', x3_p: 'Владелец, админ, кассир, официант, повар — каждый видит только своё.',
     x4_t: 'Зарплата', x4_p: 'Оклад, посуточно, процент с продаж, бонусы и штрафы. Кому сколько — уже посчитано.',
-    x5_t: 'Склад и штрих-код', x5_p: 'Для магазинов: остатки, заканчивающиеся товары, приход и возврат.',
+    x5_t: 'Склад и штрих-код', x5_p: 'Остатки, заканчивающийся товар, приход и возврат. Сканирование камерой телефона и печать этикеток.',
     x6_t: 'Сенсорная касса', x6_p: 'Экранная клавиатура для терминала без клавиатуры: цифры, латиница и кириллица.',
+    x7_t: 'Сегодня и дела', x7_p: 'Ежедневные, еженедельные и ежемесячные дела. Повторяющиеся платежи ставятся сами.',
+    x8_t: 'Напоминания в Telegram', x8_p: 'Каждое утро список дел на сегодня и сообщение за 1 час до дела со временем.',
+    x9_t: 'QR-меню', x9_p: 'Гость смотрит меню на своём телефоне, делает заказ и зовёт официанта.',
+    x10_t: 'Долговая тетрадь', x10_p: 'Долги клиентов и поставщикам, день оплаты и напоминания.',
+    x11_t: 'Клиенты и кэшбэк', x11_p: 'База постоянных клиентов, история покупок и баллы кэшбэка.',
+    x12_t: 'Склад продуктов и техкарты', x12_p: 'Мясо, рис, масло — при продаже блюда списываются с остатка сами.',
+    x13_t: 'Филиалы', x13_p: 'Несколько филиалов — каждый отдельно, общий отчёт в одном месте.',
+    x14_t: 'Посещаемость и аванс', x14_p: 'Кто пришёл, кто нет; посуточная оплата, аванс и покупки в счёт сотрудника.',
+    x15_t: 'Поставщики', x15_p: 'От кого сколько товара пришло, сколько оплачено и сколько осталось долга.',
     safe_eyebrow: 'Надёжность', safe_title: 'Ваши данные никогда не потеряются', safe_lead: 'Данные каждого бизнеса хранятся отдельно и копируются каждый день.',
     z1_t: 'Ежедневная копия', z1_p: 'Каждый день копия на сервере. По желанию — ещё и в папку на вашем компьютере.',
     z2_t: 'Каждому — свои права', z2_p: 'Сотрудник входит по PIN-коду. Финансы видят только те, кому вы разрешили.',
     z3_t: 'История действий', z3_p: 'Кто отменил блюдо, кто дал скидку, кто закрыл кассу — всё записывается.',
     who_eyebrow: 'Для кого', who_title: 'Подстраивается под ваш бизнес', who_lead: 'Выберите тип — лишние разделы скроются сами: в магазине нет комнат, в чайхане не нужен штрих-код.',
     w1: 'Чайхана', w1s: 'Сури, комнаты, банкет', w2: 'Ресторан / кафе', w2s: 'Зал, столы, кухня', w3: 'Фастфуд', w3s: 'Быстрая продажа, с собой',
-    w4: 'Продуктовый магазин', w4s: 'Штрих-код, склад', w5: 'Магазин одежды', w5s: 'Размер, цвет, возврат',
+    w4: 'Продуктовый магазин', w4s: 'Штрих-код, склад', w5: 'Магазин одежды', w5s: 'Размер, цвет, возврат', w6: 'Магазин дверей', w6s: 'Установка, мастера, рассрочка',
     shop_cap: 'Касса магазина: нажмите на товар или отсканируйте штрих-код',
     price_eyebrow: 'Цены', price_title: 'Простые и понятные тарифы', price_lead: 'Число устройств не ограничено. Тариф можно сменить в любой момент — данные останутся.',
     faq_eyebrow: 'Вопросы', faq_title: 'Частые вопросы',
@@ -441,11 +582,14 @@
     q3: 'Нужен ли интернет?', a3: 'Да, программа работает через интернет — поэтому владелец видит всё и дома, и в поездке. Данные хранятся на сервере и копируются каждый день.',
     q4: 'Мои данные не увидят другие?', a4: 'Нет. Каждый бизнес хранится в отдельном файле и открывается только по своей ссылке. Сотрудники входят по PIN-коду, финансы видят только те, кому вы разрешили.',
     q5: 'Сложно ли обучить сотрудников?', a5: 'Нет. Официанту хватит 10 минут: нажал комнату, выбрал блюдо, «Отправить». Мы подключим и поможем в первые дни.',
+    q7: 'Обязательно покупать сканер штрих-кодов?', a7: 'Нет. Камера телефона или планшета работает как сканер. Если продаж много, можно подключить обычный USB-сканер — он тоже работает. Товарам без штрих-кода программа сама присвоит код.',
+    q8: 'А если гость через QR закажет не то?', a8: 'Заказ не уходит сразу на кухню: сначала его видит и подтверждает официант или кассир. Если отклонить, гость увидит причину на телефоне. По желанию QR работает только для просмотра меню.',
+    q9: 'Как приходят напоминания в Telegram?', a9: 'В настройках, в разделе «Telegram», бот подключается одним нажатием. После этого каждый день в 08:00 приходит список дел на сегодня, а за 1 час до дела со временем — напоминание.',
     q6: 'Что будет, если оплата просрочена?', a6: 'Несколько дней программа работает с предупреждением, затем переходит в режим просмотра. Ничего не удаляется — после оплаты работа продолжается с того же места.',
     final_title: '14 дней бесплатно', final_p: 'Мы подключим ваш бизнес и поможем внести меню. Не понравится — ничего не платите.',
     ap_title: 'Оставьте заявку', ap_sub: 'Займёт 1 минуту. Мы сами позвоним.', ap_name: 'Ваше имя', ap_phone: 'Телефон', ap_business: 'Название бизнеса',
     ap_type: 'Тип бизнеса', ap_choose: 'Выберите', ap_t_choyxona: 'Чайхана', ap_t_restoran: 'Ресторан / кафе', ap_t_fastfood: 'Фастфуд', ap_t_market: 'Магазин',
-    ap_t_clothing: 'Магазин одежды', ap_t_other: 'Другое', ap_staff: 'Количество сотрудников', ap_city: 'Город / район', ap_time: 'Удобное время для звонка',
+    ap_t_clothing: 'Магазин одежды', ap_t_doors: 'Магазин дверей', ap_t_other: 'Другое', ap_staff: 'Количество сотрудников', ap_city: 'Город / район', ap_time: 'Удобное время для звонка',
     ap_any: 'В любое время', ap_plan: 'Тариф', ap_plan_unsure: 'Пока не знаю', ap_note: 'Комментарий (необязательно)', ap_send: 'Отправить заявку',
     ap_fine: 'Ваши данные используются только для связи с вами.',
     // dynamic
@@ -468,8 +612,8 @@
     ap_done_t: 'Rahmat! Arizangiz qabul qilindi', ap_done_p: "24 soat ichida siz bilan bog'lanamiz.", ap_more: 'Yana ariza yuborish', or_write: "Yoki to'g'ridan-to'g'ri yozing:",
   };
   var ALL_MODS = ['Stop-list', 'Hisobotlar va boshqaruv paneli', 'Cheklar tarixi', 'QR-menyu (mijoz telefonida)', 'Kirim-chiqim va kassa smenasi', 'Ish haqi', 'Bronlar', 'Amallar tarixi',
-    'Excelga yuklab olish', 'QR orqali buyurtma va chaqiruv', 'Mijozlar va keshbek', 'Qarz daftari (nasiya)', 'Masalliq ombori va tex-karta', 'Filiallar hisoboti'];
-  var BIZ_MODS = ALL_MODS.slice(0, 10);
+    'Excelga yuklab olish', 'QR orqali buyurtma va chaqiruv', 'Qarz daftari (nasiya)', 'Mijozlar va keshbek', 'Masalliq ombori va tex-karta', 'Filiallar hisoboti'];
+  var BIZ_MODS = ALL_MODS.slice(0, 11);
   var FALLBACK = { plans: [
     { key: 'start', name: 'Start', price: 199000, max_staff: 5, modules: ['Stop-list', 'Hisobotlar va boshqaruv paneli', 'Cheklar tarixi', 'QR-menyu (mijoz telefonida)'] },
     { key: 'biznes', name: 'Biznes', price: 349000, max_staff: 15, modules: BIZ_MODS },

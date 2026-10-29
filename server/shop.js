@@ -186,7 +186,9 @@ function createShop(db, { audit, events, now, tasks, moduleOn, settings }) {
   function writeOff({ user, params, body }) {
     const d = q('SELECT * FROM dishes WHERE id = ? AND active = 1').get(params.id);
     if (!d) throw new HttpError(404, 'Mol topilmadi');
-    const qty = int(body.qty, 'Soni', { min: 1, max: Math.max(1, d.stock ?? 1_000_000), required: true });
+    const qty = int(body.qty, 'Soni', { min: 1, max: 1_000_000, required: true });
+    // Only what is on the shelf can be written off.
+    if (d.stock !== null && qty > d.stock) throw new HttpError(400, `Omborda faqat ${Math.max(0, d.stock)} ta bor`);
     const reason = str(body.reason, 'Sabab', { required: true, max: 200 });
     tx(() => {
       if (d.stock !== null) q('UPDATE dishes SET stock = stock - ?, available = CASE WHEN stock - ? > 0 THEN available ELSE 0 END WHERE id = ?').run(qty, qty, d.id);

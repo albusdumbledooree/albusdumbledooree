@@ -40,7 +40,7 @@ CREATE INDEX IF NOT EXISTS leads_created ON leads(created_at);
 
 const STATUSES = { new: 'Yangi', called: "Qo'ng'iroq qilindi", connected: 'Ulandi', rejected: 'Rad etildi' };
 const STATUS_ICONS = { new: '🆕', called: '📞', connected: '✅', rejected: '✖️' };
-const TYPES = { choyxona: 'Choyxona', restoran: 'Restoran / kafe', fastfood: 'Fast food', market: "Do'kon", clothing: "Kiyim do'koni", other: 'Boshqa' };
+const TYPES = { choyxona: 'Choyxona', restoran: 'Restoran / kafe', fastfood: 'Fast food', market: "Do'kon", clothing: "Kiyim do'koni", doors: "Eshik do'koni", other: 'Boshqa' };
 const PLANS = { start: 'Start', biznes: 'Biznes', pro: 'Pro' };
 const HOUR = 3600 * 1000;
 const PER_IP_HOUR = 5;

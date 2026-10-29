@@ -133,7 +133,7 @@
       ${canOrder() ? `<div class="bar"><div class="wrap">
         <button class="btn small" id="call">🙋<span>${t('Chaqirish')}</span></button>
         <button class="btn small" id="bill">🧾<span>${t('Hisob')}</span></button>
-        <button class="btn primary cart" id="cart" ${count ? '' : 'disabled'}><span>🛒 ${t('Savat')} <span class="n">${count}</span></span><span>${money(cartSum())}</span></button>
+        <button class="btn primary cart" id="cart" ${count ? '' : 'disabled'}><span title="${t('Savat')}">🛒 <span class="n">${count}</span></span><span>${money(cartSum())}</span></button>
       </div></div>` : ''}`;
     bind();
   }
