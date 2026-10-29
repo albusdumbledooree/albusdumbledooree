@@ -160,6 +160,12 @@ async function api(method, path, body, token = App.token) {
   if (!res.ok) {
     const err = new Error(tServer((data && data.error) || `${t('Xatolik')} (${res.status})`));
     err.status = res.status;
+    err.code = data && data.code;
+    // Not at work yet / not inside: the "Ishga keldim" screen takes over, no error popups.
+    if (res.status === 403 && ['clock', 'geo'].includes(err.code) && token && token === App.token && typeof Work === 'object' && !/^\/api\/work\//.test(path)) {
+      err.silent = true;
+      Work.blocked(err.code);
+    }
     throw err;
   }
   return data;
@@ -212,7 +218,7 @@ const Live = {
       }
     };
     for (const type of ['rooms', 'kitchen', 'menu', 'finance', 'settings', 'kitchen_new', 'kitchen_cancel', 'item_ready',
-      'item_accepted', 'bill_requested', 'stoplist', 'payroll', 'guest', 'guest_request', 'tasks', 'jobs']) {
+      'item_accepted', 'bill_requested', 'stoplist', 'payroll', 'guest', 'guest_request', 'tasks', 'jobs', 'work', 'work_ask']) {
       this.es.addEventListener(type, (e) => {
         let data = {};
         try { data = JSON.parse(e.data); } catch { /* ignore */ }

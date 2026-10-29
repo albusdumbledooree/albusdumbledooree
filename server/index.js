@@ -174,7 +174,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
         const pic = (id) => (id ? `/media/${ctx.row.code}/${id}` : null);
         return reply({ code: ctx.row.code, name: s.name, demo: s.demo === '1', blocked: ctx.row.status !== 'active',
           business_type: ctx.api.businessType(), logo: pic(s.logo), lock_bg: { ...s.lock_bg, url: pic(s.lock_bg.image) },
-          support: platform.supportFor(ctx.row), paid_until: ctx.row.paid_until, version: VERSION, release: RELEASE });
+          support: platform.supportFor(ctx.row), paid_until: ctx.row.paid_until, version: VERSION, release: RELEASE, att_qr: !!s.att_qr });
       }
 
       // Every other request belongs to one choyxona: found by the code at login, by the token afterwards.
@@ -212,10 +212,11 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
         if (!user) throw new HttpError(401, api.wasKicked(token) ? 'Bu hisob boshqa qurilmada ochildi. Qayta kiring' : 'Tizimga kiring');
         if (!route.roles.includes(user.role)) throw new HttpError(403, "Sizda bu amal uchun huquq yo'q");
         api.guard(route, user, req.headers['x-finance']);
+        api.workGate(route, user);
       }
       reply(await route.handler({ user, device, params, body, query, token, ip }));
     } catch (err) {
-      if (err instanceof HttpError) return send(res, err.status, { error: err.message });
+      if (err instanceof HttpError) return send(res, err.status, err.code ? { error: err.message, code: err.code } : { error: err.message });
       console.error(err);
       send(res, 500, { error: 'Serverda xatolik' });
     }

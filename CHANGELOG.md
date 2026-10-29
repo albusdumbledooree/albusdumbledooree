@@ -2,6 +2,27 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.14.0 — Joylashuv: avtomatik davomat, GPS, selfi va QR-menyu himoyasi
+Hammasi ixtiyoriy: Sozlamalar → **Joylashuv** bo'limida ega o'zi yoqadi (standart holatda o'chiq).
+- **Ish joyi joylashuvi**: ega ish joyi ichida turib "Hozirgi joyni saqlash" ni bosadi, radius tanlanadi (50 m – 1 km).
+- **Xodimlar faqat ish joyida**: kassir, ofitsant va oshpaz o'z telefonida dasturni faqat radius ichida ochadi;
+  joylashuv har ~5 daqiqada fonda tekshiriladi. Kassa kompyuteri, oshxona planshetiga va egaga ta'sir qilmaydi.
+- **Ish vaqti (avtomatik davomat)**: telefonda "Ishga keldim" ekrani — bosmaguncha dastur ochilmaydi. Tasdiqlash usullari:
+  - **GPS** — ish joyi radiusida bo'lish;
+  - **kassa ekranidagi QR kod** — har 30 soniyada o'zgaradi, rasmga olib uyga olib ketib bo'lmaydi
+    (kassada va qurilmaning qulf ekranida "Davomat QR" tugmasi);
+  - **selfi** — old kamera bilan; ega rasmni Davomat sahifasida ko'radi.
+  - Telefon tasdiqlay olmasa (bino ichida GPS yo'q) — "Kassir tasdiqlasin": kassir/egada tasdiqlash oynasi chiqadi.
+  - "Ishni tugatdim" tugmasi; kassa smenasi yopilganda hammaning ish vaqti o'zi tugaydi; unutilgan kun oxirgi faollik vaqtida yopiladi.
+  - Kassa yoki oshxona qurilmasida PIN bilan kirish — o'zi "keldi" bo'ladi.
+- **Davomat sahifasida "Ish vaqti"**: kim soat nechida keldi va ketdi, necha soat ishladi, qanday tasdiqlandi (GPS 37 m · QR · selfi),
+  kechikish (ish boshlanish vaqti sozlanadi), selfi rasmi, ochiq ish vaqtini yopish.
+- **QR-menyu himoyasi**:
+  - mehmon buyurtma, chaqiruv va hisobni faqat ish joyi ichida (GPS) yubora oladi — havola tarqalib ketsa ham uydan ishlamaydi;
+  - "faqat band xonaga buyurtma" — ofitsant xonani ochmaguncha buyurtma o'tmaydi ("Ofitsantni chaqirish" doim ishlaydi);
+  - "Barcha QR kodlarni yangilash" — eski kodlar va havolalar darhol ishlamay qoladi.
+- Selfi rasmlari faqat ega va adminga ko'rinadi (ochiq havola orqali emas).
+
 ## 1.13.2 — Yangilash testi tuzatildi
 - Server yarim tundan keyin (00:00–05:00) yangilansa, 2 ta test xato chiqib, yangilanish eski versiyaga qaytarilardi.
   Sabab dasturda emas, testda edi: test "ertangi kun"ni Toshkent vaqti o'rniga Grinvich vaqtida hisoblardi. Endi istalgan soatda o'tadi.

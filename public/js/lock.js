@@ -137,6 +137,7 @@ Views.lock = {
       <div class="lock-top">${names ? `<button class="btn lock-back" id="lock-back">${icon('arrow-left', 18)} ${t('Orqaga')}</button>` : ''}
         <span class="grow"></span>
         ${langSelect()}
+        ${App.info && App.info.att_qr ? `<button class="btn lock-back" id="lock-wqr">${icon('qr-code', 18)} ${t('Davomat QR')}</button>` : ''}
         ${Screen.button('lock-full')}
         <button class="icon-btn" id="lock-menu" title="${esc(t('Qurilma'))}">${icon('settings')}</button></div>
       <div class="lock-head">${venueLogo('lock-logo')}${name ? `<div class="lock-venue">${esc(name)}</div>` : ''}
@@ -155,6 +156,8 @@ Views.lock = {
     Screen.keepAwake();
     App.biz = (App.info && App.info.business_type) || App.biz;
     root.querySelector('#lock-full').onclick = () => Screen.toggleFull();
+    const wqr = root.querySelector('#lock-wqr');
+    if (wqr) wqr.onclick = () => Work.showQr(App.device.token);
     const iosX = root.querySelector('#ios-hint-x');
     if (iosX) iosX.onclick = () => { store('cp_ios_hint', 1); iosX.closest('.ios-hint').remove(); };
     const allow = root.querySelector('#allow-backup');

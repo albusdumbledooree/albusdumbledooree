@@ -521,11 +521,47 @@ async function payHistory(r) {
   });
 }
 
+// ---------- Work hours: came / left, how it was proven, the selfie ----------
+const HOW_NAMES = () => ({ gps: 'GPS', qr: 'QR', selfie: t('Selfi'), device: t('Qurilma'), kassir: t('Kassir tasdiqladi') });
+function hoursText(min) { const h = Math.floor(min / 60); const m = min % 60; return h ? t('{0} soat {1} daq', h, m) : t('{0} daq', m); }
+function workLogHtml(w) {
+  const outName = { self: '', device: '', smena: t('smena yopildi'), auto: t('avtomatik'), manager: t('boshliq yopdi') };
+  const row = (e) => `<div class="wl-row ${e.status}">
+      ${e.photo ? `<button class="wl-photo" data-wphoto="${e.id}" title="${esc(t('Selfi'))}">${icon('camera', 18)}</button>` : `<span class="avatar ${e.role}">${esc(initials(e.name))}</span>`}
+      <div class="grow"><b>${esc(e.name)}</b> <span class="small muted">${roleName(e.role)}</span>
+        <div class="small">${e.in_how.split('+').filter(Boolean).map((h) => `<span class="chip">${esc(HOW_NAMES()[h] || h)}${h === 'gps' && e.in_dist != null ? ` ${e.in_dist} m` : ''}</span>`).join(' ')}
+          ${e.status === 'pending' ? `<span class="chip orange">${t('tasdiq kutilmoqda')}</span>` : ''}${e.status === 'rejected' ? `<span class="chip red">${t('rad etildi')}</span>` : ''}
+          ${e.reason ? `<span class="muted">${esc(e.reason)}</span>` : ''}</div></div>
+      <div class="wl-time"><b>${fmtTime(e.in_at)}</b> → ${e.out_at ? `<b>${fmtTime(e.out_at)}</b>${outName[e.out_how] ? ` <span class="small muted">${outName[e.out_how]}</span>` : ''}`
+        : e.status === 'ok' ? `<span class="chip green">${t('ishda')}</span>` : '—'}
+        <div class="small muted">${e.minutes ? hoursText(e.minutes) : ''}${e.late ? ` <span class="chip red">${t('{0} daq kechikdi', e.late)}</span>` : ''}</div></div>
+      ${!e.out_at && e.status === 'ok' ? `<button class="icon-btn" data-wclose="${e.id}" title="${esc(t('Ish vaqtini yopish'))}">${icon('log-out', 18)}</button>` : ''}
+    </div>`;
+  return `<div class="card wl-card"><div class="card-head"><h2>${icon('clock')} ${t('Ish vaqti')}</h2>${w.work_from ? `<span class="small muted">${t('Ish boshlanishi')}: ${esc(w.work_from)}</span>` : ''}</div>
+    ${w.entries.length ? w.entries.map(row).join('') : `<p class="muted" style="margin:0">${t('Hali hech kim "Ishga keldim" ni bosmagan')}</p>`}</div>`;
+}
+function bindWorkLog(root) {
+  root.querySelectorAll('[data-wphoto]').forEach((b) => b.onclick = async () => {
+    try {
+      const p = await GET(`/api/work/${b.dataset.wphoto}/photo`);
+      openModal({ title: `${icon('camera')} ${t('Selfi')}`, body: `<img src="${p.data}" alt="" style="width:100%;border-radius:12px">` });
+    } catch (e) { toastError(e); }
+  });
+  root.querySelectorAll('[data-wclose]').forEach((b) => b.onclick = async () => {
+    if (!(await confirmModal(t('Ish vaqtini yopish'), t('Xodimning ish vaqti hozir tugagan deb belgilansinmi?'), t('Yopish')))) return;
+    try { await POST(`/api/work/${b.dataset.wclose}/close`); refreshView(); } catch (e) { toastError(e); }
+  });
+}
+
 // ---------- Attendance: who came today; daily workers are paid in the evening ----------
 UI.attDay = UI.attDay || localDay();
 Views.attendance = {
-  title: () => t('Davomat'), icon: () => 'calendar', roles: ['owner', 'admin'], refreshOn: ['payroll', 'finance'], module: 'payroll',
-  async load() { return GET(`/api/attendance?day=${UI.attDay}`); },
+  title: () => t('Davomat'), icon: () => 'calendar', roles: ['owner', 'admin'], refreshOn: ['payroll', 'finance', 'work'], module: 'payroll',
+  async load() {
+    const [d, wl] = await Promise.all([GET(`/api/attendance?day=${UI.attDay}`), GET(`/api/work/log?day=${UI.attDay}`).catch(() => null)]);
+    d.work = wl;
+    return d;
+  },
   render(d) {
     const A = ATT();
     const c = d.counts;
@@ -551,10 +587,12 @@ Views.attendance = {
         <span class="chip green">${A.present[0]}: ${c.present}</span><span class="chip red">${A.absent[0]}: ${c.absent}</span>
         <span class="chip">${A.dayoff[0]}: ${c.dayoff}</span><span class="chip">${A.sick[0]}: ${c.sick}</span>
         ${c.unmarked ? `<span class="chip orange">${t('Belgilanmagan')}: ${c.unmarked}</span>` : ''}</div>
+      ${d.work && (d.work.clock || d.work.entries.length) ? workLogHtml(d.work) : ''}
       ${d.staff.length ? `<div class="card att-list">${d.staff.map(row).join('')}</div>` : emptyState('users', t("Xodimlar yo'q"))}
       <p class="small muted" style="margin-top:12px">${icon('info', 14)} ${t("Dasturga kirgan xodim o'zi \"Keldi\" bo'ladi. Kunlik maoshli xodim kechqurun \"To'lash\" bilan pulini oladi: ishlagan kuni − shu kungi xarajatlari (ovqat, ichimlik).")}</p>`;
   },
   bind(root, d) {
+    bindWorkLog(root);
     root.querySelectorAll('[data-day]').forEach((b) => b.onclick = () => {
       const x = new Date(`${UI.attDay}T12:00`); x.setDate(x.getDate() + Number(b.dataset.day));
       UI.attDay = [localDay(x.getTime()), d.today].sort()[0]; refreshView();
@@ -1172,13 +1210,15 @@ const AUDIT_NAMES = () => ({
   session_kicked: t('Boshqa qurilmadan kirdi (avvalgisi chiqarildi)'), device_add: t('Qurilma uladi'), device_remove: t('Qurilmani uzdi'), pay_payment: t("Ish haqi to'ladi"), pay_bonus: t('Bonus yozdi'), pay_fine: t('Jarima yozdi'),
   customer_create: t("Mijoz qo'shdi"), customer_update: t('Mijozni tahrirladi'), debt_pay: t("Qarz to'lovini oldi"), ingredient_save: t('Masalliqni saqladi'), ingredient_delete: t("Masalliqni o'chirdi"),
   stock_in: t('Omborga kirim qildi'), stock_receive: t('Omborga kirim qildi'), stock_count: t('Ombor sanog\'i'), stock_writeoff: t('Hisobdan chiqardi'), recipe_set: t('Tex-kartani saqladi'), staff_meal: t('Xodim hisobiga yopdi'),
-  guest_approve: t('QR buyurtmani tasdiqladi'), guest_reject: t('QR buyurtmani rad etdi'), qr_renew: t('QR kodni yangiladi'),
+  guest_approve: t('QR buyurtmani tasdiqladi'), guest_reject: t('QR buyurtmani rad etdi'), qr_renew: t('QR kodni yangiladi'), work_in: t('Ishga keldi'), work_out: t('Ishni tugatdi'), work_ask: t('Ishga keldi (kassir tasdig\'i so\'raldi)'), work_confirm: t('Ishga kelganini tasdiqladi'),
+  work_reject: t('Ishga kelganini rad etdi'), work_close: t('Ish vaqtini yopdi'), geo_outside: t('Ish joyidan tashqarida'),
 });
 const SETTINGS_TABS = () => [
   ['general', 'store', t('Muassasa'), ['owner', 'admin']],
   ['look', 'palette', t("Ko'rinish"), ['owner', 'admin']],
   ...(isShop() ? [] : [['rooms', 'door-open', App.biz === 'fastfood' ? t('Stollar') : t('Xonalar'), ['owner', 'admin']]]),
   ...(isShop() ? [] : [['qr', 'qr-code', t('QR-menyu'), ['owner', 'admin'], 'qrmenu']]),
+  ['place', 'map-pin', t('Joylashuv'), ['owner', 'admin']],
   ['rights', 'shield-check', t('Ruxsatlar'), ['owner', 'admin']],
   ['devices', 'monitor-smartphone', t('Qurilmalar'), ['owner', 'admin']],
   ['audit', 'history', t('Amallar tarixi'), ['owner', 'admin'], 'audit'],
@@ -1361,6 +1401,71 @@ Views.settings = {
 
   tab_telegram({ tg }) { return tg.html; },
   bind_telegram(root) { bindTelegramSettings(root); },
+
+  // The business on the map: staff only inside, "I came" with proof, guests order only inside. Everything off by default.
+  tab_place() {
+    const s = App.settings;
+    const has = s.geo_lat != null;
+    const chk = (k, text, hint = '') => `<label class="check wk-opt"><input type="checkbox" name="${k}" ${s[k] ? 'checked' : ''}><span>${text}${hint ? `<span class="small muted">${hint}</span>` : ''}</span></label>`;
+    return `<form id="place-form" class="stack">
+      <div class="card"><h3 style="margin:0 0 6px">${icon('map-pin', 18)} ${t('Ish joyi joylashuvi')}</h3>
+        <p class="small muted" style="margin-top:0">${t("Ish joyining ichida turib (telefon yoki planshetdan) \"Hozirgi joyni saqlash\" ni bosing. Shu nuqtadan radius ichida — \"ish joyi\" hisoblanadi.")}</p>
+        <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">
+          ${has ? `<span class="chip green">${icon('check', 14)} ${t('Saqlangan')}</span>
+            <a class="btn sm" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${s.geo_lat},${s.geo_lng}">${icon('external-link', 16)} ${t("Xaritada ko'rish")}</a>`
+            : `<span class="chip orange">${t('Hali saqlanmagan')}</span>`}
+          <button type="button" class="btn primary" id="geo-save">${icon('map-pin', 18)} ${t('Hozirgi joyni saqlash')}</button>
+          <label class="field" style="margin:0">${t('Radius')}<select name="geo_radius">${[50, 100, 150, 200, 300, 500, 1000].map((r) => `<option value="${r}" ${Number(s.geo_radius) === r ? 'selected' : ''}>${r} m</option>`).join('')}</select></label>
+        </div>
+        <p class="small muted">${icon('info', 14)} ${t("Bino ichida GPS 10–50 m adashishi mumkin, shuning uchun 100–150 m tavsiya qilinadi.")}</p></div>
+
+      <div class="card"><h3 style="margin:0 0 6px">${icon('smartphone', 18)} ${t('Xodimlar telefoni')}</h3>
+        ${chk('geo_staff', t("Xodimlar o'z telefonida dasturni faqat ish joyida ochadi"), t("Kassir, ofitsant va oshpaz uchun. Joylashuv har bir necha daqiqada tekshiriladi. Kassa kompyuteri, oshxona planshetiga va boshliqqa ta'sir qilmaydi."))}</div>
+
+      ${moduleOn('payroll') ? `<div class="card"><h3 style="margin:0 0 6px">${icon('clock', 18)} ${t('Ish vaqti (avtomatik davomat)')}</h3>
+        ${chk('att_clock', t('Xodim "Ishga keldim" va "Ishni tugatdim" ni bosadi — kelgan va ketgan soati yoziladi'), t("Bosmaguncha dastur ochilmaydi. Kassa yoki oshxona qurilmasida PIN bilan kirish — o'zi \"keldi\" bo'ladi. Kassa smenasi yopilganda hammaning ish vaqti tugaydi."))}
+        <div class="wk-subs" id="att-subs">
+          ${chk('att_gps', t('GPS bilan tekshirish'), t('Telefon ish joyi radiusida bo\'lishi kerak'))}
+          ${chk('att_qr', t('Kassa ekranidagi QR kodni skanerlash'), t("Kod har 30 soniyada o'zgaradi — rasmga olib uyga olib ketib bo'lmaydi. GPS'ni aldashga qarshi eng kuchli himoya. Kassada \"Davomat QR\" tugmasi chiqadi."))}
+          ${chk('att_selfie', t('Selfi (o\'zini rasmga olish)'), t("Boshqa xodim uning o'rniga belgilab keta olmaydi. Rasmlarni Davomat sahifasida ko'rasiz."))}
+          <label class="field" style="max-width:220px">${t('Ish boshlanish vaqti (kechikish uchun)')}<input type="time" name="work_from" value="${esc(s.work_from || '')}"></label>
+        </div>
+        <p class="small muted">${icon('hand', 14)} ${t("Telefon tasdiqlay olmasa (bino ichida GPS yo'q), xodim \"Kassir tasdiqlasin\" ni bosadi — kassir ekranida tasdiqlash chiqadi.")}</p></div>` : ''}
+
+      ${moduleOn('qrorder') ? `<div class="card"><h3 style="margin:0 0 6px">${icon('qr-code', 18)} ${t('QR-menyu himoyasi')}</h3>
+        ${chk('qr_geo', t('Mehmon buyurtmani faqat ish joyi ichida bera oladi (GPS)'), t("QR havolasi tarqalib ketsa ham, uydan buyurtma yoki chaqiruv yuborib bo'lmaydi. Menyuni ko'rish hammaga ochiq qoladi."))}
+        ${chk('qr_busy', t('Faqat ofitsant ochgan (band) xonaga buyurtma'), t("Mehmon o'tirmagan xonaga buyurtma o'tmaydi. \"Ofitsantni chaqirish\" doim ishlaydi."))}
+        ${can('owner') ? `<button type="button" class="btn" id="qr-renew-all" style="margin-top:6px">${icon('refresh-cw', 18)} ${t('Barcha QR kodlarni yangilash')}</button>
+        <p class="small muted">${t("Eski QR kodlar va havolalar darhol ishlamay qoladi — yangilarini chop etib qo'yasiz.")}</p>` : ''}</div>` : ''}
+
+      <div><button class="btn primary">${icon('check', 18)} ${t('Saqlash')}</button></div></form>`;
+  },
+  bind_place(root) {
+    const f = root.querySelector('#place-form');
+    const subs = f.querySelector('#att-subs');
+    const sync = () => { if (subs) subs.classList.toggle('off', !f.att_clock.checked); };
+    if (f.att_clock) { f.att_clock.onchange = sync; sync(); }
+    f.querySelector('#geo-save').onclick = async (e) => {
+      const b = e.currentTarget; b.disabled = true;
+      try {
+        const p = await Geo.get();
+        if (p.acc > 150 && !(await confirmModal(t('Joylashuv aniq emas'), t("Telefon joylashuvni {0} m aniqlikda berdi. Baribir saqlaymizmi? (Deraza yoniga yoki hovliga chiqib qayta urinish mumkin)", p.acc), t('Saqlash'), 'primary'))) return;
+        App.settings = await PUT('/api/settings', { geo_lat: p.lat, geo_lng: p.lng });
+        toast(t('Joylashuv saqlandi (aniqlik {0} m)', p.acc), 'ok');
+        refreshView();
+      } catch (err) { toastError(err); } finally { b.disabled = false; }
+    };
+    const renew = f.querySelector('#qr-renew-all');
+    if (renew) renew.onclick = async () => {
+      if (!(await confirmModal(t('Barcha QR kodlarni yangilash'), t("Hamma xonalar uchun yangi QR kod yaratiladi. Eski (chop etilgan) kodlar va tarqalgan havolalar darhol ishlamay qoladi. Davom etamizmi?"), t('Yangilash')))) return;
+      try { await POST('/api/qr/renew'); toast(t('Yangilandi — Sozlamalar → QR-menyu dan chop eting'), 'ok'); } catch (err) { toastError(err); }
+    };
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      const d = formData(f);
+      try { App.settings = await PUT('/api/settings', d); toast(t('Saqlandi'), 'ok'); refreshView(); } catch (err) { toastError(err); }
+    };
+  },
 
   tab_qr({ qr }) {
     const s = App.settings;

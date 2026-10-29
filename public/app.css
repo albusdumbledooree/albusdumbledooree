@@ -842,3 +842,47 @@ details.upcoming summary { cursor: pointer; font-weight: 650; color: var(--muted
 .cam-btn { flex: none; }
 .input-btn { display: flex; gap: 6px; align-items: center; }
 .input-btn input { flex: 1; min-width: 0; }
+
+/* ---------- Work hours: "Ishga keldim" screen, selfie, attendance QR, work log ---------- */
+.wk-wrap { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 520px); justify-content: center; align-content: center; padding: 16px; background: var(--bg); }
+.wk-card { width: 100%; min-width: 0; padding: 22px; }
+.wk-card .btn { white-space: normal; }
+.wk-step .grow, .wk-head > div { min-width: 0; }
+.wk-step .btn { flex: none; }
+.wk-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.wk-head h1 { margin: 0; font-size: 22px; }
+.wk-logo { width: 46px; height: 46px; border-radius: 12px; object-fit: cover; }
+.wk-clock { font-size: 26px; font-variant-numeric: tabular-nums; }
+.wk-title { display: flex; align-items: center; gap: 10px; margin: 6px 0 10px; font-size: 22px; }
+.wk-steps { display: grid; gap: 10px; margin: 12px 0 16px; }
+.wk-step { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); }
+.wk-step.done { border-color: var(--green); background: var(--green-soft); }
+.wk-step .wk-ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--panel); color: var(--primary); flex: none; }
+.wk-step.done .wk-ic { color: var(--green); }
+.wk-thumb { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; margin-top: 4px; }
+.wk-wait { text-align: center; display: grid; gap: 10px; justify-items: center; padding: 10px 0; }
+.wk-wait h2 { margin: 4px 0 0; } .wk-wait p { margin: 0; }
+.wk-wait > svg { color: var(--orange); }
+.wk-foot { display: flex; justify-content: flex-end; margin-top: 16px; }
+.wk-cam { position: relative; border-radius: 16px; overflow: hidden; background: #000; aspect-ratio: 1; }
+.wk-cam video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.wk-oval { position: absolute; inset: 12% 20%; border: 3px dashed rgba(255,255,255,.8); border-radius: 50%; pointer-events: none; }
+.wk-qr { width: min(420px, 80vw); margin: 0 auto; }
+.wk-qr svg { width: 100%; height: auto; display: block; }
+.wk-opt { align-items: flex-start; padding: 8px 0; }
+.wk-opt input { margin-top: 3px; flex: none; }
+.wk-opt > span { display: grid; gap: 2px; }
+.wk-opt .small { font-weight: 500; }
+.wk-subs { padding-left: 28px; border-left: 3px solid var(--line); margin: 4px 0 8px 8px; }
+.wk-subs.off { opacity: .45; }
+.btn.wk-out { color: var(--orange); border-color: var(--orange); }
+.work-banner { background: #7c3aed; }
+.wl-card .wl-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.wl-card .wl-row:first-of-type { border-top: 0; }
+.wl-row.rejected { opacity: .55; }
+.wl-row .chip { margin: 3px 4px 0 0; }
+.wl-photo { width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--primary); background: var(--primary-soft); color: var(--primary); display: grid; place-items: center; cursor: pointer; flex: none; }
+.wl-time { text-align: right; white-space: nowrap; }
+@media (max-width: 420px) { .wk-card { padding: 16px; } .wk-step { flex-wrap: wrap; } .wk-step .btn { margin-left: 52px; } }
+@media (max-width: 620px) { .wl-card .wl-row { flex-wrap: wrap; } .wl-time { text-align: left; width: 100%; padding-left: 52px; } }
+@media (max-width: 620px) { .btn.wk-out span { display: none; } }

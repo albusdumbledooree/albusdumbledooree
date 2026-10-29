@@ -22,6 +22,11 @@
       "QR orqali buyurtma {0}–{1} oralig'ida qabul qilinadi.": 'Заказы через QR принимаются с {0} до {1}.',
       "Aloqa yo'q. Internetni tekshiring": 'Нет связи. Проверьте интернет', 'Savat bo\'sh': 'Корзина пуста',
       'Bu taom tugadi': 'Это блюдо закончилось', "porsiya": 'порция', 'dona': 'шт', 'Yangilash': 'Обновить',
+      'Joylashuv aniqlanmoqda…': 'Определяем местоположение…',
+      "Joylashuvga ruxsat bering — buyurtma faqat shu yerning ichida qabul qilinadi": 'Разрешите доступ к местоположению — заказ принимается только внутри заведения',
+      "Joylashuv aniqlanmadi. GPS'ni yoqing yoki ofitsantni chaqiring": 'Не удалось определить местоположение. Включите GPS или позовите официанта',
+      'Avval ofitsant stolni ochishi kerak. "Ofitsantni chaqirish" ni bosing': 'Сначала официант должен открыть стол. Нажмите «Позвать официанта»',
+      'Avval ofitsant stolni ochadi — "Chaqirish" ni bosing.': 'Сначала официант откроет стол — нажмите «Позвать».',
     },
   };
   const LANGS = ['uz', 'ru'];
@@ -52,7 +57,10 @@
       r = await fetch(`/api/guest/${KEY}${path}`, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
     } catch { throw new Error(t("Aloqa yo'q. Internetni tekshiring")); }
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) { const e = new Error(j.error || r.status); e.status = r.status; throw e; }
+    if (!r.ok) {
+      const msg = /^Buyurtma faqat .* ichida qabul qilinadi$/.test(j.error || '') && lang === 'ru' ? 'Заказ принимается только внутри заведения' : t(j.error || String(r.status));
+      const e = new Error(msg); e.status = r.status; throw e;
+    }
     return j;
   }
 
@@ -179,7 +187,8 @@
         <span class="total">${t('Taxminan')}</span><span class="total">${money(sub + svc)}</span></div>
       <textarea id="gnote" rows="2" maxlength="300" placeholder="${esc(t('Buyurtmaga izoh'))}"></textarea>
       <p class="hint">ℹ️ ${t('Buyurtma ofitsant tasdiqlagandan keyin oshxonaga boradi.')}</p>
-      <button class="btn primary" id="send">✅ ${t('Ofitsantga yuborish')}</button>`);
+      ${D.order.busy_only && !D.order.busy ? `<div class="notice">${t('Avval ofitsant stolni ochadi — "Chaqirish" ni bosing.')}</div>` : ''}
+      <button class="btn primary" id="send" ${D.order.busy_only && !D.order.busy ? 'disabled' : ''}>✅ ${t('Ofitsantga yuborish')}</button>`);
     const again = () => { el.remove(); render(); if (cartLines().length) cartSheet(); };
     el.querySelectorAll('[data-p]').forEach((b) => b.onclick = () => { setQty(b.dataset.p, cart[b.dataset.p].qty + 1); again(); });
     el.querySelectorAll('[data-m]').forEach((b) => b.onclick = () => { setQty(b.dataset.m, cart[b.dataset.m].qty - 1); again(); });
@@ -188,7 +197,7 @@
       const btn = e.currentTarget; btn.disabled = true;
       try {
         await api('POST', '/request', { guest_id: guestId, note: el.querySelector('#gnote').value,
-          items: cartLines().map((l) => ({ dish_id: l.d.id, qty: l.qty, note: l.note || '' })) });
+          items: cartLines().map((l) => ({ dish_id: l.d.id, qty: l.qty, note: l.note || '' })), ...(await where()) });
         cart = {}; store(CART_KEY, cart);
         el.remove(); toast(t('Yuborildi! Ofitsant tasdiqlashini kuting'));
         await load(true);
@@ -197,9 +206,21 @@
     };
   }
 
+  // The place asks for the phone's position (a shared link must not work from home).
+  async function where() {
+    if (!D.order.geo) return {};
+    toast(t('Joylashuv aniqlanmoqda…'));
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject(new Error(t("Joylashuv aniqlanmadi. GPS'ni yoqing yoki ofitsantni chaqiring")));
+      navigator.geolocation.getCurrentPosition((p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy || 0) }),
+        (e) => reject(new Error(e.code === 1 ? t('Joylashuvga ruxsat bering — buyurtma faqat shu yerning ichida qabul qilinadi') : t("Joylashuv aniqlanmadi. GPS'ni yoqing yoki ofitsantni chaqiring"))),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+    });
+  }
+
   async function sendCall(kind) {
     try {
-      const r = await api('POST', '/request', { kind, guest_id: guestId });
+      const r = await api('POST', '/request', { kind, guest_id: guestId, ...(await where()) });
       toast(r.again ? t('Allaqachon chaqirilgan — ofitsant keladi') : kind === 'bill' ? t("Hisob so'raldi — ofitsant olib keladi") : t('Ofitsant chaqirildi — hozir keladi'));
       load(true);
     } catch (e) { toast(e.message); }

@@ -8,6 +8,7 @@ const { createGuest } = require('./guest');
 const { createTasks } = require('./tasks');
 const { createShop } = require('./shop');
 const { createPayroll } = require('./payroll');
+const { createWork, STAFF_ROLES } = require('./work');
 const { snapshot } = require('./backup');
 
 const ROLES = ['owner', 'admin', 'cashier', 'waiter', 'chef'];
@@ -41,6 +42,8 @@ const MODULES = {
   qrmenu: 'QR-menyu (mijoz telefonida)',
   qrorder: "QR orqali buyurtma va chaqiruv",
 };
+// On/off switches of the place features: staff only inside, "I came" with GPS / the desk's QR / a selfie, guest orders only inside.
+const GEO_FLAGS = ['geo_staff', 'att_clock', 'att_gps', 'att_qr', 'att_selfie', 'qr_geo', 'qr_busy'];
 function routeModule(pattern) {
   if (/^\/api\/(kitchen|items\/:id\/(accept|ready))$/.test(pattern)) return 'kitchen';
   if (pattern === '/api/dishes/:id/availability') return 'stoplist';
@@ -53,7 +56,7 @@ function routeModule(pattern) {
   if (/^\/api\/(ingredients|inventory)/.test(pattern) || pattern === '/api/dishes/:id/recipe') return 'inventory';
   if (pattern === '/api/branches') return 'branches';
   if (/^\/api\/guest-requests/.test(pattern)) return 'qrorder';
-  if (pattern === '/api/qr' || pattern === '/api/rooms/:id/qr') return 'qrmenu';
+  if (pattern === '/api/qr' || pattern === '/api/qr/renew' || pattern === '/api/rooms/:id/qr') return 'qrmenu';
   if (/^\/api\/checks/.test(pattern)) return 'history';
   return null;
 }
@@ -77,7 +80,11 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     tenantId: Number((/^t(\d+)_/.exec(tokenPrefix) || [])[1]) || 0, audit, events: hub, now, moduleOn: (m) => moduleOn(m), settings: () => settings(),
     readOnly: () => { const p = plan(); return !!(p && p.read_only); }, kitchenLoad: () => kitchenLoad(),
     openOrder: (a) => openOrder(a), addItems: (a) => addItems(a), orderDetails: (id) => orderDetails(id), placeName: (o, r) => placeName(o, r),
+    geo: (body) => work.where(work.posInput(body)),
   });
+
+  // Work hours, GPS and the cash desk's attendance QR code (all optional, switched on in the settings).
+  const work = createWork(db, { settings: () => settings(), audit, events: hub, now });
 
   function tx(fn) {
     db.exec('BEGIN');
@@ -97,6 +104,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     );
   }
 
+  const settingFlag = (k) => (q('SELECT value FROM settings WHERE key = ?').get(k) || {}).value === '1';
   function settings() {
     const out = {};
     for (const r of q('SELECT key, value FROM settings').all()) out[r.key] = r.value;
@@ -124,6 +132,13 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     if (!out.room_types.length) out.room_types = DEFAULT_ROOM_TYPES;
     out.expense_categories = JSON.parse(out.expense_categories || '[]');
     out.income_categories = JSON.parse(out.income_categories || '[]');
+    // The business on the map and what it is used for.
+    out.geo_lat = out.geo_lat ? Number(out.geo_lat) : null;
+    out.geo_lng = out.geo_lng ? Number(out.geo_lng) : null;
+    out.geo_radius = Number(out.geo_radius) || 150;
+    for (const k of GEO_FLAGS) out[k] = out[k] === '1';
+    out.work_from = out.work_from || '';
+    delete out.att_secret;
     return out;
   }
 
@@ -155,11 +170,14 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   // ---------- Auth ----------
   function authenticate(token) {
     if (!token) return null;
-    const row = q(`SELECT u.*, s.last_seen session_seen FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ? AND u.active = 1`).get(token);
+    const row = q(`SELECT u.*, s.last_seen session_seen, s.device_id session_device, s.geo_until session_geo, d.name session_device_name
+      FROM sessions s JOIN users u ON u.id = s.user_id LEFT JOIN devices d ON d.id = s.device_id WHERE s.token = ? AND u.active = 1`).get(token);
     if (!row) return null;
     if (!row.session_seen || now() - row.session_seen > MIN) q('UPDATE sessions SET last_seen = ? WHERE token = ?').run(now(), token);
-    delete row.session_seen;
-    payroll.markPresent(row.id);
+    Object.defineProperty(row, 'session', { value: { token, device_id: row.session_device, device_name: row.session_device_name || '', geo_until: row.session_geo }, enumerable: false });
+    delete row.session_seen; delete row.session_device; delete row.session_geo; delete row.session_device_name;
+    // With work hours switched on, a worker "came" when they press "I came", not when they open the program.
+    if (!(STAFF_ROLES.includes(row.role) && settingFlag('att_clock'))) payroll.markPresent(row.id);
     return row;
   }
 
@@ -266,7 +284,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       throw new HttpError(401, "PIN noto'g'ri");
     }
     pinFailures.delete(key);
-    return startSession(user, 'pin_login', device);
+    const res = startSession(user, 'pin_login', device);
+    work.deviceIn(user, device);
+    return res;
   }
 
   function listDevices() {
@@ -390,7 +410,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return { user: publicUser(user), settings: s, modules: MODULES, disabled: disabledModules(), kitchen_mode: kitchenMode(),
       business_type: businessType(), money: moneyAccess(user, s), platform_session: !!(session && session.via === 'platform'),
       tenant: t && { code: t.code, name: t.name, paid_until: t.paid_until }, plan: planInfo(),
-      branches: user.role === 'owner' ? branches().length : 0 };
+      branches: user.role === 'owner' ? branches().length : 0, work: user.session ? work.state(user) : null };
   }
 
   function changeOwnPassword({ user, body }) {
@@ -407,7 +427,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   function updateSettings({ user, body }) {
     const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width',
       'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo',
-      'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', 'cashback_pct', 'qr_order', 'qr_from', 'qr_to', ...OWNER_SETTINGS];
+      'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', 'cashback_pct', 'qr_order', 'qr_from', 'qr_to',
+      'geo_lat', 'geo_lng', 'geo_radius', 'work_from', ...GEO_FLAGS, ...OWNER_SETTINGS];
     if (user.role !== 'owner' && OWNER_SETTINGS.some((k) => body[k] !== undefined)) throw new HttpError(403, "Moliya huquqlarini faqat boshliq o'zgartiradi");
     const set = q('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     for (const k of allowed) {
@@ -431,8 +452,15 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
         v = Number(v);
         if (!(v >= 0 && v <= 30)) throw new HttpError(400, "Keshbek 0–30% oralig'ida bo'lsin");
       }
-      if (k === 'qr_order') v = v ? '1' : '0';
-      if (k === 'qr_from' || k === 'qr_to') {
+      if (k === 'qr_order' || GEO_FLAGS.includes(k)) v = v ? '1' : '0';
+      if (k === 'geo_lat' || k === 'geo_lng') {
+        if (v === null || v === '') { set.run(k, ''); continue; }
+        v = Number(v);
+        if (!Number.isFinite(v) || Math.abs(v) > (k === 'geo_lat' ? 90 : 180)) throw new HttpError(400, "Joylashuv noto'g'ri");
+        v = v.toFixed(6);
+      }
+      if (k === 'geo_radius') v = int(v, 'Radius', { min: 30, max: 2000 });
+      if (k === 'qr_from' || k === 'qr_to' || k === 'work_from') {
         v = String(v || '').trim();
         if (v && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(v)) throw new HttpError(400, "Vaqt 09:00 ko'rinishida bo'lsin");
       }
@@ -456,6 +484,12 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
         v = JSON.stringify(v.map((x) => str(x, 'Kategoriya', { max: 60 })).filter(Boolean));
       }
       set.run(k, String(v));
+    }
+    const after = settings();
+    const needPlace = ['geo_staff', 'att_gps', 'qr_geo'].filter((k) => after[k]);
+    if (needPlace.length && !work.place(after)) {
+      for (const k of needPlace) set.run(k, '0');
+      throw new HttpError(400, "Avval ish joyining joylashuvini saqlang (ish joyida turib \"Hozirgi joyni saqlash\" ni bosing)");
     }
     if (settings().finance_lock && !settings().has_finance_code) {
       set.run('finance_lock', '0');
@@ -1638,6 +1672,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       now(), closing, s.expected, str(body.note, 'Izoh', { max: 300 }), s.id
     );
     audit(user, 'shift_close', `#${s.id} kutilgan ${s.expected}, haqiqiy ${closing}, farq ${closing - s.expected}`);
+    work.shiftClosed();
     return q('SELECT * FROM shifts WHERE id = ?').get(s.id);
   }
 
@@ -1795,6 +1830,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['POST', '/api/rooms', MANAGERS, createRoom],
     ['PUT', '/api/rooms/:id', MANAGERS, updateRoom],
     ['GET', '/api/qr', MANAGERS, guest.listQr],
+    ['POST', '/api/qr/renew', ['owner'], guest.renewAll],
     ['POST', '/api/rooms/:id/qr', MANAGERS, guest.renewQr],
     ['GET', '/api/guest-requests', ['owner', 'admin', 'cashier', 'waiter'], guest.list],
     ['POST', '/api/guest-requests/:id/approve', ['owner', 'admin', 'cashier', 'waiter'], guest.approve],
@@ -1887,6 +1923,18 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['GET', '/api/payroll/users/:id', ['owner'], payroll.userLedger],
     ['GET', '/api/my/payroll', ALL, payroll.myPayroll],
     ['GET', '/api/attendance', MANAGERS, attendanceDay],
+    ['POST', '/api/geo/check', ALL, work.geoCheck],
+    ['GET', '/api/work/me', ALL, ({ user }) => work.state(user)],
+    ['POST', '/api/work/in', ALL, work.clockIn],
+    ['POST', '/api/work/out', ALL, work.clockOut],
+    ['GET', '/api/work/qr', ['owner', 'admin', 'cashier'], work.qrCode],
+    ['GET', '/api/device/work-qr', 'device', () => { if (!settings().att_qr) throw new HttpError(404, "Davomat QR kodi yoqilmagan"); return work.qrCode(); }],
+    ['GET', '/api/work/pending', ['owner', 'admin', 'cashier'], work.pending],
+    ['POST', '/api/work/:id/approve', ['owner', 'admin', 'cashier'], work.approve],
+    ['POST', '/api/work/:id/reject', ['owner', 'admin', 'cashier'], work.reject],
+    ['POST', '/api/work/:id/close', MANAGERS, work.closeByManager],
+    ['GET', '/api/work/log', MANAGERS, work.log],
+    ['GET', '/api/work/:id/photo', MANAGERS, work.photo],
     ['GET', '/api/customers', MONEY, pro.listCustomers],
     ['POST', '/api/customers', MONEY, pro.saveCustomer],
     ['GET', '/api/customers/:id', MONEY, pro.customerDetail],
@@ -1930,7 +1978,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return null;
   }
 
-  return { match, guard, authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, planInfo, wasKicked, summary, ROLES,
+  return { match, guard, workGate: (route, user) => work.gate(route, user), authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, planInfo, wasKicked, summary, ROLES,
     guestInfo: guest.info, guestImage: guest.image, guestRequest: guest.request, morningText, soonTexts };
 }
 

@@ -24,7 +24,7 @@ function newKey() {
 // "08:30" → minutes since midnight
 const hm = (v) => { const m = /^(\d{1,2}):(\d{2})$/.exec(v || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
 
-function createGuest(db, { tenantId, audit, events, now, moduleOn, settings, readOnly, kitchenLoad, openOrder, addItems, orderDetails, placeName }) {
+function createGuest(db, { tenantId, audit, events, now, moduleOn, settings, readOnly, kitchenLoad, openOrder, addItems, orderDetails, placeName, geo }) {
   const q = (sql) => db.prepare(sql);
   const recent = new Map(); // ip -> request times (10 minutes)
 
@@ -51,6 +51,15 @@ function createGuest(db, { tenantId, audit, events, now, moduleOn, settings, rea
     q('UPDATE rooms SET qr_token = ? WHERE id = ?').run(`${tenantId}-${newKey()}`, r.id);
     audit(user, 'qr_renew', r.name);
     return q('SELECT id, number, name, type, section, qr_token FROM rooms WHERE id = ?').get(r.id);
+  }
+
+  // A link that went round (sent in a chat, posted online): every QR code gets a new key, the old ones stop working.
+  function renewAll({ user }) {
+    const rows = q("SELECT id FROM rooms WHERE active = 1 AND type != 'soboy'").all();
+    const set = q('UPDATE rooms SET qr_token = ? WHERE id = ?');
+    for (const r of rows) set.run(`${tenantId}-${newKey()}`, r.id);
+    audit(user, 'qr_renew', `${rows.length} ta`);
+    return listQr();
   }
 
   // ---------- Is ordering open right now? ----------
@@ -120,7 +129,7 @@ function createGuest(db, { tenantId, audit, events, now, moduleOn, settings, rea
       room: { name: placeName({}, room), number: room.number, section: room.section, type: room.type },
       waiters: waiterNames, cashier: shift ? shift.name : null,
       service: { type: s.service_type, pct: Number(s.service_pct) || 0, per_guest: Number(s.service_per_guest) || 0 },
-      order: orderState(), categories: categories.filter((c) => used.has(c.id)), dishes, requests: mine, bill,
+      order: { ...orderState(), geo: !!s.qr_geo, busy_only: !!s.qr_busy, busy: !!open }, categories: categories.filter((c) => used.has(c.id)), dishes, requests: mine, bill,
     };
   }
 
@@ -150,6 +159,17 @@ function createGuest(db, { tenantId, audit, events, now, moduleOn, settings, rea
         : "Hozir QR orqali buyurtma qabul qilinmaydi. Ofitsantga ayting");
     }
     const kind = ['order', 'waiter', 'bill'].includes(body.kind) ? body.kind : 'order';
+    const s = settings();
+    // A shared link is useless away from the tables: the phone has to be inside the place.
+    if (s.qr_geo) {
+      const w = geo(body);
+      if (!w) throw new HttpError(403, "Joylashuvga ruxsat bering — buyurtma faqat shu yerning ichida qabul qilinadi", 'geo_need');
+      if (!w.ok) throw new HttpError(403, `Buyurtma faqat ${s.name || 'shu joy'} ichida qabul qilinadi`, 'geo_far');
+    }
+    // Only a table the waiter opened (guests are seated) takes orders; calling the waiter always works.
+    if (s.qr_busy && kind !== 'waiter' && !q("SELECT 1 FROM orders WHERE room_id = ? AND status = 'open'").get(room.id)) {
+      throw new HttpError(409, 'Avval ofitsant stolni ochishi kerak. "Ofitsantni chaqirish" ni bosing', 'not_busy');
+    }
     const guestId = /^[A-Za-z0-9-]{8,40}$/.test(body.guest_id || '') ? body.guest_id : '';
     const t = now();
     if (kind !== 'order') {
@@ -252,7 +272,7 @@ function createGuest(db, { tenantId, audit, events, now, moduleOn, settings, rea
     return { ok: true };
   }
 
-  return { info, image, request, listQr, renewQr, list, approve, reject, done };
+  return { info, image, request, listQr, renewQr, renewAll, list, approve, reject, done };
 }
 
 module.exports = { createGuest };

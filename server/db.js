@@ -648,7 +648,35 @@ CREATE TABLE IF NOT EXISTS jobs (
   created_by INTEGER,
   created_at INTEGER NOT NULL
 );
+-- Work hours: "I came" / "I left" of each worker, with how it was proven (GPS, the cash desk's QR code, a selfie,
+-- a shared device in the hall, or a cashier who confirmed it when the phone could not).
+CREATE TABLE IF NOT EXISTS work_photos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  mime TEXT NOT NULL,
+  data BLOB NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS work_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  day TEXT NOT NULL,
+  in_at INTEGER NOT NULL,
+  out_at INTEGER,
+  in_how TEXT NOT NULL DEFAULT '',
+  out_how TEXT NOT NULL DEFAULT '',
+  in_dist INTEGER,
+  out_dist INTEGER,
+  photo_id INTEGER REFERENCES work_photos(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'ok' CHECK (status IN ('ok','pending','rejected')),
+  reason TEXT NOT NULL DEFAULT '',
+  decided_by INTEGER,
+  decided_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_work_day ON work_log(day, user_id);
 `);
+  // Until when a worker's phone counts as being inside the business (a GPS check or a cashier's confirmation).
+  addCol('sessions', 'geo_until', 'INTEGER');
   const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
   if (!orderCols.includes('service_type')) db.exec("ALTER TABLE orders ADD COLUMN service_type TEXT NOT NULL DEFAULT 'percent'");
   if (!orderCols.includes('takeaway')) db.exec('ALTER TABLE orders ADD COLUMN takeaway INTEGER NOT NULL DEFAULT 0');

@@ -1476,3 +1476,120 @@ test("a business owner's Telegram: linked with a code, the morning list of tasks
     tg.close();
   }
 });
+
+test('work hours and the place: GPS, the desk QR, a selfie, a cashier confirms, guests order only inside', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  const t = (await call('POST', '/api/platform/tenants', admin, { name: 'Joy choyxona', code: 'joy', owner_name: 'Ega', owner_username: 'ega', owner_password: 'ega12345', plan: 'pro', sample: true })).data;
+  const boss = await login('ega', 'ega12345', 'joy');
+  const mk = async (name, username, role, pin) => (await call('POST', '/api/users', boss, { name, username, password: 'pass1234', role, pin })).data;
+  const w1 = await mk('Jasur', 'jasur', 'waiter', '1111');
+  const w2 = await mk('Bobur', 'bobur', 'waiter', '2222');
+  await mk('Kassir', 'kassa', 'cashier', '3333');
+  const HERE = { lat: 41.311081, lng: 69.240562 };
+  const NEAR = { lat: 41.3115, lng: 69.2407, acc: 15 }; // ~50 m
+  const FAR = { lat: 41.33, lng: 69.28, acc: 10 }; // ~4 km
+
+  // Switched off by default: nothing changes for anyone.
+  const jasur0 = await login('jasur', 'pass1234', 'joy');
+  assert.equal((await call('GET', '/api/rooms', jasur0)).status, 200);
+  // Place features need the place first.
+  const noPlace = await call('PUT', '/api/settings', boss, { geo_staff: true });
+  assert.equal(noPlace.status, 400);
+  assert.equal((await call('GET', '/api/me', boss)).data.settings.geo_staff, false);
+  const set = await call('PUT', '/api/settings', boss, { geo_lat: HERE.lat, geo_lng: HERE.lng, geo_radius: 150, geo_staff: true, att_clock: true, att_gps: true, att_qr: true, att_selfie: true, work_from: '09:00' });
+  assert.equal(set.status, 200, JSON.stringify(set.data));
+  assert.equal(set.data.att_secret, undefined, 'the QR secret never leaves the server');
+
+  // A waiter on his own phone: closed until "I came".
+  const jasur = await login('jasur', 'pass1234', 'joy');
+  let r = await call('GET', '/api/rooms', jasur);
+  assert.equal(r.status, 403); assert.equal(r.data.code, 'clock');
+  const me = (await call('GET', '/api/me', jasur)).data;
+  assert.deepEqual(me.work.rules, { geo: true, clock: true, gps: true, qr: true, selfie: true });
+  r = await call('POST', '/api/work/in', jasur, { ...FAR });
+  assert.equal(r.status, 403); assert.equal(r.data.code, 'gps_far'); assert.match(r.data.error, /m uzoqdasiz/);
+  r = await call('POST', '/api/work/in', jasur, { ...NEAR, qr: 'FLOWI-ISH:AAAAAAAAAAAA' });
+  assert.equal(r.data.code, 'qr');
+  assert.equal((await call('GET', '/api/work/qr', jasur)).status, 403, 'a waiter cannot show himself the code');
+  const code = (await call('GET', '/api/work/qr', boss)).data;
+  assert.match(code.text, /^FLOWI-ISH:[A-Za-z0-9_-]{12}$/);
+  r = await call('POST', '/api/work/in', jasur, { ...NEAR, qr: code.text });
+  assert.equal(r.data.code, 'selfie');
+  const jpg = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  r = await call('POST', '/api/work/in', jasur, { ...NEAR, qr: code.text, photo: jpg });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.open.status, 'ok');
+  assert.equal((await call('GET', '/api/rooms', jasur)).status, 200, 'at work and inside');
+  assert.equal((await call('POST', '/api/work/in', jasur, { ...NEAR, qr: code.text, photo: jpg })).status, 409);
+  // Away from the place: a GPS check fails and does not renew the pass.
+  const out = (await call('POST', '/api/geo/check', jasur, FAR)).data;
+  assert.equal(out.ok, false); assert.ok(out.dist > 3000);
+  assert.equal((await call('POST', '/api/geo/check', jasur, NEAR)).data.ok, true);
+
+  // The boss's day: when, how, the selfie.
+  let log = (await call('GET', '/api/work/log', boss)).data;
+  const e1 = log.entries.find((e) => e.user_id === w1.id);
+  assert.equal(e1.in_how, 'gps+qr+selfie'); assert.ok(e1.in_dist < 150); assert.equal(e1.photo, true);
+  assert.match((await call('GET', `/api/work/${e1.id}/photo`, boss)).data.data, /^data:image\/png;base64,/);
+  assert.equal((await call('GET', `/api/work/${e1.id}/photo`, jasur)).status, 403);
+  const att = (await call('GET', '/api/attendance', boss)).data.staff.find((x) => x.id === w1.id);
+  assert.equal(att.status, 'present');
+
+  // No GPS indoors: Bobur asks, the cashier confirms; until then the program stays closed.
+  const bobur = await login('bobur', 'pass1234', 'joy');
+  r = await call('POST', '/api/work/in', bobur, { ask: true, photo: jpg });
+  assert.equal(r.status, 200); assert.equal(r.data.open.status, 'pending');
+  assert.equal((await call('GET', '/api/rooms', bobur)).data.code, 'clock');
+  const cashier = await login('kassa', 'pass1234', 'joy');
+  assert.equal((await call('GET', '/api/rooms', cashier)).data.code, 'clock', 'the cashier on her own phone too');
+  const pend = (await call('GET', '/api/work/pending', boss)).data;
+  assert.equal(pend.length, 1); assert.equal(pend[0].name, 'Bobur');
+  assert.equal((await call('POST', `/api/work/${pend[0].id}/approve`, jasur)).status, 403);
+  assert.equal((await call('POST', `/api/work/${pend[0].id}/approve`, boss)).status, 200);
+  assert.equal((await call('GET', '/api/rooms', bobur)).status, 200, 'confirmed in the hall: inside for the day');
+
+  // "I left": closed again; the time is kept.
+  r = await call('POST', '/api/work/out', jasur, NEAR);
+  assert.equal(r.status, 200);
+  assert.equal((await call('GET', '/api/rooms', jasur)).data.code, 'clock');
+  log = (await call('GET', '/api/work/log', boss)).data;
+  assert.ok(log.entries.find((e) => e.id === e1.id).out_at);
+
+  // A shared device in the hall: the PIN sign-in is "I came", no GPS, QR or selfie asked.
+  const dev = (await call('POST', '/api/device/register', null, { code: 'joy', username: 'ega', password: 'ega12345', name: 'Kassa PC' })).data.device_token;
+  const k = (await call('GET', '/api/device/staff', dev)).data.find((u) => u.name === 'Kassir');
+  const ks = (await call('POST', '/api/device/pin', dev, { user_id: k.id, pin: '3333' })).data.token;
+  assert.equal((await call('GET', '/api/rooms', ks)).status, 200);
+  assert.match((await call('GET', '/api/device/work-qr', dev)).data.text, /^FLOWI-ISH:/);
+  log = (await call('GET', '/api/work/log', boss)).data;
+  assert.equal(log.entries.find((e) => e.name === 'Kassir').in_how, 'device');
+  // Closing the cash desk ends everyone's day.
+  await call('POST', '/api/shifts/open', ks, { opening_cash: 0 });
+  await call('POST', '/api/shifts/close', ks, { closing_cash: 0 });
+  log = (await call('GET', '/api/work/log', boss)).data;
+  assert.ok(log.entries.every((e) => e.out_at), JSON.stringify(log.entries));
+
+  // Guests: a QR link that went round works only inside, and only at a table the waiter opened.
+  await call('PUT', '/api/settings', boss, { qr_order: true, qr_geo: true, qr_busy: true, geo_staff: false, att_clock: false });
+  const qr = (await call('GET', '/api/qr', boss)).data;
+  const key = qr[0].qr_token;
+  const menu = (await call('GET', '/api/menu', boss)).data;
+  const items = [{ dish_id: menu.dishes[0].id, qty: 1 }];
+  const g = (await call('GET', `/api/guest/${key}`, null)).data;
+  assert.equal(g.order.geo, true); assert.equal(g.order.busy_only, true); assert.equal(g.order.busy, false);
+  r = await call('POST', `/api/guest/${key}/request`, null, { kind: 'order', items });
+  assert.equal(r.status, 403); assert.equal(r.data.code, 'geo_need');
+  r = await call('POST', `/api/guest/${key}/request`, null, { kind: 'order', items, ...FAR });
+  assert.equal(r.data.code, 'geo_far');
+  r = await call('POST', `/api/guest/${key}/request`, null, { kind: 'order', items, ...NEAR });
+  assert.equal(r.status, 409); assert.equal(r.data.code, 'not_busy');
+  assert.equal((await call('POST', `/api/guest/${key}/request`, null, { kind: 'waiter', ...NEAR })).status, 200, 'calling the waiter always works inside');
+  await call('POST', '/api/orders', boss, { room_id: qr[0].id });
+  r = await call('POST', `/api/guest/${key}/request`, null, { kind: 'order', items, ...NEAR });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  // Every QR gets a new key: the old link stops working.
+  const fresh = (await call('POST', '/api/qr/renew', boss)).data;
+  assert.notEqual(fresh[0].qr_token, key);
+  assert.equal((await call('GET', `/api/guest/${key}`, null)).status, 404);
+  assert.ok(t.id);
+});

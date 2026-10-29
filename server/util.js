@@ -20,9 +20,11 @@ function newToken() {
 }
 
 class HttpError extends Error {
-  constructor(status, message) {
+  // code: a short word the app reacts to (e.g. 'geo' — show the "you are not at work" screen).
+  constructor(status, message, code) {
     super(message);
     this.status = status;
+    if (code) this.code = code;
   }
 }
 

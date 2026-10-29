@@ -75,6 +75,8 @@ function shellHtml() {
       <nav class="tabs">${navHtml()}</nav>
       <div class="tright">
         <span class="me-chip"><span class="avatar ${App.user.role}">${esc(initials(App.user.name))}</span><span class="hide-sm">${esc(App.user.name)}</span></span>
+        ${App.settings.att_qr && can('owner', 'admin', 'cashier') ? `<button class="icon-btn" id="top-wqr" title="${esc(t('Davomat QR'))}">${icon('qr-code')}</button>` : ''}
+        ${Work.state && Work.state.rules.clock && Work.state.open ? `<button class="btn sm wk-out" id="top-out" title="${esc(t('Ishni tugatdim'))}">${icon('clock', 16)}<span class="hide-sm">${t('Ishni tugatdim')}</span></button>` : ''}
         ${Screen.standalone() && !Screen.canFullscreen() ? '' : Screen.button('top-full')}
         <button class="icon-btn lockbtn" id="top-exit" title="${esc(t('Chiqish'))}">${icon(App.device ? 'lock' : 'log-out')}</button>
       </div>
@@ -138,12 +140,18 @@ async function render() {
     }
     return;
   }
+  // Work hours / the place: until the worker "came" (and is inside), this screen stands in front of the program.
+  if (Work.gate) { currentView = null; Work.render(app); return; }
   const navName = parentOf(name);
   if (!Views[name] || !viewOn(navName) || !viewOn(name)) { location.hash = homeRoute(); return; }
   const view = Views[name];
   if (!document.getElementById('view')) {
     app.innerHTML = shellHtml();
     app.querySelector('#top-exit').onclick = logout;
+    const wq = app.querySelector('#top-wqr');
+    if (wq) wq.onclick = () => Work.showQr();
+    const wo = app.querySelector('#top-out');
+    if (wo) wo.onclick = () => Work.clockOut();
     const sp = app.querySelector('#set-pin');
     if (sp) sp.onclick = () => { UI.settingsTab = 'me'; };
     const full = app.querySelector('#top-full');
@@ -247,6 +255,7 @@ async function afterLogin() {
   App.branchCount = me.branches || 0;
   App.modulesAll = me.modules || {};
   App.platformSession = !!me.platform_session;
+  Work.load(me.work);
   if (!App.info || App.info.code !== me.tenant.code) await loadInfo(me.tenant.code);
   document.getElementById('app').innerHTML = '';
   Live.start();
@@ -278,12 +287,15 @@ Live.on('settings', async () => {
   try {
     const me = await GET('/api/me');
     const changed = JSON.stringify([me.disabled, me.kitchen_mode, me.business_type, me.money]) !== JSON.stringify([App.disabled, App.kitchenMode, App.biz, App.money]);
+    const workBefore = JSON.stringify([Work.gate, App.settings.att_qr, Work.state && Work.state.rules]);
     App.settings = me.settings; App.disabled = me.disabled || []; App.kitchenMode = me.kitchen_mode; App.user = me.user;
+    Work.load(me.work);
+    const workChanged = workBefore !== JSON.stringify([Work.gate, App.settings.att_qr, Work.state && Work.state.rules]);
     App.biz = me.business_type || 'choyxona'; App.money = me.money || {};
     const termChanged = JSON.stringify([me.tenant, me.plan && { ...me.plan, staff_used: 0 }]) !== JSON.stringify([App.tenant, App.plan && { ...App.plan, staff_used: 0 }]);
     App.tenant = me.tenant; App.plan = me.plan || null; App.branchCount = me.branches || 0;
     await loadInfo(me.tenant.code);
-    if (changed || termChanged) { document.getElementById('app').innerHTML = ''; render(); } else updateNav();
+    if (changed || termChanged || workChanged) { document.getElementById('app').innerHTML = ''; render(); } else updateNav();
   } catch { /* ignore */ }
 });
 Live.on('item_ready', (d) => {
@@ -325,6 +337,7 @@ async function refreshBadges() {
     const tk = await GET('/api/tasks');
     App.badges.tasks = tk.overdue.length + tk.today.length;
     App.guestReqs = moduleOn('qrorder') && ['owner', 'admin', 'cashier', 'waiter'].includes(role) ? await GET('/api/guest-requests') : [];
+    App.workAsks = App.settings.att_clock && ['owner', 'admin', 'cashier'].includes(role) ? await GET('/api/work/pending') : [];
     updateNav();
     renderReadyBanner();
   } catch { /* ignore */ }
@@ -335,13 +348,15 @@ function renderReadyBanner() {
   if (!el || !App.user) return;
   const items = App.user.role === 'waiter' && parseHash().name !== 'ready' ? App.readyItems || [] : [];
   const reqs = App.guestReqs || [];
-  if (!items.length && !reqs.length) { el.innerHTML = ''; return; }
-  el.innerHTML = `<div class="float-stack">${reqs.length ? guestBannerHtml(reqs) : ''}
+  const asks = App.workAsks || [];
+  if (!items.length && !reqs.length && !asks.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="float-stack">${asks.length ? workAskHtml(asks) : ''}${reqs.length ? guestBannerHtml(reqs) : ''}
     ${items.length ? `<div class="ready-banner"><div class="rb-head">${icon('bell', 20)} ${t('Tayyor — olib keting!')}</div>
     ${items.slice(0, 3).map((i) => `<div class="rb-item"><div class="grow"><b>${esc(i.room_name)}</b> · ${i.qty}× ${esc(i.name)}</div>
       <button class="btn sm" data-banner-serve="${i.id}">${icon('hand', 16)} ${t('Oldim')}</button></div>`).join('')}
     ${items.length > 3 ? `<a href="#/ready" style="color:#fff">+${items.length - 3}</a>` : ''}</div>` : ''}</div>`;
   bindGuestBanner(el);
+  bindWorkAsks(el);
   el.querySelectorAll('[data-banner-serve]').forEach((b) => b.onclick = async () => {
     b.disabled = true;
     try { await POST(`/api/items/${b.dataset.bannerServe}/serve`); await refreshBadges(); refreshSoon(); } catch (e) { toastError(e); }
