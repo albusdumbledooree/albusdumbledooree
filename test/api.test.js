@@ -25,6 +25,12 @@ async function login(username, password, code = 'demo') {
   return r.data.token;
 }
 
+// A date n days from today as the server sees it (local time, not UTC: they differ around midnight).
+function localDay(n = 0) {
+  const d = new Date(); d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 test.before(async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'choyxona-test-'));
   server = createServer({ dataDir });
@@ -1288,7 +1294,7 @@ test('door shop: goods in with freight, sale with installation and credit, damag
 
   // Goods arrive on part credit; the freight goes into each item's cost.
   const sup = (await call('POST', '/api/suppliers', boss, { name: 'Zavod "Dveri"', phone: '+998901112233' })).data;
-  const due = new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10);
+  const due = localDay(3);
   const p = await call('POST', '/api/purchases', boss, { supplier_id: sup.id, freight: 500000, paid: 3000000, due_date: due,
     items: [{ dish_id: door.id, qty: 4, price: 1000000 }, { dish_id: lock.id, qty: 10, price: 100000 }] });
   assert.equal(p.status, 200, JSON.stringify(p.data));
@@ -1306,7 +1312,7 @@ test('door shop: goods in with freight, sale with installation and credit, damag
   // An installer; a sale: door + lock + installation + delivery; 1 000 000 now, the rest on credit.
   const usta = (await call('POST', '/api/masters', boss, { name: 'Usta Botir', phone: '+998935554433' })).data;
   const cust = (await call('POST', '/api/customers', boss, { name: 'Akmal aka', phone: '+998901234567' })).data;
-  const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+  const tomorrow = localDay(1);
   const sale = await call('POST', '/api/sales', boss, {
     items: [{ dish_id: door.id, qty: 1 }, { dish_id: lock.id, qty: 1 }],
     services: [{ kind: 'install', price: 300000, cost: 200000, master_id: usta.id, date: tomorrow, time: '15:00', address: 'Chilonzor 5-uy' },
@@ -1343,7 +1349,7 @@ test('door shop: goods in with freight, sale with installation and credit, damag
   assert.equal(cnt.diff, -1);
 
   // Rent: a monthly task with an amount; ticking it writes the expense and the next one appears.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();
   const rent = (await call('POST', '/api/tasks', boss, { title: "Ijara to'lash", date: today, repeat: 'monthly', amount: 4000000, category: 'Ijara' })).data;
   assert.equal((await call('POST', `/api/tasks/${rent.id}/done`, boss, { method: 'cash' })).status, 200);
   tk = (await call('GET', '/api/tasks?days=40', boss)).data;

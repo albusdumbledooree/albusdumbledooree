@@ -2,6 +2,10 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.13.2 — Yangilash testi tuzatildi
+- Server yarim tundan keyin (00:00–05:00) yangilansa, 2 ta test xato chiqib, yangilanish eski versiyaga qaytarilardi.
+  Sabab dasturda emas, testda edi: test "ertangi kun"ni Toshkent vaqti o'rniga Grinvich vaqtida hisoblardi. Endi istalgan soatda o'tadi.
+
 ## 1.13.1 — Bosh sahifa yangilandi
 - flowi.uz bosh sahifasi oxirgi o'zgarishlar bilan yangilandi:
   - tepada **"Yangi: QR-menyu va eshik do'konlari uchun bo'lim"** belgisi, menyuda "QR-menyu" va "Do'konlar" havolalari;
