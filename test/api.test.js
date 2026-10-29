@@ -476,7 +476,7 @@ test('shop: counter sale with barcode goods, stock, refund, stock receipt', asyn
   assert.equal(rec.status, 200);
   assert.equal(rec.data.stock, 40);
   const txs = (await call('GET', `/api/transactions?from=${day.getTime()}`, boss)).data;
-  assert.ok(txs.some((x) => x.category === 'Mahsulotlar' && x.amount === 108000));
+  assert.ok(txs.some((x) => x.category === 'Mol xaridi' && x.amount === 108000));
 });
 
 test('fast food: a paid counter order still goes to the kitchen', async () => {
@@ -946,10 +946,11 @@ test('Pro: customers with cashback, debts paid back later, ingredients taken by 
   const boss = await login('ega', 'ega12345', 'probosh');
   const room = (await call('POST', '/api/rooms', boss, { number: '1', name: 'Xona' })).data;
 
-  // Biznes plan has none of it.
+  // Biznes plan: the credit book (customers who owe) yes, cashback and the stock of ingredients no.
   const bizC = (await call('POST', '/api/platform/tenants', admin, { name: 'Biz', code: 'bizfirma', owner_name: 'E', owner_username: 'ega', owner_password: 'ega12345', plan: 'biznes' })).data;
   const bizBoss = await login('ega', 'ega12345', 'bizfirma');
-  assert.equal((await call('GET', '/api/customers', bizBoss)).status, 403);
+  assert.equal((await call('GET', '/api/customers', bizBoss)).status, 200);
+  assert.equal((await call('GET', '/api/me', bizBoss)).data.disabled.includes('customers'), true);
   assert.equal((await call('GET', '/api/ingredients', bizBoss)).status, 403);
 
   // Ingredients and a recipe: 1 osh = 0.15 kg guruch + 0.1 kg go'sht. The dish's cost follows the recipe.
@@ -1270,4 +1271,191 @@ test('QR menu: a guest orders from the table, a worker approves, the check opens
   assert.equal((await call('GET', '/api/guest-requests', boss)).status, 403);
   await call('PUT', `/api/platform/tenants/${t.id}`, admin, { disabled_modules: ['qrmenu'] });
   assert.equal((await call('GET', `/api/guest/${renewed.qr_token}`, null)).status, 404);
+});
+
+test('door shop: goods in with freight, sale with installation and credit, damage, rent, tasks, profit', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  await call('POST', '/api/platform/tenants', admin, { name: "Eshik olami", code: 'eshik', owner_name: 'Aziz', owner_username: 'aziz', owner_password: 'aziz12345', plan: 'biznes', business_type: 'doors', sample: true });
+  const boss = await login('aziz', 'aziz12345', 'eshik');
+  const me = (await call('GET', '/api/me', boss)).data;
+  assert.equal(me.business_type, 'doors');
+  assert.ok(me.settings.expense_categories.includes('Ijara'));
+  const menu = (await call('GET', '/api/menu', boss)).data;
+  const door = menu.dishes.find((d) => d.size === '2000×800' && d.side === "O'ng");
+  const lock = menu.dishes.find((d) => /Qulf/.test(d.name));
+  assert.equal(door.material, 'MDF');
+  assert.equal(door.cost, 980000);
+
+  // Goods arrive on part credit; the freight goes into each item's cost.
+  const sup = (await call('POST', '/api/suppliers', boss, { name: 'Zavod "Dveri"', phone: '+998901112233' })).data;
+  const due = new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10);
+  const p = await call('POST', '/api/purchases', boss, { supplier_id: sup.id, freight: 500000, paid: 3000000, due_date: due,
+    items: [{ dish_id: door.id, qty: 4, price: 1000000 }, { dish_id: lock.id, qty: 10, price: 100000 }] });
+  assert.equal(p.status, 200, JSON.stringify(p.data));
+  assert.deepEqual(p.data.items.map((i) => i.unit_cost), [1100000, 110000]);
+  let m2 = (await call('GET', '/api/menu', boss)).data;
+  assert.equal(m2.dishes.find((d) => d.id === door.id).cost, 1028000, 'running average of 6 × 980 000 and 4 × 1 100 000');
+  assert.equal(m2.dishes.find((d) => d.id === door.id).stock, 10);
+  assert.equal(m2.dishes.find((d) => d.id === lock.id).cost, 116000);
+  let s = (await call('GET', `/api/suppliers/${sup.id}`, boss)).data;
+  assert.equal(s.debt, 2000000);
+  let tk = (await call('GET', '/api/tasks', boss)).data;
+  assert.ok(tk.upcoming.some((x) => x.ref === `supplier:${sup.id}` && /2 000 000/.test(x.title)));
+  assert.equal((await call('POST', '/api/purchases', boss, { paid: 0, items: [{ dish_id: lock.id, qty: 1, price: 1 }] })).status, 400, 'credit needs a supplier');
+
+  // An installer; a sale: door + lock + installation + delivery; 1 000 000 now, the rest on credit.
+  const usta = (await call('POST', '/api/masters', boss, { name: 'Usta Botir', phone: '+998935554433' })).data;
+  const cust = (await call('POST', '/api/customers', boss, { name: 'Akmal aka', phone: '+998901234567' })).data;
+  const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+  const sale = await call('POST', '/api/sales', boss, {
+    items: [{ dish_id: door.id, qty: 1 }, { dish_id: lock.id, qty: 1 }],
+    services: [{ kind: 'install', price: 300000, cost: 200000, master_id: usta.id, date: tomorrow, time: '15:00', address: 'Chilonzor 5-uy' },
+      { kind: 'delivery', price: 100000, cost: 70000, date: tomorrow, time: '11:00', address: 'Chilonzor 5-uy' }],
+    customer_id: cust.id, paid_cash: 1000000, paid_debt: 1030000, debt_due: tomorrow });
+  assert.equal(sale.status, 200, JSON.stringify(sale.data));
+  assert.equal(sale.data.total, 2030000);
+  assert.equal(sale.data.profit, 2030000 - 1028000 - 116000 - 200000 - 70000);
+  assert.equal(sale.data.jobs.length, 2);
+  tk = (await call('GET', '/api/tasks', boss)).data;
+  const jobTask = tk.upcoming.find((x) => x.ref === `job:${sale.data.jobs.find((j) => j.kind === 'install').id}`);
+  assert.ok(jobTask && /Usta Botir/.test(jobTask.title) && jobTask.has_time === 1);
+  assert.ok(tk.upcoming.some((x) => x.ref === `debt:${cust.id}` && /1 030 000/.test(x.title)));
+  const inv = (await call('GET', `/api/orders/${sale.data.id}/invoice`, boss)).data;
+  assert.equal(inv.customer.name, 'Akmal aka');
+  assert.equal(inv.address, 'Chilonzor 5-uy');
+  assert.equal(inv.debt, 1030000);
+  assert.equal(inv.items.length, 4);
+
+  // The installation is done (ticked from the task), the installer is paid.
+  assert.equal((await call('POST', `/api/tasks/${jobTask.id}/done`, boss, {})).status, 200);
+  assert.equal((await call('GET', '/api/jobs?status=done', boss)).data.length, 1);
+  assert.equal((await call('GET', '/api/masters', boss)).data[0].owed, 200000);
+  assert.equal((await call('POST', `/api/masters/${usta.id}/pay`, boss, { method: 'cash' })).data.amount, 200000);
+  assert.equal((await call('GET', '/api/masters', boss)).data[0].owed, 0);
+
+  // A damaged door, a lock short at the count, a lock brought back.
+  assert.equal((await call('POST', `/api/dishes/${door.id}/writeoff`, boss, { qty: 1 })).status, 400, 'reason needed');
+  assert.equal((await call('POST', `/api/dishes/${door.id}/writeoff`, boss, { qty: 1, reason: 'Singan' })).data.stock, 8);
+  const ref = await call('POST', `/api/orders/${sale.data.id}/refund`, boss, { items: [{ item_id: sale.data.items.find((i) => i.dish_id === lock.id).id, qty: 1 }], reason: 'Mos kelmadi' });
+  assert.equal(ref.status, 200, JSON.stringify(ref.data));
+  const cnt = (await call('POST', `/api/dishes/${lock.id}/count`, boss, { qty: 24 })).data;
+  assert.equal(cnt.diff, -1);
+
+  // Rent: a monthly task with an amount; ticking it writes the expense and the next one appears.
+  const today = new Date().toISOString().slice(0, 10);
+  const rent = (await call('POST', '/api/tasks', boss, { title: "Ijara to'lash", date: today, repeat: 'monthly', amount: 4000000, category: 'Ijara' })).data;
+  assert.equal((await call('POST', `/api/tasks/${rent.id}/done`, boss, { method: 'cash' })).status, 200);
+  tk = (await call('GET', '/api/tasks?days=40', boss)).data;
+  assert.ok(tk.upcoming.some((x) => x.title === "Ijara to'lash" && x.repeat === 'monthly'));
+  assert.ok(tk.done.some((x) => x.title === "Ijara to'lash"));
+
+  // System entries cannot be deleted from the cash book.
+  const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+  const txs = (await call('GET', `/api/transactions?from=${d0.getTime()}`, boss)).data;
+  const pt = txs.find((x) => x.category === 'Mol xaridi');
+  assert.equal(pt.amount, 3500000);
+  assert.equal((await call('DELETE', `/api/transactions/${pt.id}`, boss)).status, 400);
+
+  // The profit report: sales − goods − workers − damage − running costs.
+  const r = (await call('GET', `/api/profit?from=${d0.getTime()}&to=${d0.getTime() + 864e5}`, boss)).data;
+  assert.equal(r.revenue, 2030000 - 180000);
+  assert.equal(r.goods_cost, 1028000);
+  assert.equal(r.service_cost, 270000);
+  assert.equal(r.damage, 1028000 + 116000);
+  assert.deepEqual(r.running.map((x) => [x.category, x.amount]), [['Ijara', 4000000]]);
+  assert.equal(r.net, 1850000 - 1028000 - 270000 - 1144000 - 4000000);
+  assert.equal(r.top_qty[0].id, door.id);
+  assert.ok(r.stock_value > 0);
+  assert.equal(r.debts.owed_to_us, 1030000);
+  assert.equal(r.debts.we_owe, 2000000);
+
+  // Paying debts closes their tasks.
+  await call('POST', `/api/suppliers/${sup.id}/pay`, boss, { amount: 2000000 });
+  await call('POST', `/api/customers/${cust.id}/pay`, boss, { amount: 1030000, method: 'cash' });
+  tk = (await call('GET', '/api/tasks', boss)).data;
+  assert.ok(![...tk.overdue, ...tk.today, ...tk.upcoming].some((x) => /^(debt|supplier):/.test(x.ref)));
+
+  // "Bugun": today's numbers, low stock, tasks.
+  const td = (await call('GET', '/api/today', boss)).data;
+  assert.equal(td.shop, true);
+  assert.equal(td.money.revenue, 1850000);
+  assert.ok(Array.isArray(td.low_stock));
+
+  // Loading goods from an Excel list.
+  const im = await call('POST', '/api/import/products', boss, { rows: [
+    { name: 'Metall eshik "Sfinks"', size: '2050×960', color: 'Qora', material: 'Metall', side: "O'ng", category: 'Metall eshiklar', cost: 2500000, price: 3400000, stock: 2, min_stock: 1 },
+    { name: 'MDF eshik "Klassik"', size: '2000×800', color: 'Oq', material: 'MDF', side: "O'ng", price: 1500000, cost: 1100000, stock: 2 }] });
+  assert.equal(im.status, 200, JSON.stringify(im.data));
+  assert.deepEqual(im.data, { added: 1, updated: 1 });
+  m2 = (await call('GET', '/api/menu', boss)).data;
+  assert.equal(m2.dishes.find((d) => d.id === door.id).price, 1500000);
+  assert.equal(m2.dishes.find((d) => d.id === door.id).stock, 10);
+  assert.equal((await call('POST', '/api/import/products', boss, { rows: [{ name: '', price: 1 }] })).status, 400);
+
+  // A worker sees only their own tasks; the chef can tick a task given to them.
+  const seller = (await call('POST', '/api/users', boss, { name: 'Sotuvchi Ali', username: 'ali', password: 'ali12345', role: 'waiter' })).data;
+  const ali = await login('ali', 'ali12345', 'eshik');
+  const mine = (await call('POST', '/api/tasks', boss, { title: 'Vitrinani artish', date: today, assignee_id: seller.id })).data;
+  const aliTasks = (await call('GET', '/api/tasks', ali)).data;
+  assert.deepEqual([...aliTasks.today, ...aliTasks.overdue].map((x) => x.id), [mine.id]);
+  assert.equal((await call('POST', `/api/tasks/${rent.id}/done`, ali, {})).status, 403);
+  assert.equal((await call('POST', `/api/tasks/${mine.id}/done`, ali, {})).status, 200);
+  assert.equal((await call('GET', '/api/profit?from=1&to=2', ali)).status, 403);
+});
+
+test("a business owner's Telegram: linked with a code, the morning list of tasks", async () => {
+  const http = require('node:http');
+  const sent = [];
+  const updates = [];
+  const tg = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      const method = /\/(\w+)$/.exec(req.url)[1];
+      const body = raw ? JSON.parse(raw) : {};
+      const ok = (result) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, result })); };
+      if (method === 'getMe') return ok({ username: 'flowi_bot' });
+      if (method === 'getUpdates') return setTimeout(() => ok(updates.splice(0)), 80);
+      if (method === 'sendMessage') { sent.push(body); return ok({ message_id: sent.length }); }
+      return ok(true);
+    });
+  });
+  await new Promise((r) => tg.listen(0, r));
+  process.env.TELEGRAM_API = `http://127.0.0.1:${tg.address().port}`;
+  const waitFor = async (fn, what) => { for (let i = 0; i < 100; i++) { const v = await fn(); if (v) return v; await new Promise((r) => setTimeout(r, 50)); } throw new Error(what); };
+  try {
+    const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+    const boss = await login('aziz', 'aziz12345', 'eshik');
+    let st = (await call('GET', '/api/telegram', boss)).data;
+    assert.equal(st.bot_ready, false);
+    assert.equal((await call('POST', '/api/telegram/link', boss)).status, 409);
+    await call('PUT', '/api/platform/telegram', admin, { token: '123456:ABCdefGHIjklMNOpqrSTUvwxYZ_12345' });
+    st = (await call('POST', '/api/telegram/link', boss)).data;
+    assert.match(st.link_code, /^b\d{8}$/);
+    updates.push({ update_id: 1, message: { message_id: 1, chat: { id: 4242, type: 'private', first_name: 'Aziz' }, text: `/start ${st.link_code}` } });
+    await waitFor(async () => (await call('GET', '/api/telegram', boss)).data.linked, 'linked');
+    assert.ok(sent.some((m) => m.chat_id === 4242 && /Ulandi/.test(m.text)));
+    // A task for today with a time in the next hour.
+    const soon = new Date(Date.now() + 30 * 60 * 1000);
+    const pad = (n) => String(n).padStart(2, '0');
+    if (soon.getDate() === new Date().getDate()) {
+      await call('POST', '/api/tasks', boss, { title: 'Usta bilan uchrashuv', date: `${soon.getFullYear()}-${pad(soon.getMonth() + 1)}-${pad(soon.getDate())}`, time: `${pad(soon.getHours())}:${pad(soon.getMinutes())}` });
+    }
+    await server.platform.remindTick({ forceMorning: true });
+    const morning = sent.find((m) => /Xayrli tong/.test(m.text));
+    assert.ok(morning, JSON.stringify(sent));
+    assert.equal(String(morning.chat_id), '4242');
+    assert.match(morning.text, /Eshik olami/);
+    if (soon.getDate() === new Date().getDate()) assert.ok(sent.some((m) => /⏰/.test(m.text) && /Usta bilan uchrashuv/.test(m.text)));
+    const n = sent.length;
+    await server.platform.remindTick({ forceMorning: true });
+    assert.equal(sent.length, n, 'once a day, each reminder once');
+    assert.equal((await call('POST', '/api/telegram/test', boss)).status, 200);
+    const ali = await login('ali', 'ali12345', 'eshik');
+    assert.equal((await call('GET', '/api/telegram', ali)).status, 403);
+    assert.equal((await call('DELETE', '/api/telegram', boss)).data.linked, false);
+  } finally {
+    delete process.env.TELEGRAM_API;
+    tg.close();
+  }
 });

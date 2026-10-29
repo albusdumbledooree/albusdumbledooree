@@ -254,13 +254,13 @@ function addUser(db, name, username, password, role, pin = null) {
 
 function addMenu(db, menu) {
   const addCat = db.prepare('INSERT INTO categories (name, icon, sort) VALUES (?, ?, ?)');
-  const addDish = db.prepare(`INSERT INTO dishes (category_id, name, price, cost, prep_minutes, unit, needs_kitchen, icon, stock, barcode, size, color)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const addDish = db.prepare(`INSERT INTO dishes (category_id, name, price, cost, prep_minutes, unit, needs_kitchen, icon, stock, barcode, size, color, material, side, min_stock)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   menu.forEach(([cat, icon, dishes], i) => {
     const cid = addCat.run(cat, icon, i).lastInsertRowid;
     for (const d of dishes) {
       addDish.run(cid, d.name, d.price, d.cost || 0, d.prep ?? 10, d.unit || 'porsiya', d.kitchen ?? 1, d.icon || '', d.stock ?? null,
-        d.barcode || '', d.size || '', d.color || '');
+        d.barcode || '', d.size || '', d.color || '', d.material || '', d.side || '', d.min ?? null);
     }
   });
 }
@@ -284,6 +284,17 @@ const SAMPLES = {
       { name: 'Shakar 1 kg', price: 14000, cost: 12000, icon: '🧂', stock: 40, barcode: '4780000000073', unit: 'kg' }, { name: "Yog' 1 L", price: 22000, cost: 18500, icon: '🫒', stock: 30, barcode: '4780000000080' }]],
     ['Ichimliklar', '🥤', [{ name: 'Suv 1.5 L', price: 5000, cost: 3500, icon: '💧', stock: 48, barcode: '4780000000097' }, { name: 'Coca-Cola 1 L', price: 12000, cost: 9000, icon: '🥤', stock: 24, barcode: '4780000000103' }]],
   ].map(([c, i, ds]) => [c, i, ds.map((d) => ({ prep: 0, kitchen: 0, unit: 'dona', ...d }))]),
+  doors: [
+    ['MDF eshiklar', '🚪', [{ name: 'MDF eshik "Klassik"', size: '2000×800', color: 'Oq', material: 'MDF', side: "O'ng", price: 1450000, cost: 980000, stock: 6, min: 2 },
+      { name: 'MDF eshik "Klassik"', size: '2000×800', color: 'Oq', material: 'MDF', side: 'Chap', price: 1450000, cost: 980000, stock: 4, min: 2 },
+      { name: 'MDF eshik "Klassik"', size: '2000×900', color: 'Yong\'oq', material: 'MDF', side: "O'ng", price: 1600000, cost: 1080000, stock: 3, min: 1 },
+      { name: 'MDF eshik "Modern" oynali', size: '2000×800', color: 'Kulrang', material: 'MDF', side: 'Chap', price: 1750000, cost: 1200000, stock: 2, min: 1 }]],
+    ['Metall eshiklar', '🛡️', [{ name: 'Metall eshik "Qo\'rg\'on"', size: '2050×960', color: 'Jigarrang', material: 'Metall', side: "O'ng", price: 3200000, cost: 2350000, stock: 3, min: 1 },
+      { name: 'Metall eshik "Qo\'rg\'on"', size: '2050×860', color: 'Qora', material: 'Metall', side: 'Chap', price: 3000000, cost: 2200000, stock: 2, min: 1 }]],
+    ['Furnitura', '🔑', [{ name: 'Qulf "Apecs"', price: 180000, cost: 120000, stock: 15, min: 5, icon: '🔒' }, { name: 'Ruchka (juft)', price: 90000, cost: 55000, stock: 20, min: 5, icon: '🔑' },
+      { name: 'Petlya (3 dona)', price: 60000, cost: 36000, stock: 30, min: 10, icon: '🔩' }, { name: 'Nalichnik (komplekt)', price: 150000, cost: 95000, stock: 12, min: 4, icon: '📏' },
+      { name: 'Karobka (komplekt)', price: 250000, cost: 170000, stock: 10, min: 3, icon: '🪵' }]],
+  ].map(([c, i, ds]) => [c, i, ds.map((d) => ({ prep: 0, kitchen: 0, unit: 'dona', icon: i, ...d }))]),
   clothing: [
     ["Ko'ylaklar", '👔', [{ name: "Ko'ylak klassik", size: 'M', color: 'Oq', price: 180000, cost: 110000, stock: 6, barcode: '4781000000017' },
       { name: "Ko'ylak klassik", size: 'L', color: 'Oq', price: 180000, cost: 110000, stock: 4, barcode: '4781000000024' }, { name: "Ko'ylak klassik", size: 'L', color: "Ko'k", price: 185000, cost: 112000, stock: 3, barcode: '4781000000031' }]],
@@ -367,6 +378,11 @@ function seed(db, opts = {}) {
   const type = opts.type || 'choyxona';
   // Fast food and shops take no service charge by default.
   if (!['choyxona', 'restoran'].includes(type)) db.prepare("UPDATE settings SET value = '0' WHERE key = 'service_pct'").run();
+  // A door shop's running costs; goods bought, supplier and installer payments are kept by their own screens.
+  if (type === 'doors') {
+    db.prepare("UPDATE settings SET value = ? WHERE key = 'expense_categories'").run(JSON.stringify(['Ijara', 'Soliq', 'Kommunal', 'Ish haqi', "Yo'lkira", 'Ustalar', 'Reklama', 'Boshqa']));
+    db.prepare("UPDATE settings SET value = ? WHERE key = 'income_categories'").run(JSON.stringify(['Boshqa kirim']));
+  }
   if (opts.sample) {
     if (SAMPLES[type]) addMenu(db, SAMPLES[type]);
     else seedRoomsAndMenu(db);
@@ -513,6 +529,125 @@ CREATE TABLE IF NOT EXISTS guest_requests (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_guest_req ON guest_requests(status, room_id);
+`);
+  // Shops (door shop first): a product's material and opening side, its supplier, a low-stock warning level;
+  // a check line may be a service (installation, delivery) with what the customer pays and what the worker gets.
+  addCol('dishes', 'material', "TEXT NOT NULL DEFAULT ''");
+  addCol('dishes', 'side', "TEXT NOT NULL DEFAULT ''");
+  addCol('dishes', 'supplier_id', 'INTEGER');
+  addCol('dishes', 'min_stock', 'INTEGER');
+  addCol('order_items', 'service', "TEXT NOT NULL DEFAULT ''");
+  // When a product was added: goods with no sale since then for 60 days are "dead" stock (older rows: unknown).
+  addCol('dishes', 'created_at', 'INTEGER');
+  db.exec(`CREATE TRIGGER IF NOT EXISTS dishes_created AFTER INSERT ON dishes WHEN NEW.created_at IS NULL
+    BEGIN UPDATE dishes SET created_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000 WHERE id = NEW.id; END;`);
+  db.exec(`
+-- Tasks ("Ishlar"): one-off or repeating, written by hand or by the program (a delivery date, a debt to collect).
+CREATE TABLE IF NOT EXISTS tasks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  due_at INTEGER NOT NULL,
+  has_time INTEGER NOT NULL DEFAULT 0,
+  repeat TEXT NOT NULL DEFAULT 'none' CHECK (repeat IN ('none','daily','weekly','monthly')),
+  assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  ref TEXT NOT NULL DEFAULT '',
+  amount INTEGER NOT NULL DEFAULT 0,
+  category TEXT NOT NULL DEFAULT '',
+  auto INTEGER NOT NULL DEFAULT 0,
+  done_at INTEGER,
+  done_by INTEGER,
+  reminded_at INTEGER,
+  created_by INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(done_at, due_at);
+CREATE TABLE IF NOT EXISTS suppliers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL
+);
+-- What we owe a supplier: purchases on credit up, payments down.
+CREATE TABLE IF NOT EXISTS supplier_moves (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+  kind TEXT NOT NULL CHECK (kind IN ('purchase','payment','opening')),
+  amount INTEGER NOT NULL,
+  purchase_id INTEGER,
+  transaction_id INTEGER,
+  method TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  user_id INTEGER,
+  created_at INTEGER NOT NULL
+);
+-- "Mol keldi": goods from a supplier, the freight spread over them as part of their cost.
+CREATE TABLE IF NOT EXISTS purchases (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  supplier_id INTEGER REFERENCES suppliers(id),
+  goods_total INTEGER NOT NULL,
+  freight INTEGER NOT NULL DEFAULT 0,
+  paid INTEGER NOT NULL DEFAULT 0,
+  method TEXT NOT NULL DEFAULT 'cash',
+  due_at INTEGER,
+  note TEXT NOT NULL DEFAULT '',
+  user_id INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS purchase_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  purchase_id INTEGER NOT NULL REFERENCES purchases(id) ON DELETE CASCADE,
+  dish_id INTEGER NOT NULL REFERENCES dishes(id),
+  qty INTEGER NOT NULL,
+  price INTEGER NOT NULL,
+  unit_cost INTEGER NOT NULL
+);
+-- Goods moving outside sales: received, written off (damaged), counted, brought back, loaded from a list.
+CREATE TABLE IF NOT EXISTS stock_moves (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dish_id INTEGER NOT NULL REFERENCES dishes(id),
+  kind TEXT NOT NULL CHECK (kind IN ('in','writeoff','count','refund','import')),
+  qty INTEGER NOT NULL,
+  unit_cost INTEGER NOT NULL DEFAULT 0,
+  amount INTEGER NOT NULL DEFAULT 0,
+  ref TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  user_id INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_stock_moves ON stock_moves(dish_id, created_at);
+-- Installers and drivers paid per job.
+CREATE TABLE IF NOT EXISTS masters (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL
+);
+-- A job at the customer's place: measuring, delivery, installation.
+CREATE TABLE IF NOT EXISTS jobs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL CHECK (kind IN ('measure','delivery','install')),
+  order_id INTEGER,
+  item_id INTEGER,
+  master_id INTEGER REFERENCES masters(id),
+  customer_id INTEGER,
+  customer_name TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  address TEXT NOT NULL DEFAULT '',
+  scheduled_at INTEGER,
+  price INTEGER NOT NULL DEFAULT 0,
+  cost INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','done','cancelled')),
+  done_at INTEGER,
+  paid_at INTEGER,
+  transaction_id INTEGER,
+  note TEXT NOT NULL DEFAULT '',
+  created_by INTEGER,
+  created_at INTEGER NOT NULL
+);
 `);
   const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
   if (!orderCols.includes('service_type')) db.exec("ALTER TABLE orders ADD COLUMN service_type TEXT NOT NULL DEFAULT 'percent'");

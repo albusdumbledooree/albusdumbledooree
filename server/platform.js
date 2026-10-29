@@ -58,8 +58,10 @@ const CODE_RE = /^[a-z0-9][a-z0-9-]{1,30}$/;
  * the three keys stay. max_staff 0 = no limit. A lower plan never deletes anything: it only stops adding more.
  */
 const PLAN_KEYS = ['start', 'biznes', 'pro'];
-const BIZ_MODULES = ['stoplist', 'reports', 'finance', 'payroll', 'reservations', 'history', 'audit', 'export', 'qrmenu', 'qrorder'];
-const PRO_MODULES = [...BIZ_MODULES, 'customers', 'debts', 'inventory', 'branches'];
+const BIZ_MODULES = ['stoplist', 'reports', 'finance', 'payroll', 'reservations', 'history', 'audit', 'export', 'qrmenu', 'qrorder', 'debts'];
+const PRO_MODULES = [...BIZ_MODULES, 'customers', 'inventory', 'branches'];
+// A section moved into a plan after the plans were saved; each is applied once (the owner may take it out again).
+const PLAN_ADDITIONS = [['biznes', 'debts']];
 const DEFAULT_PLANS = {
   start: { name: 'Start', price: 199000, max_staff: 5, devices_per_staff: 1, modules: ['stoplist', 'reports', 'history', 'qrmenu'] },
   biznes: { name: 'Biznes', price: 349000, max_staff: 15, devices_per_staff: 1, modules: BIZ_MODULES },
@@ -128,7 +130,7 @@ function createPlatform(dataDir) {
     const db = open(file);
     const hub = createHub();
     ctx = { id, db, hub, row, file };
-    ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row, plan: () => planFor(ctx.row), branches: () => branchesOf(id), file });
+    ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row, plan: () => planFor(ctx.row), branches: () => branchesOf(id), file, telegram: telegramFor(id) });
     contexts.set(id, ctx);
     return ctx;
   }
@@ -178,6 +180,66 @@ function createPlatform(dataDir) {
   const leads = createLeads({ pdb, pget, pset, now });
   leads.start();
 
+  // ---------- A business owner's Telegram: the morning list of tasks, a reminder an hour before a task ----------
+  pdb.exec(`CREATE TABLE IF NOT EXISTS tenant_telegram (
+    tenant_id INTEGER PRIMARY KEY, chat_id TEXT, chat_title TEXT NOT NULL DEFAULT '', link_code TEXT, linked_at INTEGER, digest_day TEXT NOT NULL DEFAULT ''
+  )`);
+  const tgRow = (id) => q('SELECT * FROM tenant_telegram WHERE tenant_id = ?').get(id);
+  function telegramFor(id) {
+    return {
+      status() {
+        const r = tgRow(id) || {};
+        return { bot_ready: leads.ready(), bot: leads.botName(), linked: !!r.chat_id, chat_title: r.chat_title || '', link_code: r.chat_id ? '' : r.link_code || '' };
+      },
+      link() {
+        if (!leads.ready()) throw new HttpError(409, "Platforma boti hali ulanmagan — FLOWI yordamiga yozing");
+        const code = `b${String(require('node:crypto').randomInt(10000000, 100000000))}`;
+        q(`INSERT INTO tenant_telegram (tenant_id, link_code) VALUES (?, ?) ON CONFLICT(tenant_id) DO UPDATE SET link_code = excluded.link_code, chat_id = NULL, chat_title = ''`).run(id, code);
+        return this.status();
+      },
+      unlink() { q('DELETE FROM tenant_telegram WHERE tenant_id = ?').run(id); return this.status(); },
+      async test() {
+        const r = tgRow(id);
+        if (!r || !r.chat_id) throw new HttpError(400, 'Avval Telegramni ulang');
+        await leads.sendTo(r.chat_id, '✅ FLOWI: sinov xabari. Har kuni ertalab bugungi ishlaringiz shu yerga keladi.');
+        return { ok: true };
+      },
+    };
+  }
+  leads.onMessage((msg) => {
+    const m = /^\/start(?:@\w+)?\s+(b\d{8})\s*$/.exec(msg.text.trim());
+    if (!m) return null;
+    const r = q('SELECT * FROM tenant_telegram WHERE link_code = ?').get(m[1]);
+    if (!r) return "Bu kod eskirgan. Dasturda Sozlamalar → Telegram bo'limidan yangisini oling.";
+    const title = msg.chat.title || [msg.chat.first_name, msg.chat.last_name].filter(Boolean).join(' ') || '';
+    q('UPDATE tenant_telegram SET chat_id = ?, chat_title = ?, link_code = NULL, linked_at = ? WHERE tenant_id = ?').run(String(msg.chat.id), title, now(), r.tenant_id);
+    const ctx = context(r.tenant_id);
+    if (ctx) ctx.hub.publish('settings');
+    return `✅ Ulandi: ${ctx ? ctx.api.settings().name : ''}. Har kuni ertalab soat 8 da bugungi ishlaringiz shu yerga keladi, vaqti belgilangan ishdan 1 soat oldin eslatma ham keladi.`;
+  });
+  let tgBusy = false;
+  async function remindTick({ forceMorning = false } = {}) {
+    if (tgBusy || !leads.ready()) return;
+    tgBusy = true;
+    try {
+      const day = (() => { const d = new Date(now()); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; })();
+      const morning = forceMorning || new Date(now()).getHours() >= 8;
+      for (const r of q("SELECT t.* FROM tenant_telegram t JOIN tenants n ON n.id = t.tenant_id WHERE t.chat_id IS NOT NULL AND n.status = 'active'").all()) {
+        const ctx = context(r.tenant_id);
+        if (!ctx) continue;
+        try {
+          if (morning && r.digest_day !== day) {
+            q('UPDATE tenant_telegram SET digest_day = ? WHERE tenant_id = ?').run(day, r.tenant_id);
+            await leads.sendTo(r.chat_id, ctx.api.morningText());
+          }
+          for (const text of ctx.api.soonTexts()) await leads.sendTo(r.chat_id, text);
+        } catch (e) { console.error(`Telegram eslatma (${ctx.row.code}): ${e.message}`); }
+      }
+    } finally { tgBusy = false; }
+  }
+  const remindTimer = setInterval(() => { remindTick().catch(() => {}); }, 5 * 60 * 1000);
+  remindTimer.unref();
+
   function supportInput(v) {
     const o = v && typeof v === 'object' ? v : {};
     return { text: str(o.text, 'Yordam matni', { max: 120 }), link: str(o.link, 'Yordam havolasi', { max: 200 }) };
@@ -208,7 +270,9 @@ function createPlatform(dataDir) {
     return Object.fromEntries(PLAN_KEYS.map((k) => {
       const p = { ...DEFAULT_PLANS[k], ...(saved[k] || {}) };
       if (saved[k]) {
+        const applied = readJson('plan_additions', []);
         const added = DEFAULT_PLANS[k].modules.filter((m) => !known.includes(m) && !p.modules.includes(m));
+        for (const [plan, m] of PLAN_ADDITIONS) if (plan === k && !applied.includes(`${plan}:${m}`) && !p.modules.includes(m) && !added.includes(m)) added.push(m);
         if (added.length) p.modules = [...p.modules, ...added];
       }
       return [k, p];
@@ -252,6 +316,7 @@ function createPlatform(dataDir) {
     };
     pset('plans', JSON.stringify(plans));
     pset('plan_modules_known', JSON.stringify(Object.keys(MODULES)));
+    pset('plan_additions', JSON.stringify(PLAN_ADDITIONS.map(([k, m]) => `${k}:${m}`)));
     pset('plan_terms', JSON.stringify(terms));
     for (const c of contexts.values()) c.hub.publish('settings');
     return { plans: getPlans(), terms: getTerms() };
@@ -582,11 +647,12 @@ function createPlatform(dataDir) {
 
   function close() {
     leads.stop();
+    clearInterval(remindTimer);
     for (const c of contexts.values()) c.db.close();
     pdb.close();
   }
 
-  return { handle, byCode, byToken, byGuestKey, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, submitLead: leads.submit };
+  return { handle, byCode, byToken, byGuestKey, remindTick, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, submitLead: leads.submit };
 }
 
 module.exports = { createPlatform };

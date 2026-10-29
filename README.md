@@ -56,6 +56,12 @@ O'chirilgan bo'lim choyxonaning menyusidan darhol yo'qoladi va server ham uni yo
 Har bir choyxona bo'yicha xodimlar, xonalar, oxirgi 30 kundagi cheklar va savdo, oxirgi faollik ko'rinadi.
 Muddat 5 kundan kam qolganda boshliqning ekranida eslatma chiqadi.
 
+### Eshik do'koni va "Bugun"
+Biznes turi **Eshik do'koni**: mollar o'lcham/rang/tur/tomon bilan; **Mol keldi** (yo'lkira tannarxga bo'linadi, yetkazib beruvchi qarzi);
+sotuvda yetkazish va o'rnatish (ustaga beriladigan haq bilan), avans/nasiya, nakladnoy; ustalar va ishlar; brak va sanash;
+Excel'dan yuklash; **Foyda hisoboti** (sof foyda, ko'p/kam sotilgan, o'lik mollar). "Bugun" sahifasi va **Ishlar** (takrorlanadigan,
+doimiy xarajatlar) barcha bizneslarda bor; ertalabki Telegram eslatma — Sozlamalar → Telegram (platforma boti ulangan bo'lishi kerak).
+
 ### QR-menyu (mijoz stoldan buyurtma beradi)
 Sozlamalar → **QR-menyu**: har bir xona uchun QR kod, "Hammasini chop etish" (A4, 4 ta karta). Mijoz skanerlaydi —
 `/q/<kalit>` sahifasida menyu (rasmlar bilan) ochiladi, login kerak emas. Mijoz yuborgan buyurtma **so'rov** bo'lib keladi:

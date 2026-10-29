@@ -5,6 +5,8 @@ const path = require('node:path');
 const { hashPassword, verifyPassword, newToken, HttpError, str, int } = require('./util');
 const { createPro } = require('./pro');
 const { createGuest } = require('./guest');
+const { createTasks } = require('./tasks');
+const { createShop } = require('./shop');
 const { createPayroll } = require('./payroll');
 const { snapshot } = require('./backup');
 
@@ -16,8 +18,8 @@ const KITCHEN = ['owner', 'admin', 'chef'];
 const ROLE_NAMES = { owner: 'Boshliq', admin: 'Admin', cashier: 'Kassir', waiter: 'Ofitsant', chef: 'Oshpaz' };
 const METHODS = ['cash', 'card', 'transfer'];
 // What the platform owner picks when creating a business; the screens adapt to it.
-const BUSINESS_TYPES = { choyxona: 'Choyxona', restoran: 'Restoran / kafe', fastfood: 'Fast food', market: "Do'kon (oziq-ovqat)", clothing: 'Kiyim-kechak' };
-const SHOP_TYPES = ['market', 'clothing'];
+const BUSINESS_TYPES = { choyxona: 'Choyxona', restoran: 'Restoran / kafe', fastfood: 'Fast food', market: "Do'kon (oziq-ovqat)", clothing: 'Kiyim-kechak', doors: "Eshik do'koni" };
+const SHOP_TYPES = ['market', 'clothing', 'doors'];
 const IMAGE_TYPES = { 'image/jpeg': 1, 'image/png': 1, 'image/webp': 1 };
 const DEFAULT_ROOM_TYPES = [['banket', 'Banket'], ['vip', 'VIP'], ['supa', 'Supa'], ['stol', 'Stol'], ['zal', 'Zal'], ['boshqa', 'Boshqa']].map(([key, name]) => ({ key, name }));
 const WALLPAPERS = 28;
@@ -42,7 +44,7 @@ const MODULES = {
 function routeModule(pattern) {
   if (/^\/api\/(kitchen|items\/:id\/(accept|ready))$/.test(pattern)) return 'kitchen';
   if (pattern === '/api/dishes/:id/availability') return 'stoplist';
-  if (pattern === '/api/reports' || pattern === '/api/dashboard') return 'reports';
+  if (pattern === '/api/reports' || pattern === '/api/dashboard' || pattern === '/api/profit') return 'reports';
   if (/^\/api\/(transactions|shifts)/.test(pattern)) return 'finance';
   if (/^\/api\/(payroll|my\/payroll|attendance)/.test(pattern)) return 'payroll';
   if (/^\/api\/reservations/.test(pattern)) return 'reservations';
@@ -59,7 +61,7 @@ function routeModule(pattern) {
 // opts.hub: live-event hub of this choyxona; opts.tokenPrefix marks which choyxona a session token belongs to;
 // opts.tenant(): the choyxona's platform record (code, name, paid_until); opts.plan(): its plan (sections, staff limit);
 // opts.file: its database file.
-function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () => null, branches = () => [], file = null } = {}) {
+function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () => null, branches = () => [], file = null, telegram = null } = {}) {
   const events = hub;
   // Shared devices (the staff-list screen) get tokens of their own: "d<choyxona>_…".
   const devicePrefix = tokenPrefix.replace(/^t/, 'd');
@@ -67,6 +69,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   const now = () => Date.now();
   const payroll = createPayroll(db, { audit, events: hub, now });
   const pro = createPro(db, { audit, events: hub, now, moduleOn: (m) => moduleOn(m), settings: () => settings() });
+  // Tasks ("Ishlar") and shop bookkeeping (suppliers, goods in and out, installers, profit).
+  const tasks = createTasks(db, { audit, events: hub, now, settings: () => settings() });
+  const shop = createShop(db, { audit, events: hub, now, tasks, moduleOn: (m) => moduleOn(m), settings: () => settings() });
   // QR menu: guests order from the table, a worker approves.
   const guest = createGuest(db, {
     tenantId: Number((/^t(\d+)_/.exec(tokenPrefix) || [])[1]) || 0, audit, events: hub, now, moduleOn: (m) => moduleOn(m), settings: () => settings(),
@@ -325,6 +330,52 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   }
 
   // Which money pages this person may open: the boss always; admin and cashier as the boss allows.
+  // ---------- "Bugun": the first page — today's tasks and, for those who see money, today's numbers ----------
+  function today({ user }) {
+    const t0 = tasks.startOfDay(now());
+    const t1 = t0 + 24 * 3600 * 1000;
+    const out = { tasks: tasks.list({ user, query: {} }), shop: SHOP_TYPES.includes(businessType()) };
+    if (['owner', 'admin', 'cashier', 'waiter'].includes(user.role)) out.jobs = shop.todayJobs(t0, t1);
+    if (out.shop && user.role !== 'chef') out.low_stock = shop.lowStock();
+    if (moneyAccess(user).reports) {
+      const n = shop.periodNumbers(t0, t1);
+      const y = shop.periodNumbers(t0 - 24 * 3600 * 1000, t0);
+      out.money = { sales: n.sales, revenue: n.revenue, profit: out.shop ? n.net : null, gross: n.gross, yesterday: y.revenue };
+      out.debts = shop.debts();
+    }
+    return out;
+  }
+  // The owner's Telegram: the morning list and a reminder an hour before a task with a time.
+  function morningText() {
+    const d = tasks.digest();
+    const s = settings();
+    const t0 = tasks.startOfDay(now());
+    const y = shop.periodNumbers(t0 - 24 * 3600 * 1000, t0);
+    const line = (x) => `${x.has_time ? `<b>${shop.fmtTime(x.due_at)}</b> ` : ''}${esc(x.title)}${x.amount ? ` — ${shop.money(x.amount)} so'm` : ''}`;
+    const out = [`☀️ <b>Xayrli tong! ${esc(s.name)}</b>`];
+    if (d.overdue.length) out.push('', `🔴 <b>Qolib ketgan (${d.overdue.length}):</b>`, ...d.overdue.slice(0, 10).map((x) => `• ${shop.fmtDate(x.due_at)} ${line(x)}`));
+    out.push('', d.today.length ? `📋 <b>Bugungi ishlar (${d.today.length}):</b>` : "📋 Bugunga ish yozilmagan.", ...d.today.slice(0, 15).map((x) => `• ${line(x)}`));
+    if (y.sales) out.push('', `💰 Kecha: savdo <b>${shop.money(y.revenue)}</b> so'm${SHOP_TYPES.includes(businessType()) ? `, sof foyda <b>${shop.money(y.net)}</b> so'm` : ''} (${y.sales} ta chek)`);
+    const low = SHOP_TYPES.includes(businessType()) ? shop.lowStock() : [];
+    if (low.length) out.push('', `⚠️ Kam qoldi: ${low.slice(0, 8).map((x) => `${esc(x.name)} (${x.stock})`).join(', ')}`);
+    return out.join('\n');
+  }
+  function soonTexts() {
+    return tasks.dueSoon().map((x) => `⏰ <b>${shop.fmtTime(x.due_at)}</b> — ${esc(x.title)}${x.note ? `\n${esc(x.note)}` : ''}`);
+  }
+  const esc = (v) => String(v ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const tgApi = (fn) => ({ user }) => {
+    if (!telegram) throw new HttpError(404, 'Topilmadi');
+    if (user.role !== 'owner') throw new HttpError(403, 'Faqat boshliq');
+    return telegram[fn]();
+  };
+
+  function invoiceOf({ user, params }) {
+    const o = getOrderRow(params.id);
+    assertOrderAccess(user, o);
+    return shop.invoice(o);
+  }
+
   function moneyAccess(user, s = settings()) {
     if (user.role === 'owner') return { reports: true, finance: true, payroll: true };
     if (user.role === 'admin') return { reports: s.perm_admin_reports, finance: s.perm_admin_finance, payroll: false };
@@ -710,6 +761,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       icon: pick('icon', (v) => str(v, 'Belgi', { max: 8 })) ?? '',
       stock: pick('stock', (v) => (v === null || v === '' ? null : int(v, 'Qoldiq'))) ?? null,
       barcode: pick('barcode', (v) => str(v, 'Shtrix-kod', { max: 40 })) ?? '',
+      material: pick('material', (v) => str(v, 'Turi', { max: 30 })) ?? '',
+      side: pick('side', (v) => str(v, 'Tomoni', { max: 20 })) ?? '',
+      supplier_id: pick('supplier_id', (v) => (v ? int(v, 'Yetkazib beruvchi', { min: 1 }) : null)) ?? null,
+      min_stock: pick('min_stock', (v) => (v === null || v === '' ? null : int(v, 'Minimal qoldiq', { max: 100000 }))) ?? null,
       size: pick('size', (v) => str(v, "O'lcham", { max: 20 })) ?? '',
       color: pick('color', (v) => str(v, 'Rang', { max: 30 })) ?? '',
       // QR menu: a photo (uploaded as a 'dish' picture) and a line or two shown to guests.
@@ -723,16 +778,17 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     let id = prev.id;
     if (id) {
       q(`UPDATE dishes SET category_id = ?, name = ?, price = ?, cost = ?, prep_minutes = ?, unit = ?, needs_kitchen = ?, icon = ?, stock = ?,
-        barcode = ?, size = ?, color = ?, photo = ?, description = ?,
+        barcode = ?, size = ?, color = ?, photo = ?, description = ?, material = ?, side = ?, supplier_id = ?, min_stock = ?,
         available = CASE WHEN ? = 0 THEN 0 WHEN ? > 0 AND available = 0 AND stock = 0 THEN 1 ELSE available END WHERE id = ?`).run(
         d.category_id, d.name, d.price, d.cost, d.prep_minutes, d.unit, d.needs_kitchen, d.icon, d.stock, d.barcode, d.size, d.color, d.photo, d.description,
-        d.stock ?? 1, d.stock ?? 0, id
+        d.material, d.side, d.supplier_id, d.min_stock, d.stock ?? 1, d.stock ?? 0, id
       );
       if (prev.price !== d.price) audit(user, 'price_change', `${d.name}: ${prev.price} → ${d.price}`);
     } else {
-      id = q(`INSERT INTO dishes (category_id, name, price, cost, prep_minutes, unit, needs_kitchen, icon, stock, barcode, size, color, photo, description, available)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(d.category_id, d.name, d.price, d.cost, d.prep_minutes, d.unit, d.needs_kitchen, d.icon, d.stock,
-        d.barcode, d.size, d.color, d.photo, d.description, d.stock === 0 ? 0 : 1).lastInsertRowid;
+      id = q(`INSERT INTO dishes (category_id, name, price, cost, prep_minutes, unit, needs_kitchen, icon, stock, barcode, size, color, photo, description,
+        material, side, supplier_id, min_stock, available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(d.category_id, d.name, d.price, d.cost,
+        d.prep_minutes, d.unit, d.needs_kitchen, d.icon, d.stock, d.barcode, d.size, d.color, d.photo, d.description, d.material, d.side, d.supplier_id, d.min_stock,
+        d.stock === 0 ? 0 : 1).lastInsertRowid;
     }
     audit(user, prev.id ? 'dish_update' : 'dish_create', d.name);
     events.publish('menu');
@@ -754,16 +810,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     if (!d) throw new HttpError(404, 'Mahsulot topilmadi');
     const qty = int(body.qty, 'Soni', { min: 1, max: 1_000_000, required: true });
     const cost = body.cost !== undefined && body.cost !== '' ? int(body.cost, 'Tannarxi') : d.cost;
-    tx(() => {
-      q('UPDATE dishes SET stock = COALESCE(stock, 0) + ?, cost = ?, available = 1 WHERE id = ?').run(qty, cost, d.id);
-      if (body.expense && cost * qty > 0) {
-        q("INSERT INTO transactions (type, category, amount, method, note, user_id, created_at) VALUES ('expense', 'Mahsulotlar', ?, ?, ?, ?, ?)")
-          .run(cost * qty, METHODS.includes(body.method) ? body.method : 'cash', `${d.name} × ${qty}`, user.id, now());
-      }
-    });
-    audit(user, 'stock_receive', `${d.name} +${qty}`);
-    events.publish('menu');
-    if (body.expense) events.publish('finance');
+    // The same bookkeeping as "Mol keldi": running average cost, a stock record, the money if paid from the till.
+    shop.receiveOne(user, d, qty, cost, { expense: !!body.expense, method: METHODS.includes(body.method) ? body.method : 'cash' });
     return q('SELECT * FROM dishes WHERE id = ?').get(d.id);
   }
 
@@ -1170,23 +1218,32 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   // still go to the kitchen; the check is already paid.
   function createSale({ user, body }) {
     if (!perms(user).close) throw new HttpError(403, "Chekni yopish huquqingiz yo'q");
-    if (!Array.isArray(body.items) || !body.items.length) throw new HttpError(400, 'Mahsulot tanlanmagan');
+    // Installation, delivery: lines with what the customer pays and what the worker gets.
+    const services = shop.serviceInput(body);
+    const goods = Array.isArray(body.items) ? body.items : [];
+    if (!goods.length && !services.length) throw new HttpError(400, 'Mahsulot tanlanmagan');
     const room = q("SELECT id FROM rooms WHERE type = 'soboy'").get();
     const t = now();
-    let added;
+    let added = [];
+    let svc = [];
     const r = tx(() => {
       const id = q("INSERT INTO orders (room_id, waiter_id, guests, opened_at, takeaway, label) VALUES (?, ?, 1, ?, 1, ?)").run(
         room.id, user.id, t, str(body.label, 'Mijoz', { max: 60 })
       ).lastInsertRowid;
       const o = getOrderRow(id);
-      added = insertItems(o, body.items, t);
+      if (goods.length) added = insertItems(o, goods, t);
+      svc = shop.insertServices(id, services, t);
       const items = q('SELECT * FROM order_items WHERE order_id = ?').all(id);
       return { id, o, ...settle(user, o, items, body, false) };
     });
-    afterItems(user, r.o, added, t);
+    if (added.length) afterItems(user, r.o, added, t);
+    const jobs = shop.afterSale(user, getOrderRow(r.id), svc, body);
     audit(user, 'sale', `#${r.id} jami ${r.total}`);
     events.publish('finance');
-    return { ...orderDetails(r.id), change: r.change };
+    const items = q('SELECT price, cost, qty FROM order_items WHERE order_id = ? AND status != \'cancelled\'').all(r.id);
+    // What this sale earned: the check minus the goods' cost and the workers' pay.
+    const profit = r.total - items.reduce((s, i) => s + i.cost * i.qty, 0);
+    return { ...orderDetails(r.id), change: r.change, jobs, profit };
   }
 
   // Goods brought back: money goes back as an expense "Qaytarish", the stock returns.
@@ -1209,6 +1266,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
         amount += it.price * qty;
         lines.push(`${it.name}×${qty}`);
         pro.consume(o.id, [{ dish_id: it.dish_id, qty }], 1, user.id);
+        shop.refunded(it, qty, user.id, o.id);
       }
       const already = q("SELECT COALESCE(SUM(amount), 0) s FROM transactions WHERE category = 'Qaytarish' AND order_id = ?").get(o.id).s;
       amount = Math.min(amount, o.total - already);
@@ -1372,6 +1430,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const t = q('SELECT * FROM transactions WHERE id = ?').get(params.id);
     if (!t) throw new HttpError(404, 'Topilmadi');
     if (t.order_id) throw new HttpError(400, "Savdo yozuvini o'chirib bo'lmaydi");
+    shop.assertDeletable(t);
     q('DELETE FROM transactions WHERE id = ?').run(t.id);
     audit(user, 'transaction_delete', `${t.type} ${t.category}: ${t.amount}`);
     events.publish('finance');
@@ -1752,6 +1811,47 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['GET', '/api/orders', ['owner', 'admin', 'cashier', 'waiter'], listOrders],
     ['POST', '/api/orders', ['owner', 'admin', 'cashier', 'waiter'], openOrder],
     ['GET', '/api/orders/:id', ['owner', 'admin', 'cashier', 'waiter'], getOrder],
+    ['GET', '/api/orders/:id/invoice', ['owner', 'admin', 'cashier', 'waiter'], invoiceOf],
+    ['GET', '/api/today', ALL, today],
+    ['GET', '/api/telegram', ['owner'], tgApi('status')],
+    ['POST', '/api/telegram/link', ['owner'], tgApi('link')],
+    ['POST', '/api/telegram/test', ['owner'], tgApi('test')],
+    ['DELETE', '/api/telegram', ['owner'], tgApi('unlink')],
+    ['GET', '/api/tasks', ALL, tasks.list],
+    ['POST', '/api/tasks', ['owner', 'admin', 'cashier'], tasks.create],
+    ['PUT', '/api/tasks/:id', MANAGERS, tasks.update],
+    ['DELETE', '/api/tasks/:id', MANAGERS, tasks.remove],
+    ['POST', '/api/tasks/:id/done', ALL, (a) => tasks.done(a, { onDone: (t, u) => {
+      const m = /^job:(\d+)$/.exec(t.ref);
+      if (m && (shop.jobRow(Number(m[1])).status === 'planned')) shop.setJobStatus(u, Number(m[1]), 'done');
+    } })],
+    ['POST', '/api/tasks/:id/undo', ALL, tasks.undo],
+    ['GET', '/api/suppliers', MONEY, shop.listSuppliers],
+    ['POST', '/api/suppliers', MANAGERS, shop.saveSupplier],
+    ['GET', '/api/suppliers/:id', MONEY, shop.supplierDetail],
+    ['PUT', '/api/suppliers/:id', MANAGERS, shop.saveSupplier],
+    ['DELETE', '/api/suppliers/:id', MANAGERS, shop.deleteSupplier],
+    ['POST', '/api/suppliers/:id/pay', MONEY, shop.paySupplier],
+    ['GET', '/api/purchases', MONEY, shop.listPurchases],
+    ['POST', '/api/purchases', MONEY, shop.createPurchase],
+    ['GET', '/api/purchases/:id', MONEY, shop.purchaseDetail],
+    ['POST', '/api/dishes/:id/writeoff', MANAGERS, shop.writeOff],
+    ['POST', '/api/dishes/:id/count', MONEY, shop.count],
+    ['GET', '/api/dishes/:id/history', MANAGERS, shop.stockHistory],
+    ['POST', '/api/import/products', MANAGERS, shop.importProducts],
+    ['GET', '/api/masters', ['owner', 'admin', 'cashier', 'waiter'], shop.listMasters],
+    ['POST', '/api/masters', MANAGERS, shop.saveMaster],
+    ['PUT', '/api/masters/:id', MANAGERS, shop.saveMaster],
+    ['DELETE', '/api/masters/:id', MANAGERS, shop.deleteMaster],
+    ['POST', '/api/masters/:id/pay', MONEY, shop.payMaster],
+    ['GET', '/api/jobs', ['owner', 'admin', 'cashier', 'waiter'], shop.listJobs],
+    ['POST', '/api/jobs', ['owner', 'admin', 'cashier', 'waiter'], shop.createJob],
+    ['PUT', '/api/jobs/:id', ['owner', 'admin', 'cashier'], shop.updateJob],
+    ['POST', '/api/jobs/:id/done', ['owner', 'admin', 'cashier', 'waiter'], shop.jobDone],
+    ['POST', '/api/jobs/:id/cancel', ['owner', 'admin', 'cashier'], shop.jobCancel],
+    ['POST', '/api/jobs/:id/reopen', ['owner', 'admin', 'cashier'], shop.jobReopen],
+    ['GET', '/api/debts', MONEY, shop.debts],
+    ['GET', '/api/profit', MONEY, shop.profit],
     ['PUT', '/api/orders/:id', ['owner', 'admin', 'cashier', 'waiter'], updateOrder],
     ['POST', '/api/orders/:id/items', ['owner', 'admin', 'cashier', 'waiter'], addItems],
     ['POST', '/api/orders/:id/request-bill', ['owner', 'admin', 'waiter'], requestBill],
@@ -1830,7 +1930,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   }
 
   return { match, guard, authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, planInfo, wasKicked, summary, ROLES,
-    guestInfo: guest.info, guestImage: guest.image, guestRequest: guest.request };
+    guestInfo: guest.info, guestImage: guest.image, guestRequest: guest.request, morningText, soonTexts };
 }
 
 module.exports = { createApi, MODULES, BUSINESS_TYPES, SHOP_TYPES };

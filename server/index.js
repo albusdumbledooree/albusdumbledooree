@@ -213,7 +213,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
         if (!route.roles.includes(user.role)) throw new HttpError(403, "Sizda bu amal uchun huquq yo'q");
         api.guard(route, user, req.headers['x-finance']);
       }
-      reply(route.handler({ user, device, params, body, query, token, ip }));
+      reply(await route.handler({ user, device, params, body, query, token, ip }));
     } catch (err) {
       if (err instanceof HttpError) return send(res, err.status, { error: err.message });
       console.error(err);
@@ -222,6 +222,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
   });
   server.on('close', () => platform.close());
   server.version = VERSION;
+  server.platform = platform;
   return server;
 }
 

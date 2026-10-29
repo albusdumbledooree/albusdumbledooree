@@ -244,10 +244,22 @@ function createLeads({ pdb, pget, pset, now = Date.now, log = console }) {
   }
 
   // ---------- Reading the bot's updates ----------
+  // Other parts of the platform may answer messages first (a business linking its reminders).
+  const handlers = [];
+  function onMessage(fn) { handlers.push(fn); }
+  async function sendTo(chatId, text) {
+    return call('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true });
+  }
+  const ready = () => !!tg().token;
+
   async function onUpdate(u) {
     const s = tg();
     const msg = u.message || u.channel_post;
     if (msg && typeof msg.text === 'string') {
+      for (const h of handlers) {
+        const reply = h(msg);
+        if (reply) { await call('sendMessage', { chat_id: msg.chat.id, text: reply }).catch(() => {}); return; }
+      }
       const m = /^\/start(?:@\w+)?\s+(\d{6})\s*$/.exec(msg.text.trim()) || /^(\d{6})$/.exec(msg.text.trim());
       if (m && s.link_code && m[1] === s.link_code && !s.chat_id) {
         const title = msg.chat.title || [msg.chat.first_name, msg.chat.last_name].filter(Boolean).join(' ') || msg.chat.username || '';
@@ -306,7 +318,7 @@ function createLeads({ pdb, pget, pset, now = Date.now, log = console }) {
   function start() { if (running) return; running = true; loop(); }
   function stop() { running = false; kick(); }
 
-  return { submit, list, update, botStatus, setToken, relink, unlink, test, start, stop, STATUSES };
+  return { submit, list, update, botStatus, setToken, relink, unlink, test, start, stop, STATUSES, onMessage, sendTo, ready, botName: () => tg().bot || '' };
 }
 
 module.exports = { createLeads };

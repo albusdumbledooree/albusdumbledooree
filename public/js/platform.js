@@ -5,7 +5,7 @@
 const P = { admin: null, tenants: [], search: '', filter: 'all', modules: {}, types: {}, plans: {}, terms: {}, tab: 'biz', leads: null, leadStatus: '', leadQ: '', tg: {} };
 const DAY_MS = 24 * 60 * MIN;
 const TOKEN_KEY = 'cp_ptoken';
-const TYPE_ICONS = { choyxona: 'house', restoran: 'utensils', fastfood: 'sandwich', market: 'shopping-cart', clothing: 'shirt' };
+const TYPE_ICONS = { choyxona: 'house', restoran: 'utensils', fastfood: 'sandwich', market: 'shopping-cart', clothing: 'shirt', doors: 'door-open' };
 
 // Overrides core.js: the platform session is stored separately from business logins.
 function endSession() {
@@ -288,7 +288,7 @@ async function load() {
 
 // ---------- Forms ----------
 const KITCHEN_MODES = { full: "To'liq: oshpaz qabul qiladi → tayyor → ofitsantga xabar", notify: "Faqat xabar: oshxona ko'radi/chop etadi, qabul qilish shart emas", off: "O'chiq: oshxonaga hech narsa bormaydi" };
-const TYPE_DEFAULTS = { choyxona: ['full', []], restoran: ['full', []], fastfood: ['notify', ['reservations']], market: ['off', ['reservations']], clothing: ['off', ['reservations']] };
+const TYPE_DEFAULTS = { choyxona: ['full', []], restoran: ['full', []], fastfood: ['notify', ['reservations']], market: ['off', ['reservations']], clothing: ['off', ['reservations']], doors: ['off', ['reservations']] };
 
 function typeSelect(cur = 'choyxona') {
   return `<label class="field">Biznes turi<select name="business_type">${Object.entries(P.types).map(([k, v]) => `<option value="${k}" ${cur === k ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>`;

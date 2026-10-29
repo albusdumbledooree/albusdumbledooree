@@ -140,6 +140,7 @@ function checkDetailHtml(o) {
       ${['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => `<span class="small muted">${methodName(m)}</span><span class="right small muted">${money(o[`paid_${m}`])}</span>`).join('')}</div>
       ${o.status === 'closed' ? `<div class="order-actions">
         ${can('owner', 'admin', 'cashier') && o.refunded < o.total ? `<button class="btn" id="h-refund">${icon('undo-2', 18)} ${t('Qaytarish')}</button>` : ''}
+        ${isShop() ? `<button class="btn" id="h-invoice">${icon('file-text', 18)} ${t('Nakladnoy')}</button>` : ''}
         ${permsOf.print ? `<button class="btn primary" id="h-print">${icon('printer', 18)} ${t('Chop etish')}</button>` : ''}</div>` : ''}
     </div></aside>`;
 }
@@ -212,6 +213,8 @@ Views.history = {
     if (pr) pr.onclick = () => printCheck(d.order.id);
     const rf = root.querySelector('#h-refund');
     if (rf) rf.onclick = () => refundDialog(d.order);
+    const inv = root.querySelector('#h-invoice');
+    if (inv) inv.onclick = () => printInvoice(d.order.id);
     (root.querySelector('#hist-export') || {}).onclick = async () => {
       try {
         const res = await fetch(`/api/checks/export?${histQuery()}`, { headers: { Authorization: `Bearer ${App.token}` } });
@@ -228,6 +231,10 @@ const MONEY_PAGES = () => [
   ['finance', 'arrow-right-left', t('Kirim-chiqim'), t('Xarajat va boshqa kirimlarni yozish')],
   ['payroll', 'hand-coins', t('Ish haqi'), t('Maosh, avans, xarajat, bonus va jarima')],
   ['attendance', 'calendar', t('Davomat'), t("Kim keldi, kunlik ish haqini berish")],
+  ['profit', 'coins', t('Foyda hisoboti'), t("Sof foyda, nima ko'p sotildi, pul qayerga ketdi")],
+  ['purchases', 'package-plus', t('Mol keldi'), t("Kelgan mollar, yo'lkira, yetkazib beruvchilar")],
+  ['debts', 'notebook-pen', t('Qarzlar'), t('Bizga qarz va biz qarzmiz — bitta joyda')],
+  ['masters', 'hammer', t('Ustalar va ishlar'), t("O'lchov, yetkazish, o'rnatish va ustalarga to'lov")],
   ['customers', 'book-user', t('Mijozlar'), t('Qarz daftari, keshbek va doimiy mijozlar')],
   ['inventory', 'warehouse', t('Ombor'), t("Masalliqlar qoldig'i, kirim va tex-karta")],
   ['branches', 'network', t('Filiallar'), t("Hamma filial savdosi bitta jadvalda")],
@@ -920,32 +927,39 @@ Views.reservations = {
 // ---------- Menu (with "Tugadi" switches) ----------
 Views.menuadmin = {
   title: () => W('Menyu'), icon: () => (isShop() ? 'package' : 'utensils'), roles: ['owner', 'admin'], refreshOn: ['menu'],
-  async load() { return GET('/api/menu'); },
+  async load() {
+    const [menu, suppliers] = await Promise.all([GET('/api/menu'), isShop() ? GET('/api/suppliers').catch(() => []) : []]);
+    return { ...menu, suppliers };
+  },
   render({ categories, dishes }) {
     const shop = isShop();
     const q = (UI.menuSearch || '').toLowerCase();
-    const list = dishes.filter((d) => !q || `${d.name} ${d.barcode} ${d.size} ${d.color}`.toLowerCase().includes(q));
+    const list = dishes.filter((d) => !q || `${d.name} ${d.barcode} ${d.size} ${d.color} ${d.material || ''} ${d.side || ''}`.toLowerCase().includes(q));
     const groups = [...categories, { id: null, name: t("Bo'limsiz"), icon: '' }].map((c) => ({ c, ds: list.filter((d) => (d.category_id ?? null) === c.id) }));
-    const low = dishes.filter((d) => d.stock != null && d.stock <= 3);
+    const low = dishes.filter((d) => d.stock != null && (d.min_stock != null ? d.stock <= d.min_stock : d.stock <= (isDoors() ? 0 : 3)));
     return `<div class="page-head"><h1>${W('Menyu')}</h1>
       <input type="search" id="menu-search" placeholder="${esc(shop ? t('Shtrix-kod yoki nomi') : t('Qidirish'))}" value="${esc(UI.menuSearch || '')}" style="max-width:240px">
+      ${shop ? `<button class="btn ok" id="mol-keldi">${icon('package-plus', 18)} ${t('Mol keldi')}</button><button class="btn" id="mol-import">${icon('file-spreadsheet', 18)} Excel</button>` : ''}
       <button class="btn" id="add-cat">${icon('plus', 18)} ${t("Bo'lim")}</button><button class="btn primary" id="add-dish">${icon('plus', 18)} ${W('Taom')}</button></div>
       ${shop && low.length ? `<div class="notice">${icon('triangle-alert', 18)} ${t('Kam qolgan: {0}', low.map((d) => `${esc(d.name)}${d.size ? ` ${esc(d.size)}` : ''} (${d.stock})`).join(', '))}</div>` : ''}
       ${groups.filter((g) => (g.c.id && !q) || g.ds.length).map(({ c, ds }) => `<div class="card"><div class="card-head"><h2>${c.id ? `<i class="cat-dot" style="background:${catColor({ categories }, c.id)}"></i>` : ''}${esc(c.icon)} ${esc(c.name)}</h2>
         ${c.id ? `<button class="icon-btn" data-edit-cat="${c.id}">${icon('pencil', 18)}</button><button class="icon-btn danger" data-del-cat="${c.id}">${icon('trash-2', 18)}</button>` : ''}</div>
         ${ds.length ? `<div class="table-wrap"><table>
-        ${ds.map((d) => `<tr><td style="width:44px;font-size:24px">${d.photo ? `<img class="dish-thumb" src="${dishPhoto(d.photo)}" alt="" loading="lazy">` : esc(d.icon)}</td><td><b>${esc(d.name)}</b>${d.size || d.color ? ` <span class="chip">${esc([d.size, d.color].filter(Boolean).join(' · '))}</span>` : ''}<br>
+        ${ds.map((d) => `<tr><td style="width:44px;font-size:24px">${d.photo ? `<img class="dish-thumb" src="${dishPhoto(d.photo)}" alt="" loading="lazy">` : esc(d.icon)}</td><td><b>${esc(d.name)}</b>${variantOf(d) ? ` <span class="chip">${esc(variantOf(d))}</span>` : ''}<br>
             <span class="small muted">${shop ? `${d.barcode ? `${icon('scan-barcode', 13)} ${esc(d.barcode)} · ` : ''}${icon('package', 13)} ${d.stock ?? '∞'} ${esc(d.unit)}`
               : d.needs_kitchen ? `${icon('chef-hat', 13)} ${d.prep_minutes} ${t('daq')}` : `${icon('check', 13)} ${t('Darhol')}`}</span></td>
           <td class="right num"><b>${money(d.price)}</b>${shop && d.cost ? `<br><span class="small muted">${money(d.cost)}</span>` : ''}</td>
-          <td class="actions">${shop ? `<button class="btn sm" data-receive="${d.id}" title="${esc(t('Kirim qilish'))}">${icon('package-plus', 16)} ${t('Kirim')}</button>` : ''}${!shop && moduleOn('inventory') && can('owner', 'admin') ? `<button class="btn sm" data-recipe="${d.id}" title="${esc(t('Tex-karta'))}">${icon('chef-hat', 16)} ${t('Tex-karta')}</button>` : ''}${d.available ? `<button class="btn sm" data-stop="${d.id}" title="${esc(t('Tugadi'))}">${icon('ban', 16)}</button>` : `<button class="btn sm danger" data-start="${d.id}">${icon('ban', 16)} ${t('Tugadi')}</button>`}
+          <td class="actions">${shop ? `<button class="btn sm" data-receive="${d.id}" title="${esc(t('Kirim qilish'))}">${icon('package-plus', 16)} ${t('Kirim')}</button><button class="btn sm" data-stock="${d.id}" title="${esc(t('Brak, sanash, tarix'))}">${icon('ellipsis-vertical', 16)}</button>` : ''}${!shop && moduleOn('inventory') && can('owner', 'admin') ? `<button class="btn sm" data-recipe="${d.id}" title="${esc(t('Tex-karta'))}">${icon('chef-hat', 16)} ${t('Tex-karta')}</button>` : ''}${d.available ? `<button class="btn sm" data-stop="${d.id}" title="${esc(t('Tugadi'))}">${icon('ban', 16)}</button>` : `<button class="btn sm danger" data-start="${d.id}">${icon('ban', 16)} ${t('Tugadi')}</button>`}
             <button class="icon-btn" data-edit="${d.id}">${icon('pencil', 18)}</button><button class="icon-btn danger" data-del="${d.id}">${icon('trash-2', 18)}</button></td></tr>`).join('')}
         </table></div>` : `<p class="muted">${W("Bu bo'limda taom yo'q")}</p>`}</div>`).join('')}`;
   },
-  bind(root, { categories, dishes }) {
+  bind(root, { categories, dishes, suppliers = [] }) {
     const ms = root.querySelector('#menu-search');
     ms.oninput = () => { UI.menuSearch = ms.value; renderView(currentData); };
-    root.querySelectorAll('[data-receive]').forEach((b) => b.onclick = () => receiveDialog(dishes.find((d) => d.id === Number(b.dataset.receive))));
+    root.querySelectorAll('[data-receive]').forEach((b) => b.onclick = () => (isDoors() ? purchaseDialog(Number(b.dataset.receive)) : receiveDialog(dishes.find((d) => d.id === Number(b.dataset.receive)))));
+    root.querySelectorAll('[data-stock]').forEach((b) => b.onclick = () => stockMenu(dishes.find((d) => d.id === Number(b.dataset.stock))));
+    const mk = root.querySelector('#mol-keldi'); if (mk) mk.onclick = () => purchaseDialog();
+    const mi = root.querySelector('#mol-import'); if (mi) mi.onclick = () => importDialog();
     const editCat = (c = {}) => openModal({
       title: `${icon('list')} ${c.id ? t("Bo'limni tahrirlash") : t("Yangi bo'lim")}`,
       body: `<div class="form-grid"><label class="field">${t('Nomi')}<input name="name" value="${esc(c.name || '')}" required></label>
@@ -976,6 +990,14 @@ Views.menuadmin = {
         ${shop ? `<label class="field">${t('Shtrix-kod')}<input name="barcode" value="${esc(d.barcode || '')}" placeholder="${esc(t('Skanerlang yoki yozing'))}"></label>
           ${App.biz === 'clothing' ? `<label class="field">${t("O'lcham")}<input name="size" value="${esc(d.size || '')}" placeholder="S, M, L, 42"></label>
           <label class="field">${t('Rang')}<input name="color" value="${esc(d.color || '')}"></label>` : ''}
+          ${isDoors() ? `<label class="field">${t("O'lcham")}<input name="size" value="${esc(d.size || '')}" placeholder="2000×800" list="dl-sizes"></label>
+          <label class="field">${t('Rang')}<input name="color" value="${esc(d.color || '')}" placeholder="${esc(t("Oq, yong'oq, qora…"))}"></label>
+          <label class="field">${t('Turi')}<input name="material" value="${esc(d.material || '')}" list="dl-mat" placeholder="MDF"></label>
+          <label class="field">${t('Ochilish tomoni')}<select name="side"><option value="">—</option>${SIDES().map((x) => `<option ${d.side === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
+          <datalist id="dl-mat">${MATERIALS().map((x) => `<option value="${esc(x)}">`).join('')}</datalist>
+          <datalist id="dl-sizes">${[...new Set(dishes.map((x) => x.size).filter(Boolean))].map((x) => `<option value="${esc(x)}">`).join('')}</datalist>` : ''}
+          <label class="field">${t('Kam qolganda ogohlantirish (dona)')}<input type="number" name="min_stock" min="0" value="${d.min_stock ?? ''}" placeholder="${isDoors() ? '1' : '3'}"></label>
+          ${suppliers.length ? `<label class="field">${t('Yetkazib beruvchi')}<select name="supplier_id"><option value="">—</option>${suppliers.map((s) => `<option value="${s.id}" ${d.supplier_id === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>` : ''}
           <label class="field">${t("O'lchov birligi")}<select name="unit">${['dona', 'kg', 'litr', 'metr', 'quti', 'juft'].map((u) => `<option ${(d.unit || 'dona') === u ? 'selected' : ''}>${u}</option>`).join('')}</select></label>`
         : `<label class="field">${t('Tayyorlash vaqti (daq)')}<input type="number" name="prep_minutes" min="0" value="${d.prep_minutes ?? 15}"></label>
           <input type="hidden" name="unit" value="${esc(d.unit || 'porsiya')}">`}
@@ -1010,6 +1032,8 @@ Views.menuadmin = {
         x.category_id = x.category_id ? Number(x.category_id) : null;
         x.stock = x.stock === '' ? null : x.stock;
         if ('photo' in x) x.photo = x.photo ? Number(x.photo) : null;
+        if ('min_stock' in x) x.min_stock = x.min_stock === '' ? null : Number(x.min_stock);
+        if ('supplier_id' in x) x.supplier_id = x.supplier_id ? Number(x.supplier_id) : null;
         if (shop) { x.needs_kitchen = false; x.prep_minutes = 0; }
         if (d.id) await PUT(`/api/dishes/${d.id}`, x); else await POST('/api/dishes', x);
         toast(t('Saqlandi'), 'ok'); refreshView();
@@ -1035,6 +1059,20 @@ Views.menuadmin = {
 };
 
 // Goods arrived: stock grows; the purchase can be written down as an expense at once.
+// Goods that left outside a sale, a count, the history of one product.
+function stockMenu(d) {
+  openModal({
+    title: `${icon('package')} ${esc(d.name)}`,
+    body: `<p class="muted" style="margin-top:0">${esc(variantOf(d))} · ${t('Omborda')}: <b>${d.stock ?? '∞'}</b></p>
+      <div class="stack" style="gap:8px">
+        <button type="button" class="btn block" data-a="wo">${icon('trash-2', 18)} ${t('Brak / hisobdan chiqarish')}</button>
+        <button type="button" class="btn block" data-a="cnt">${icon('list', 18)} ${t('Sanash (haqiqiy soni)')}</button>
+        <button type="button" class="btn block" data-a="hist">${icon('history', 18)} ${t('Harakatlar tarixi')}</button></div>`,
+    actions: [{ label: t('Yopish') }],
+    onMount: (f) => f.querySelectorAll('[data-a]').forEach((b) => b.onclick = () => ({ wo: writeoffDialog, cnt: countDialog, hist: stockHistoryDialog })[b.dataset.a](d)),
+  });
+}
+
 function receiveDialog(d) {
   openModal({
     title: `${icon('package-plus')} ${esc(d.name)} — ${t('Kirim qilish')}`,
@@ -1139,6 +1177,7 @@ const SETTINGS_TABS = () => [
   ['audit', 'history', t('Amallar tarixi'), ['owner', 'admin'], 'audit'],
   ['backup', 'database', t('Zaxira'), ['owner', 'admin', 'cashier']],
   ['me', 'user', t('Mening sozlamalarim'), ['owner', 'admin', 'cashier', 'waiter', 'chef']],
+  ['telegram', 'send', t('Telegram'), ['owner']],
   ...(App.plan ? [['plan', 'star', t('Mening tarifim'), ['owner']]] : []),
 ];
 
@@ -1153,6 +1192,7 @@ Views.settings = {
     if (tab === 'rooms') [data.rooms, data.users] = await Promise.all([GET('/api/rooms?all=1'), GET('/api/users')]);
     if (tab === 'devices') data.devices = await GET('/api/devices');
     if (tab === 'qr') data.qr = await GET('/api/qr');
+    if (tab === 'telegram') data.tg = await telegramSettingsHtml();
     if (tab === 'audit') data.rows = await GET('/api/audit?limit=300');
     if (tab === 'backup') [data.local, data.folder] = await Promise.all([LocalBackup.all(), FolderBackup.status()]);
     if (tab === 'me' && App.user.role !== 'owner' && moduleOn('payroll')) data.pay = await GET('/api/my/payroll').catch(() => null);
@@ -1311,6 +1351,9 @@ Views.settings = {
     const rdel = root.querySelector('#rlogo-del');
     if (rdel) rdel.onclick = () => save({ receipt_logo_id: '' }, t("O'chirildi"));
   },
+
+  tab_telegram({ tg }) { return tg.html; },
+  bind_telegram(root) { bindTelegramSettings(root); },
 
   tab_qr({ qr }) {
     const s = App.settings;

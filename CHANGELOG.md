@@ -2,6 +2,34 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.12.0 — Eshik do'koni va "Bugun" (kunlik ishlar)
+- **"Bugun" sahifasi** (hamma bizneslar uchun): bugungi va kechikkan ishlar, bugungi savdo va sof foyda, bugungi chiqishlar
+  (yetkazish, o'rnatish), kam qolgan mollar, qarzlar. Eshik do'konida dastur shu sahifadan ochiladi; katta tugmalar:
+  Sotish · Mol keldi · Xarajat · Hisobot.
+- **Ishlar (eslatmalar)**: bir martalik yoki takrorlanadigan (har kuni / hafta / oy), soati bilan, xodimga biriktirish mumkin.
+  **Doimiy xarajat** (ijara, soliq, kommunal): har oy o'zi chiqadi, ✓ bosilganda xarajat bo'lib yoziladi.
+  Dastur o'zi ham ish yozadi: yetkazish/o'rnatish sanasi, mijoz qarzini olish, yetkazib beruvchiga to'lash — ish bajarilsa
+  yoki qarz yopilsa o'zi yopiladi. Kechikkan ish qizil bo'lib tepada turadi.
+- **Telegram eslatma**: Sozlamalar → Telegram. Har kuni ertalab soat 8 da bugungi ishlar ro'yxati (va kechagi savdo/foyda),
+  vaqti belgilangan ishdan 1 soat oldin eslatma keladi.
+- **Eshik do'koni** biznes turi: mollarda o'lcham, rang, turi (MDF, metall…), ochilish tomoni, kam qolganda ogohlantirish,
+  yetkazib beruvchi. Sotuv ekranida o'lcham/tur/rang bo'yicha tez filtr.
+- **Mol keldi**: yetkazib beruvchidan bir nechta mol birdan; **yo'lkira** mollarga narxiga qarab bo'lib qo'shiladi va har bir
+  eshikning haqiqiy tannarxi (o'rtacha) chiqadi; to'lanmagan qismi yetkazib beruvchiga qarz bo'lib yoziladi.
+- **Sotuvda xizmatlar**: yetkazib berish va o'rnatish — mijozdan olinadigan va ustaga/haydovchiga beriladigan summa, usta,
+  sana va soat, manzil. Avans/nasiya (qolganini qachon to'lashi bilan). Sotuvdan keyin **"Shu savdodan sof foyda"** ko'rinadi.
+- **Nakladnoy** (A4) chop etish: sotuvdan keyin va Cheklar bo'limidan.
+- **Ustalar va ishlar**: ustalar ro'yxati, o'lchovga yozish, rejadagi/bajarilgan ishlar, kimga qancha to'lash kerak, bir tugma bilan to'lash.
+- **Brak / hisobdan chiqarish**, **sanash** (kamomad yoki ortiqcha), har bir mol harakatlari tarixi.
+- **Excel'dan yuklash**: jadvalni nusxa olib joylash — ustunlar nomidan o'zi taniydi.
+- **Foyda hisoboti** (do'konlar uchun): Savdo − mollar tannarxi − ustalar va yetkazish − brak − ijara, soliq, kommunal,
+  ish haqi… = **sof foyda**, o'tgan davrga nisbatan; eng ko'p sotilgan va eng ko'p foyda keltirgan mollar, kam sotilgan,
+  **o'lik mollar** (60 kun harakatsiz, qancha pul qotgani), ombordagi mol qiymati, qarzlar, kunlar bo'yicha savdo, Excel.
+  Har bir raqam yonidagi ⓘ uni bir gap bilan tushuntiradi.
+- **Qarzlar** sahifasi: bizga qarz (mijozlar) va biz qarzmiz (yetkazib beruvchilar, ustalar) — bitta joyda, to'lov tugmalari bilan.
+- Tariflar: **Qarz daftari endi Biznes tarifida ham** bor (saqlangan tariflarga bir marta o'zi qo'shiladi).
+- Do'kondagi oddiy "Kirim" ham endi o'rtacha tannarx va harakatlar tarixi bilan yoziladi (kassa yozuvi: "Mol xaridi").
+
 ## 1.11.0 — QR-menyu: mijoz stoldan buyurtma beradi
 - **Har bir xona/stol uchun QR kod** (Sozlamalar → QR-menyu). Kod ichida maxfiy kalit bor — xona raqamini taxmin qilib
   boshqa xonaga buyurtma berib bo'lmaydi. Kod tarqalib ketsa, bitta tugma bilan yangilanadi (eskisi darhol ishlamay qoladi).

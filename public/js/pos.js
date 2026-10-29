@@ -12,12 +12,12 @@ function posAdd(x, qty = 1) {
   const line = PosCart.lines.find((c) => c.dish_id === x.id);
   const want = (line ? line.qty : 0) + qty;
   if (x.stock != null && want > x.stock) return toast(t('"{0}" dan faqat {1} ta qoldi', x.name, x.stock), 'warn');
-  if (line) line.qty = want; else PosCart.lines.push({ dish_id: x.id, name: x.name, price: x.price, qty, variant: [x.size, x.color].filter(Boolean).join(' · ') });
+  if (line) line.qty = want; else PosCart.lines.push({ dish_id: x.id, name: x.name, price: x.price, qty, variant: variantOf(x) });
 }
 
 function productSub(x) {
-  const low = x.stock != null && x.stock <= 3;
-  const variant = [x.size, x.color].filter(Boolean).join(' · ');
+  const low = x.stock != null && (x.min_stock != null ? x.stock <= x.min_stock : x.stock <= 3);
+  const variant = variantOf(x);
   return `${variant ? `<b>${esc(variant)}</b> ` : ''}${x.stock != null ? `<span class="${low ? 'low' : ''}">${icon('package', 12)} ${x.stock}</span>`
     : x.needs_kitchen && App.kitchenMode !== 'off' ? `${icon('timer', 12)} ${x.eta_minutes} ${t('daq')}` : ''}`;
 }
@@ -32,8 +32,16 @@ Views.pos = {
   },
   render({ menu, shift, money: showShift }) {
     const q = UI.search.toLowerCase();
+    const f = UI.posFilter || (UI.posFilter = {});
     const list = menu.dishes.filter((x) => (UI.category === 'all' || x.category_id === Number(UI.category))
-      && (!q || `${x.name} ${x.barcode || ''} ${x.size || ''} ${x.color || ''}`.toLowerCase().includes(q)));
+      && (!q || `${x.name} ${x.barcode || ''} ${variantOf(x)}`.toLowerCase().includes(q))
+      && (!f.size || x.size === f.size) && (!f.material || x.material === f.material) && (!f.color || x.color === f.color));
+    // A door shop narrows by size, material and colour in two taps.
+    const chips = (key, label) => {
+      const vals = [...new Set(menu.dishes.map((x) => x[key]).filter(Boolean))].sort();
+      return vals.length > 1 ? `<div class="chips"><span class="small muted">${label}:</span>${vals.map((v) => `<button class="chip-btn ${f[key] === v ? 'on' : ''}" data-f="${key}" data-v="${esc(v)}">${esc(v)}</button>`).join('')}</div>` : '';
+    };
+    const filters = isDoors() ? `<div class="pos-filters">${chips('size', t("O'lcham"))}${chips('material', t('Turi'))}${chips('color', t('Rang'))}</div>` : '';
     const count = PosCart.lines.reduce((s, c) => s + c.qty, 0);
     return `<div class="order">
       <aside class="checkpane ${UI.drawer ? 'open' : ''}" id="checkpane">
@@ -58,6 +66,7 @@ Views.pos = {
           <div class="menu-bar">
             <div class="scan">${icon(isShop() ? 'scan-barcode' : 'search', 20)}<input type="search" id="pos-scan" autocomplete="off" placeholder="${esc(isShop() ? t('Shtrix-kod yoki nomi') : W('Taom qidirish'))}" value="${esc(UI.search)}"></div>
             ${showShift ? `<button class="btn ${shift ? '' : 'primary'}" id="shift">${icon(shift ? 'lock' : 'circle-plus', 16)} ${shift ? t('Smenani yopish') : t('Smenani ochish')}</button>` : ''}</div>
+          ${filters}
           <div class="dishes">${list.map((x) => dishTile(menu, x, { qty: (PosCart.lines.find((c) => c.dish_id === x.id) || {}).qty, sub: productSub(x) })).join('') || emptyState('search', W('Taom topilmadi'))}</div>
         </div>
       </section>
@@ -93,6 +102,7 @@ Views.pos = {
     const back = root.querySelector('#drawer-back');
     if (back) back.onclick = () => { UI.drawer = false; rerender(); };
     root.querySelectorAll('[data-cat]').forEach((b) => b.onclick = () => { UI.category = b.dataset.cat; rerender(); });
+    root.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => { const f = UI.posFilter; f[b.dataset.f] = f[b.dataset.f] === b.dataset.v ? '' : b.dataset.v; rerender(); });
     root.querySelectorAll('[data-dish]').forEach((b) => b.onclick = () => { posAdd(menu.dishes.find((x) => x.id === Number(b.dataset.dish))); rerender(); });
     const dish = (c) => menu.dishes.find((x) => x.id === c.dish_id) || {};
     root.querySelectorAll('[data-inc]').forEach((b) => b.onclick = () => { posAdd(dish(PosCart.lines[b.dataset.inc])); rerender(); });
@@ -111,9 +121,11 @@ Views.pos = {
   },
 };
 
-function posPayment() {
+async function posPayment() {
   if (!(App.user.perms || {}).close) return toast(t("Chekni yopish huquqingiz yo'q"), 'warn');
-  const subtotal = posTotal();
+  const goodsTotal = posTotal();
+  let subtotal = goodsTotal;
+  const masters = isDoors() ? await GET('/api/masters').catch(() => []) : [];
   const canDiscount = can('owner', 'admin', 'cashier');
   const form = openModal({
     title: `${icon('wallet')} ${t("To'lov")}`, size: 'wide',
@@ -122,18 +134,23 @@ function posPayment() {
         <div class="stack">
           <div class="sum-rows num" id="pay-sums"></div>
           ${canDiscount ? `<label class="field">${t('Chegirma')} (${esc(App.settings.currency)})<input type="number" name="discount" min="0" placeholder="0"></label>` : ''}
+          ${isDoors() ? saleServicesHtml(masters) : ''}
           ${customerPayHtml()}
-          <div class="methods">${['cash', 'card', 'transfer'].map((m) => `<button type="button" class="method" data-m="${m}">${icon(METHOD_ICONS[m], 26)}${methodName(m)}</button>`).join('')}${staffPayButton()}</div>
+          <div class="methods">${['cash', 'card', 'transfer'].map((m) => `<button type="button" class="method" data-m="${m}">${icon(METHOD_ICONS[m], 26)}${methodName(m)}</button>`).join('')}${isDoors() ? '' : staffPayButton()}</div>
           ${staffPayBox()}
           <div class="form-grid" style="grid-template-columns:repeat(3,1fr)">${['cash', 'card', 'transfer'].map((m) => `<label class="field">${methodName(m)}<input type="number" name="paid_${m}" min="0" placeholder="0"></label>`).join('')}</div>
           <div id="pay-change" class="change"></div>
-          ${(App.user.perms || {}).print ? `<label class="check"><input type="checkbox" name="print" ${App.biz === 'fastfood' || store('cp_pos_print') !== false ? 'checked' : ''}> ${icon('printer', 18)} ${t('Chekni chop etish')}</label>` : ''}
+          ${isDoors() ? `<label class="field" id="debt-due" hidden>${t("Qolganini qachon to'laydi")}<input type="date" name="debt_due" value="${isoDay(Date.now() + 7 * 864e5)}"></label>` : ''}
+          ${(App.user.perms || {}).print ? `<label class="check"><input type="checkbox" name="print" ${App.biz === 'fastfood' || (!isDoors() && store('cp_pos_print') !== false) ? 'checked' : ''}> ${icon('printer', 18)} ${t('Chekni chop etish')}</label>` : ''}
         </div></div>`,
     actions: [{ label: t('Bekor') }, { label: t("To'lovni yakunlash"), cls: 'ok', icon: 'circle-check', onClick: async (f) => {
       const x = formData(f);
       if (staffPay.on && !x.staff_id) { toast(t('Xodimni tanlang'), 'warn'); return false; }
+      const services = getServices();
+      if (services.some((s) => !s.date)) { toast(t('Xizmat sanasini tanlang'), 'warn'); return false; }
       const r = await POST('/api/sales', {
         items: PosCart.lines.map(({ dish_id, qty }) => ({ dish_id, qty })), label: PosCart.label,
+        services, phone: x.svc_phone || '', debt_due: x.debt_due || '',
         ...(staffPay.on ? { staff_id: Number(x.staff_id) } : {
           discount: Number(x.discount) || 0, paid_cash: Number(x.paid_cash) || 0, paid_card: Number(x.paid_card) || 0, paid_transfer: Number(x.paid_transfer) || 0,
           ...(cust.customer ? { customer_id: cust.customer.id, bonus: sums().bonus, paid_debt: sums().debt } : {}) }),
@@ -149,6 +166,7 @@ function posPayment() {
           actions: [{ label: t('Yangi buyurtma'), cls: 'primary', icon: 'plus' }] });
         return false;
       }
+      if (isDoors()) { saleDoneDialog(r); return false; }
       toast(`${t('Sotildi')}: ${moneyText(r.total)}${r.change ? ` · ${t('Qaytim')}: ${moneyText(r.change)}` : ''}`, 'ok', 8000);
     } }],
   });
@@ -164,13 +182,18 @@ function posPayment() {
   };
   const calc = () => {
     const x = formData(form);
+    // Services are part of the check: what the customer pays for delivery and installation.
+    subtotal = goodsTotal + getServices().reduce((s, v) => s + v.price, 0);
     if (staffPay.on) {
       form.querySelector('#pay-sums').innerHTML = `<span>${t('Xodim hisobiga')}</span><span class="right">${x.staff_id ? esc(form.staff_id.selectedOptions[0].textContent.split(' — ')[0]) : '—'}</span>
         <span style="grid-column:1/-1" class="big-total">${money(subtotal)}</span>`;
       return subtotal;
     }
     const { discount, bonus, total, paid, debt } = sums();
-    form.querySelector('#pay-sums').innerHTML = `${discount || bonus ? `<span>${W('Taomlar')}</span><span class="right">${money(subtotal)}</span>` : ''}
+    const svcSum = subtotal - goodsTotal;
+    const due = form.querySelector('#debt-due'); if (due) due.hidden = !debt;
+    form.querySelector('#pay-sums').innerHTML = `${svcSum ? `<span>${W('Taomlar')}</span><span class="right">${money(goodsTotal)}</span><span>${t('Xizmatlar')}</span><span class="right">${money(svcSum)}</span>` : ''}
+      ${discount || bonus ? `<span>${t('Jami')}</span><span class="right">${money(subtotal)}</span>` : ''}
       ${discount ? `<span>${t('Chegirma')}</span><span class="right">−${money(discount)}</span>` : ''}
       ${bonus ? `<span>${t('Bonusdan')}</span><span class="right">−${money(bonus)}</span>` : ''}
       <span style="grid-column:1/-1" class="big-total">${money(total)}</span>
@@ -183,8 +206,10 @@ function posPayment() {
   };
   form.addEventListener('input', calc);
   form.addEventListener('change', calc);
+  let getServices = () => [];
   const staffPay = bindStaffPay(form, calc);
   const cust = bindCustomerPay(form, calc);
+  getServices = bindSaleServices(form, () => { calc(); const b = form.querySelector('.method.active'); if (b) b.click(); });
   form.querySelectorAll('[data-m]').forEach((b) => b.onclick = () => {
     staffPay.on = false;
     const total = calc();

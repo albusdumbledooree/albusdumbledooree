@@ -68,9 +68,11 @@ function subscriptionNotice(until) {
 }
 
 // ---------- Business type ----------
-const BIZ_TYPES = () => ({ choyxona: t('Choyxona'), restoran: t('Restoran / kafe'), fastfood: t('Fast food'), market: t("Do'kon (oziq-ovqat)"), clothing: t('Kiyim-kechak') });
-const BIZ_ICONS = { choyxona: 'house', restoran: 'utensils', fastfood: 'sandwich', market: 'shopping-cart', clothing: 'shirt' };
-function isShop() { return App.biz === 'market' || App.biz === 'clothing'; }
+const BIZ_TYPES = () => ({ choyxona: t('Choyxona'), restoran: t('Restoran / kafe'), fastfood: t('Fast food'), market: t("Do'kon (oziq-ovqat)"), clothing: t('Kiyim-kechak'), doors: t("Eshik do'koni") });
+const BIZ_ICONS = { choyxona: 'house', restoran: 'utensils', fastfood: 'sandwich', market: 'shopping-cart', clothing: 'shirt', doors: 'door-open' };
+function isShop() { return App.biz === 'market' || App.biz === 'clothing' || App.biz === 'doors'; }
+// A door shop: goods with size, colour, material and side; installation and delivery on a sale.
+function isDoors() { return App.biz === 'doors'; }
 // Fast food and shops sell at the counter (the "Sotuv" screen).
 function sellsAtCounter() { return App.biz === 'fastfood' || isShop(); }
 // Words that differ in a shop: "Menyu" is "Mahsulotlar", "Taom" is "Mahsulot".
@@ -208,7 +210,7 @@ const Live = {
       }
     };
     for (const type of ['rooms', 'kitchen', 'menu', 'finance', 'settings', 'kitchen_new', 'kitchen_cancel', 'item_ready',
-      'item_accepted', 'bill_requested', 'stoplist', 'payroll', 'guest', 'guest_request']) {
+      'item_accepted', 'bill_requested', 'stoplist', 'payroll', 'guest', 'guest_request', 'tasks', 'jobs']) {
       this.es.addEventListener(type, (e) => {
         let data = {};
         try { data = JSON.parse(e.data); } catch { /* ignore */ }

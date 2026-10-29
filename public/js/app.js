@@ -3,16 +3,27 @@
 
 // Money pages (reports, cash book, payroll) are not in the main list: they sit behind one quiet "Moliya" entry.
 function navOrder(role) {
-  const home = isShop() ? ['pos'] : App.biz === 'fastfood' ? ['pos', 'rooms'] : ['rooms'];
+  // A door shop opens on "Bugun" (today's tasks and numbers) and keeps the menu short.
+  if (isDoors()) {
+    return {
+      owner: ['today', 'pos', 'menuadmin', 'history', 'staff', 'settings', 'money'],
+      admin: ['today', 'pos', 'menuadmin', 'history', 'staff', 'settings', 'money'],
+      cashier: ['today', 'pos', 'history', 'settings', 'money'],
+      waiter: ['today', 'pos', 'settings'],
+      chef: ['today', 'settings'],
+    }[role];
+  }
+  const home = isShop() ? ['pos', 'today'] : App.biz === 'fastfood' ? ['pos', 'rooms', 'today'] : ['rooms', 'today'];
   return {
     owner: [...home, 'kitchen', 'history', 'reservations', 'menuadmin', 'staff', 'settings', 'money'],
     admin: [...home, 'kitchen', 'history', 'reservations', 'menuadmin', 'staff', 'settings', 'money'],
     cashier: [...home, 'history', 'reservations', 'stoplist', 'settings', 'money'],
     waiter: [...home, 'ready', 'settings'],
-    chef: ['kitchen', 'stoplist', 'inventory', 'settings'],
+    chef: ['kitchen', 'today', 'stoplist', 'inventory', 'settings'],
   }[role];
 }
-const CHILD_OF = { room: 'rooms', order: 'rooms', soboy: 'rooms', reports: 'money', finance: 'money', payroll: 'money', attendance: 'staff', customers: 'money', inventory: 'money', branches: 'money' };
+const CHILD_OF = { room: 'rooms', order: 'rooms', soboy: 'rooms', reports: 'money', finance: 'money', payroll: 'money', attendance: 'staff', customers: 'money', inventory: 'money', branches: 'money',
+  profit: 'money', purchases: 'money', debts: 'money', masters: 'money' };
 let currentView = null;
 let currentParams = [];
 let currentData = null;
@@ -311,6 +322,8 @@ async function refreshBadges() {
     }
     if (['chef', 'owner', 'admin'].includes(role) && App.kitchenMode !== 'off') App.badges.kitchen = (await GET('/api/kitchen')).load.pending;
     if (['cashier', 'owner', 'admin'].includes(role)) App.badges.bills = (await GET('/api/orders?status=open')).filter((o) => o.bill_requested).length;
+    const tk = await GET('/api/tasks');
+    App.badges.tasks = tk.overdue.length + tk.today.length;
     App.guestReqs = moduleOn('qrorder') && ['owner', 'admin', 'cashier', 'waiter'].includes(role) ? await GET('/api/guest-requests') : [];
     updateNav();
     renderReadyBanner();
@@ -405,6 +418,7 @@ function rejectGuestRequest(g) {
   });
 }
 Live.on('guest', () => refreshBadges());
+Live.on('tasks', () => refreshBadges());
 Live.on('guest_request', (d) => {
   const text = d.kind === 'waiter' ? t('{0}: ofitsantni chaqirmoqda', d.room) : d.kind === 'bill' ? t("{0}: hisob so'ramoqda", d.room) : t('{0}: QR orqali yangi buyurtma', d.room);
   Voice.say(d.kind === 'waiter' ? t('{0} sizni chaqirmoqda.', d.room) : d.kind === 'bill' ? t("{0} hisob so'ramoqda.", d.room) : t('{0} dan yangi buyurtma. Tasdiqlang.', d.room), 'new');
