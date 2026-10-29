@@ -927,6 +927,25 @@
     "Ulandimi? Tekshirish": ["Подключилось? Проверить", "Connected? Check"],
     "Telegramni ulash": ["Подключить Telegram", "Connect Telegram"],
     "Yuborildi — Telegramni tekshiring": ["Отправлено — проверьте Telegram", "Sent — check Telegram"],
+    // ---------- Barcode labels ----------
+    "Yorliq": ["Этикетки", "Labels"],
+    "Shtrix-kod yorlig'i": ["Этикетка со штрихкодом", "Barcode label"],
+    "Mol omborga qo'shildi": ["Товар добавлен на склад", "Added to stock"],
+    "Yorliq chop etish": ["Печать этикеток", "Print labels"],
+    "Termo yorliq 58×40 mm": ["Термоэтикетка 58×40 мм", "Thermal label 58×40 mm"],
+    "Termo yorliq 40×30 mm": ["Термоэтикетка 40×30 мм", "Thermal label 40×30 mm"],
+    "A4 varaq — 24 ta (70×37 mm)": ["Лист A4 — 24 шт (70×37 мм)", "A4 sheet — 24 labels (70×37 mm)"],
+    "Shtrix-kod yorliqlari": ["Этикетки со штрихкодом", "Barcode labels"],
+    "Yorliq o'lchami": ["Размер этикетки", "Label size"],
+    "Nomi, o'lcham, rang": ["Название, размер, цвет", "Name, size, colour"],
+    "Narxni ham chiqarish": ["Печатать цену", "Print the price"],
+    "Har biridan omborda qancha bo'lsa": ["Сколько каждого на складе", "As many as in stock"],
+    "Hammasini olib tashlash": ["Очистить всё", "Clear all"],
+    "Yorliq soni": ["Кол-во этикеток", "Labels"],
+    "yo'q — yaratiladi": ["нет — будет создан", "none — will be created"],
+    "Yorliq sonini kiriting": ["Введите количество этикеток", "Enter the number of labels"],
+    "Jami: {0} ta yorliq": ["Всего: {0} этикеток", "Total: {0} labels"],
+    "Yorliqlar": ["Этикетки", "Labels"],
   };
   for (const [uz, [ru, en]] of Object.entries(T)) {
     I18N.ru[uz] = ru;

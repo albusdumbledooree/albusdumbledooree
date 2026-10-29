@@ -1392,6 +1392,16 @@ test('door shop: goods in with freight, sale with installation and credit, damag
   assert.equal(m2.dishes.find((d) => d.id === door.id).stock, 10);
   assert.equal((await call('POST', '/api/import/products', boss, { rows: [{ name: '', price: 1 }] })).status, 400);
 
+  // Own barcodes for goods without one: EAN-13 "20…", valid check digit, found by the till.
+  const bc = (await call('POST', '/api/barcodes', boss, { ids: [door.id, lock.id] })).data;
+  const code = bc.find((x) => x.id === door.id).barcode;
+  assert.match(code, /^20\d{11}$/);
+  const digits = [...code].map(Number);
+  assert.equal((10 - (digits.slice(0, 12).reduce((s, d, i) => s + d * (i % 2 ? 3 : 1), 0) % 10)) % 10, digits[12]);
+  const again = (await call('POST', '/api/barcodes', boss, { ids: [door.id] })).data;
+  assert.equal(again[0].barcode, code, 'a code once given stays');
+  assert.equal((await call('GET', '/api/menu', boss)).data.dishes.find((d) => d.id === door.id).barcode, code);
+
   // A worker sees only their own tasks; the chef can tick a task given to them.
   const seller = (await call('POST', '/api/users', boss, { name: 'Sotuvchi Ali', username: 'ali', password: 'ali12345', role: 'waiter' })).data;
   const ali = await login('ali', 'ali12345', 'eshik');

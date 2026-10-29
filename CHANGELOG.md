@@ -2,6 +2,14 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.12.1 — Shtrix-kod yorliqlari
+- Mahsulotlar → **Yorliq**: tanlangan mollarga shtrix-kod yorliqlari chop etiladi — do'kon nomi, mol nomi, o'lcham · rang · tur · tomon,
+  narx va shtrix-kod. O'lchamlar: termo yorliq 58×40 yoki 40×30 mm, yoki A4 varaq (24 ta, 70×37 mm).
+- Kodi yo'q mollarga dastur o'zi **EAN-13** kod yaratadi ("20" bilan boshlanadi — do'kon ichki mollari uchun ajratilgan,
+  zavod kodlari bilan to'qnashmaydi). Har qanday skaner o'qiydi; Sotuv ekranida skanerlansa, mol savatga tushadi.
+- "Har biridan omborda qancha bo'lsa" — har bir dona uchun bittadan yorliq.
+- **Mol keldi**dan keyin "Yorliq chop etish" taklif qilinadi (kelgan soni bo'yicha); bitta mol uchun — mol menyusidagi ⋮ → "Shtrix-kod yorlig'i".
+
 ## 1.12.0 — Eshik do'koni va "Bugun" (kunlik ishlar)
 - **"Bugun" sahifasi** (hamma bizneslar uchun): bugungi va kechikkan ishlar, bugungi savdo va sof foyda, bugungi chiqishlar
   (yetkazish, o'rnatish), kam qolgan mollar, qarzlar. Eshik do'konida dastur shu sahifadan ochiladi; katta tugmalar:

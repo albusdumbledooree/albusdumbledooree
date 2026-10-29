@@ -1839,6 +1839,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['POST', '/api/dishes/:id/count', MONEY, shop.count],
     ['GET', '/api/dishes/:id/history', MANAGERS, shop.stockHistory],
     ['POST', '/api/import/products', MANAGERS, shop.importProducts],
+    ['POST', '/api/barcodes', MANAGERS, shop.assignBarcodes],
     ['GET', '/api/masters', ['owner', 'admin', 'cashier', 'waiter'], shop.listMasters],
     ['POST', '/api/masters', MANAGERS, shop.saveMaster],
     ['PUT', '/api/masters/:id', MANAGERS, shop.saveMaster],

@@ -229,6 +229,34 @@ function createShop(db, { audit, events, now, tasks, moduleOn, settings }) {
       .run(item.dish_id, qty, item.cost, item.cost * qty, `order:${orderId}`, userId, now());
   }
 
+  // ---------- Own barcodes for goods that came without one ----------
+  // EAN-13 starting with "20": the range kept for a shop's own goods, so it never clashes with a factory code.
+  function ean13(first12) {
+    const sum = [...first12].reduce((s, d, i) => s + Number(d) * (i % 2 ? 3 : 1), 0);
+    return first12 + ((10 - (sum % 10)) % 10);
+  }
+  function assignBarcodes({ user, body }) {
+    const ids = Array.isArray(body.ids) ? body.ids.map(Number).filter(Boolean).slice(0, 2000) : [];
+    if (!ids.length) throw new HttpError(400, 'Mol tanlanmagan');
+    const taken = q('SELECT 1 FROM dishes WHERE barcode = ? AND active = 1');
+    const out = [];
+    tx(() => {
+      for (const id of ids) {
+        const d = q('SELECT * FROM dishes WHERE id = ? AND active = 1').get(id);
+        if (!d) continue;
+        if (d.barcode) { out.push({ id, barcode: d.barcode }); continue; }
+        let n = id;
+        let code = ean13(`20${String(n).padStart(10, '0')}`);
+        while (taken.get(code)) code = ean13(`20${String(n += 100000).padStart(10, '0')}`);
+        q('UPDATE dishes SET barcode = ? WHERE id = ?').run(code, id);
+        out.push({ id, barcode: code, created: true });
+      }
+    });
+    const made = out.filter((x) => x.created).length;
+    if (made) { audit(user, 'barcode_create', `${made} ta`); events.publish('menu'); }
+    return out;
+  }
+
   // ---------- Loading the goods list from Excel ----------
   function importProducts({ user, body }) {
     if (!Array.isArray(body.rows) || !body.rows.length) throw new HttpError(400, "Ro'yxat bo'sh");
@@ -548,7 +576,7 @@ function createShop(db, { audit, events, now, tasks, moduleOn, settings }) {
 
   return {
     listSuppliers, saveSupplier, supplierDetail, paySupplier, deleteSupplier,
-    createPurchase, purchaseDetail, listPurchases, receiveOne, writeOff, count, stockHistory, refunded, importProducts,
+    createPurchase, purchaseDetail, listPurchases, receiveOne, assignBarcodes, ean13, writeOff, count, stockHistory, refunded, importProducts,
     listMasters, saveMaster, deleteMaster, listJobs, createJob, updateJob, jobDone, jobCancel, jobReopen, payMaster,
     serviceInput, insertServices, afterSale, debts, profit, periodNumbers, lowStock, todayJobs, invoice, assertDeletable,
     jobRow, setJobStatus, SYSTEM_CATS, CAT, fmtDate, fmtTime, money,

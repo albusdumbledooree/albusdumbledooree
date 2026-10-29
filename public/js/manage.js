@@ -939,7 +939,7 @@ Views.menuadmin = {
     const low = dishes.filter((d) => d.stock != null && (d.min_stock != null ? d.stock <= d.min_stock : d.stock <= (isDoors() ? 0 : 3)));
     return `<div class="page-head"><h1>${W('Menyu')}</h1>
       <input type="search" id="menu-search" placeholder="${esc(shop ? t('Shtrix-kod yoki nomi') : t('Qidirish'))}" value="${esc(UI.menuSearch || '')}" style="max-width:240px">
-      ${shop ? `<button class="btn ok" id="mol-keldi">${icon('package-plus', 18)} ${t('Mol keldi')}</button><button class="btn" id="mol-import">${icon('file-spreadsheet', 18)} Excel</button>` : ''}
+      ${shop ? `<button class="btn ok" id="mol-keldi">${icon('package-plus', 18)} ${t('Mol keldi')}</button><button class="btn" id="mol-import">${icon('file-spreadsheet', 18)} Excel</button><button class="btn" id="mol-labels">${icon('scan-barcode', 18)} ${t('Yorliq')}</button>` : ''}
       <button class="btn" id="add-cat">${icon('plus', 18)} ${t("Bo'lim")}</button><button class="btn primary" id="add-dish">${icon('plus', 18)} ${W('Taom')}</button></div>
       ${shop && low.length ? `<div class="notice">${icon('triangle-alert', 18)} ${t('Kam qolgan: {0}', low.map((d) => `${esc(d.name)}${d.size ? ` ${esc(d.size)}` : ''} (${d.stock})`).join(', '))}</div>` : ''}
       ${groups.filter((g) => (g.c.id && !q) || g.ds.length).map(({ c, ds }) => `<div class="card"><div class="card-head"><h2>${c.id ? `<i class="cat-dot" style="background:${catColor({ categories }, c.id)}"></i>` : ''}${esc(c.icon)} ${esc(c.name)}</h2>
@@ -960,6 +960,7 @@ Views.menuadmin = {
     root.querySelectorAll('[data-stock]').forEach((b) => b.onclick = () => stockMenu(dishes.find((d) => d.id === Number(b.dataset.stock))));
     const mk = root.querySelector('#mol-keldi'); if (mk) mk.onclick = () => purchaseDialog();
     const mi = root.querySelector('#mol-import'); if (mi) mi.onclick = () => importDialog();
+    const ml = root.querySelector('#mol-labels'); if (ml) ml.onclick = () => labelsDialog();
     const editCat = (c = {}) => openModal({
       title: `${icon('list')} ${c.id ? t("Bo'limni tahrirlash") : t("Yangi bo'lim")}`,
       body: `<div class="form-grid"><label class="field">${t('Nomi')}<input name="name" value="${esc(c.name || '')}" required></label>
@@ -1067,9 +1068,11 @@ function stockMenu(d) {
       <div class="stack" style="gap:8px">
         <button type="button" class="btn block" data-a="wo">${icon('trash-2', 18)} ${t('Brak / hisobdan chiqarish')}</button>
         <button type="button" class="btn block" data-a="cnt">${icon('list', 18)} ${t('Sanash (haqiqiy soni)')}</button>
-        <button type="button" class="btn block" data-a="hist">${icon('history', 18)} ${t('Harakatlar tarixi')}</button></div>`,
+        <button type="button" class="btn block" data-a="hist">${icon('history', 18)} ${t('Harakatlar tarixi')}</button>
+        <button type="button" class="btn block" data-a="lbl">${icon('scan-barcode', 18)} ${t('Shtrix-kod yorlig\'i')}</button></div>`,
     actions: [{ label: t('Yopish') }],
-    onMount: (f) => f.querySelectorAll('[data-a]').forEach((b) => b.onclick = () => ({ wo: writeoffDialog, cnt: countDialog, hist: stockHistoryDialog })[b.dataset.a](d)),
+    onMount: (f) => f.querySelectorAll('[data-a]').forEach((b) => b.onclick = () => ({ wo: writeoffDialog, cnt: countDialog, hist: stockHistoryDialog,
+      lbl: (x) => labelsDialog([{ id: x.id, qty: Math.max(1, Math.min(500, x.stock || 1)) }]) })[b.dataset.a](d)),
   });
 }
 

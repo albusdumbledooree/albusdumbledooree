@@ -213,6 +213,12 @@ async function purchaseDialog(preset = null) {
         paid: f.paid.value === '' ? undefined : Number(f.paid.value), method: f.method.value, freight_paid: f.freight_paid.checked, due_date: f.due_date.value });
       toast(t('Mol omborga qo\'shildi: {0} ta', r.items.reduce((s, i) => s + i.qty, 0)), 'ok', 6000);
       refreshView();
+      // New goods usually need their labels right away.
+      openModal({ title: `${icon('circle-check')} ${t('Mol omborga qo\'shildi')}`,
+        body: `<p style="margin-top:0">${r.items.map((i) => `${esc(i.label)} — <b>${i.qty} ${t('ta')}</b>`).join('<br>')}</p>`,
+        actions: [{ label: t('Yopish') }, { label: t('Yorliq chop etish'), cls: 'primary', icon: 'scan-barcode',
+          onClick: () => { labelsDialog(r.items.map((i) => ({ id: i.dish_id, qty: i.qty }))); return false; } }] });
+      return false;
     } }],
   });
   const fill = (l) => {
@@ -711,4 +717,97 @@ function bindTelegramSettings(root) {
   a('#tg-check', async () => { refreshView(); });
   a('#tg-test', async () => { await POST('/api/telegram/test'); toast(t('Yuborildi — Telegramni tekshiring'), 'ok'); });
   a('#tg-off', async () => { await DEL('/api/telegram'); refreshView(); });
+}
+
+// ---------- Barcode labels ----------
+// EAN-13 drawn as SVG (the code every scanner reads); any other code is printed as text only.
+const EAN = {
+  L: ['0001101', '0011001', '0010011', '0111101', '0100011', '0110001', '0101111', '0111011', '0110111', '0001011'],
+  G: ['0100111', '0110011', '0011011', '0100001', '0011101', '0111001', '0000101', '0010001', '0001001', '0010111'],
+  R: ['1110010', '1100110', '1101100', '1000010', '1011100', '1001110', '1010000', '1000100', '1001000', '1110100'],
+  P: ['LLLLLL', 'LLGLGG', 'LLGGLG', 'LLGGGL', 'LGLLGG', 'LGGLLG', 'LGGGLL', 'LGLGLG', 'LGLGGL', 'LGGLGL'],
+};
+function ean13Valid(code) {
+  if (!/^\d{13}$/.test(code)) return false;
+  const d = [...code].map(Number);
+  return (10 - (d.slice(0, 12).reduce((s, x, i) => s + x * (i % 2 ? 3 : 1), 0) % 10)) % 10 === d[12];
+}
+function ean13Svg(code) {
+  if (!ean13Valid(code)) return '';
+  const d = [...code].map(Number);
+  const par = EAN.P[d[0]];
+  let bits = '101';
+  for (let i = 1; i <= 6; i++) bits += EAN[par[i - 1]][d[i]];
+  bits += '01010';
+  for (let i = 7; i <= 12; i++) bits += EAN.R[d[i]];
+  bits += '101';
+  // Guard bars run longer, the way scanners and people expect.
+  const guard = (i) => i < 3 || (i >= 45 && i < 50) || i >= 92;
+  let rects = '';
+  for (let i = 0; i < bits.length; i++) if (bits[i] === '1') rects += `<rect x="${i + 9}" y="0" width="1" height="${guard(i) ? 56 : 50}"/>`;
+  // The digits are written under the bars as text of their own (an SVG stretched to the label would stretch them).
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 113 56" preserveAspectRatio="none">${rects}</svg>`;
+}
+const LABEL_FORMATS = () => ({
+  t58: { name: t('Termo yorliq 58×40 mm'), page: '58mm 40mm', w: '58mm', h: '40mm', grid: false },
+  t40: { name: t('Termo yorliq 40×30 mm'), page: '40mm 30mm', w: '40mm', h: '30mm', grid: false, small: true },
+  a4: { name: t('A4 varaq — 24 ta (70×37 mm)'), page: 'A4', w: '70mm', h: '37.1mm', grid: true },
+});
+// Choose goods and how many labels of each; goods with no code get one first.
+async function labelsDialog(preset = null) {
+  let menu;
+  try { menu = await GET('/api/menu'); } catch (e) { return toastError(e); }
+  const goods = menu.dishes;
+  const want = new Map(preset ? preset.map((p) => [p.id, p.qty]) : []);
+  const fmt = store('cp_label_fmt') || 't58';
+  const form = openModal({
+    title: `${icon('scan-barcode')} ${t('Shtrix-kod yorliqlari')}`, size: 'wide',
+    body: `<div class="form-grid"><label class="field">${t("Yorliq o'lchami")}<select name="fmt">${Object.entries(LABEL_FORMATS()).map(([k, f]) => `<option value="${k}" ${fmt === k ? 'selected' : ''}>${f.name}</option>`).join('')}</select></label>
+        <label class="field">${t('Qidirish')}<input type="search" name="q" placeholder="${esc(t("Nomi, o'lcham, rang"))}"></label></div>
+      <label class="check" style="margin:8px 0"><input type="checkbox" name="price" checked> ${t("Narxni ham chiqarish")}</label>
+      <div class="row" style="gap:8px;margin-bottom:8px"><button type="button" class="btn sm" id="lb-stock">${t("Har biridan omborda qancha bo'lsa")}</button>
+        <button type="button" class="btn sm" id="lb-none">${t('Hammasini olib tashlash')}</button></div>
+      <div class="table-wrap" style="max-height:340px"><table class="lb-table"><tr><th>${t('Mol')}</th><th>${t('Shtrix-kod')}</th><th class="right">${t('Yorliq soni')}</th></tr>
+        ${goods.map((d) => `<tr data-row="${d.id}" data-text="${esc(`${d.name} ${variantOf(d)} ${d.barcode || ''}`.toLowerCase())}"><td><b>${esc(d.name)}</b><br><span class="small muted">${esc(variantOf(d))}</span></td>
+          <td class="small">${d.barcode ? esc(d.barcode) : `<span class="muted">${t("yo'q — yaratiladi")}</span>`}</td>
+          <td class="right"><input type="number" min="0" max="500" data-qty="${d.id}" value="${want.get(d.id) || 0}" style="width:80px"></td></tr>`).join('')}</table></div>
+      <p class="small muted" id="lb-sum"></p>`,
+    actions: [{ label: t('Bekor') }, { label: t('Chop etish'), cls: 'primary', icon: 'printer', onClick: async (f) => {
+      const picked = [...f.querySelectorAll('[data-qty]')].map((i) => ({ id: Number(i.dataset.qty), qty: Math.min(500, Number(i.value) || 0) })).filter((x) => x.qty > 0);
+      if (!picked.length) { toast(t('Yorliq sonini kiriting'), 'warn'); return false; }
+      store('cp_label_fmt', f.fmt.value);
+      const codes = new Map((await POST('/api/barcodes', { ids: picked.map((x) => x.id) })).map((x) => [x.id, x.barcode]));
+      const list = picked.flatMap((p) => { const d = goods.find((x) => x.id === p.id); return Array(p.qty).fill({ ...d, barcode: codes.get(d.id) || d.barcode }); });
+      printLabels(list, f.fmt.value, f.price.checked);
+      refreshView();
+    } }],
+  });
+  const sum = () => { const n = [...form.querySelectorAll('[data-qty]')].reduce((s, i) => s + (Number(i.value) || 0), 0); form.querySelector('#lb-sum').textContent = t('Jami: {0} ta yorliq', n); };
+  form.q.oninput = () => { const v = form.q.value.toLowerCase(); form.querySelectorAll('[data-row]').forEach((r) => { r.style.display = !v || r.dataset.text.includes(v) ? '' : 'none'; }); };
+  form.querySelector('#lb-stock').onclick = () => { form.querySelectorAll('[data-qty]').forEach((i) => { const d = goods.find((x) => x.id === Number(i.dataset.qty)); i.value = Math.max(0, Math.min(500, d.stock || 0)); }); sum(); };
+  form.querySelector('#lb-none').onclick = () => { form.querySelectorAll('[data-qty]').forEach((i) => { i.value = 0; }); sum(); };
+  form.addEventListener('input', sum);
+  sum();
+}
+function printLabels(list, fmtKey, withPrice) {
+  const f = LABEL_FORMATS()[fmtKey] || LABEL_FORMATS().t58;
+  const w = window.open('', '_blank');
+  if (!w) return toast(t("Brauzer yangi oynani to'sib qo'ydi — ruxsat bering"), 'warn');
+  const shop = App.settings.name || '';
+  const label = (d) => `<div class="l">
+      <div class="s">${esc(shop)}</div><div class="n">${esc(d.name)}</div>${variantOf(d) ? `<div class="v">${esc(variantOf(d))}</div>` : ''}
+      ${withPrice ? `<div class="p">${num(d.price)} <small>${esc(App.settings.currency || "so'm")}</small></div>` : ''}
+      <div class="b">${ean13Svg(d.barcode)}</div><div class="code">${esc(d.barcode || '')}</div></div>`;
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(t('Yorliqlar'))}</title><style>
+    @page { size: ${f.page}; margin: 0; } * { box-sizing: border-box; } body { margin: 0; font-family: Arial, sans-serif; color: #000; }
+    .wrap { ${f.grid ? 'display: grid; grid-template-columns: repeat(3, 70mm); grid-auto-rows: 37.1mm; width: 210mm;' : ''} }
+    .l { width: ${f.w}; height: ${f.h}; padding: ${f.small ? '1.2mm 1.5mm' : '2mm 2.5mm'}; display: flex; flex-direction: column; overflow: hidden; ${f.grid ? 'break-inside: avoid;' : 'page-break-after: always;'} }
+    .s { font-size: ${f.small ? 5.5 : 6.5}pt; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .n { font-size: ${f.small ? 7.5 : 9}pt; font-weight: 700; line-height: 1.15; max-height: 2.3em; overflow: hidden; }
+    .v { font-size: ${f.small ? 6.5 : 7.5}pt; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .p { font-size: ${f.small ? 10 : 13}pt; font-weight: 800; margin-top: .3mm; } .p small { font-size: 60%; font-weight: 600; }
+    .b { margin-top: auto; height: ${f.small ? 8 : 11}mm; padding: 0 2mm; } .b svg { width: 100%; height: 100%; display: block; }
+    .code { font-size: ${f.small ? 6.5 : 8}pt; letter-spacing: 1.5px; text-align: center; line-height: 1.2; }
+  </style></head><body><div class="wrap">${list.map(label).join('')}</div><script>window.onload = () => setTimeout(() => window.print(), 300);<\/script></body></html>`);
+  w.document.close();
 }
