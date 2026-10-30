@@ -107,6 +107,7 @@ async function taskDialog(x = null, reload = refreshView, preset = {}) {
 // ---------- "Bugun" ----------
 Views.today = {
   title: () => t('Bugun'), icon: () => 'sun', roles: ['owner', 'admin', 'cashier', 'waiter', 'chef'], badge: 'tasks', refreshOn: ['tasks', 'jobs', 'finance', 'menu'],
+  on: () => isDoors(),
   async load() { return GET('/api/today'); },
   render(d) {
     const tk = d.tasks;
@@ -162,21 +163,7 @@ Views.today = {
 };
 
 // A running cost written in two taps (rent, electricity, a lunch for the helper).
-function quickExpense() {
-  const cats = (App.settings.expense_categories || []).filter((c) => c !== 'Mahsulotlar');
-  openModal({
-    title: `${icon('wallet')} ${t('Xarajat')}`,
-    body: `<div class="cat-pick">${cats.map((c, i) => `<label class="pill"><input type="radio" name="category" value="${esc(c)}" ${i === 0 ? 'checked' : ''}><span>${esc(c)}</span></label>`).join('')}</div>
-      <div class="form-grid" style="margin-top:12px"><label class="field">${t('Summa')}<input type="number" name="amount" min="1" required></label>
-        <label class="field">${t("To'lov turi")}<select name="method">${['cash', 'card', 'transfer'].map((m) => `<option value="${m}">${methodName(m)}</option>`).join('')}</select></label></div>
-      <label class="field" style="margin-top:12px">${t('Izoh')}<input name="note" maxlength="300"></label>`,
-    actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: 'primary', icon: 'check', onClick: async (f) => {
-      const d = formData(f);
-      await POST('/api/transactions', { type: 'expense', category: d.category, amount: Number(d.amount), method: d.method, note: d.note });
-      toast(t('Xarajat yozildi'), 'ok'); refreshView();
-    } }],
-  });
-}
+function quickExpense() { openTransaction('expense'); }
 
 // ---------- "Mol keldi": goods from a supplier, freight spread over them ----------
 async function purchaseDialog(preset = null) {
@@ -719,10 +706,14 @@ async function telegramSettingsHtml() {
   const s = await GET('/api/telegram');
   return { s, html: `<div class="card" style="max-width:640px">
       <h3 style="margin-top:0">${icon('send', 18)} ${t('Telegram eslatmalar')}</h3>
-      <p class="muted">${t("Har kuni ertalab soat 8 da bugungi ishlaringiz Telegramingizga keladi. Vaqti belgilangan ish (masalan, 15:00 o'rnatish) dan 1 soat oldin ham eslatadi.")}</p>
+      <p class="muted">${t('Har kuni kechqurun kunlik hisobot keladi: savdo, xarajat, eng ko\'p sotilgan taomlar, ochiq cheklar.')}
+        ${isDoors() ? t("Ertalab soat 8 da bugungi ishlaringiz keladi, vaqti belgilangan ishdan 1 soat oldin ham eslatadi.") : t("To'lov kuni kelgan doimiy xarajatlar (ijara, svet…) haqida ertalab eslatadi.")}</p>
       ${!s.bot_ready ? `<div class="notice">${icon('info', 18)} ${t('Hozircha mavjud emas — FLOWI yordamiga yozing.')}</div>`
         : s.linked ? `<p>${icon('circle-check', 18)} <b>${t('Ulangan')}</b>${s.chat_title ? `: ${esc(s.chat_title)}` : ''}</p>
-          <div class="row" style="gap:8px"><button class="btn" id="tg-test">${icon('send', 16)} ${t('Sinov xabari')}</button><button class="btn danger" id="tg-off">${icon('x', 16)} ${t('Uzish')}</button></div>`
+          <div class="form-grid" style="margin:12px 0"><label class="field">${t('Kunlik hisobot vaqti')}<select id="tg-time">
+            ${['', '20:00', '21:00', '22:00', '22:30', '23:00', '23:30'].map((x) => `<option value="${x}" ${(s.report_time ?? '23:00') === x ? 'selected' : ''}>${x || t("Yubormaslik")}</option>`).join('')}</select></label></div>
+          <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" id="tg-report">${icon('chart-column', 16)} ${t('Hisobotni hozir yuborish')}</button>
+            <button class="btn" id="tg-test">${icon('send', 16)} ${t('Sinov xabari')}</button><button class="btn danger" id="tg-off">${icon('x', 16)} ${t('Uzish')}</button></div>`
         : s.link_code ? `<a class="btn primary" href="https://t.me/${esc(s.bot)}?start=${esc(s.link_code)}" target="_blank" rel="noopener">${icon('send', 18)} ${t('Telegramni ochish va ulash')}</a>
           <p class="small muted">${t('Telegram ochilgach "Start" ni bosing. Ishlamasa, botga shu xabarni yozing')}: <b>/start ${esc(s.link_code)}</b></p>
           <button class="btn sm" id="tg-check">${icon('refresh-cw', 16)} ${t('Ulandimi? Tekshirish')}</button>`
@@ -734,6 +725,9 @@ function bindTelegramSettings(root) {
   a('#tg-check', async () => { refreshView(); });
   a('#tg-test', async () => { await POST('/api/telegram/test'); toast(t('Yuborildi — Telegramni tekshiring'), 'ok'); });
   a('#tg-off', async () => { await DEL('/api/telegram'); refreshView(); });
+  a('#tg-report', async () => { await POST('/api/telegram/report'); toast(t('Yuborildi — Telegramni tekshiring'), 'ok'); });
+  const tm = root.querySelector('#tg-time');
+  if (tm) tm.onchange = async () => { try { await PUT('/api/telegram/report', { time: tm.value }); toast(t('Saqlandi'), 'ok'); } catch (e) { toastError(e); } };
 }
 
 // ---------- Barcode labels ----------

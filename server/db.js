@@ -203,8 +203,8 @@ const DEFAULT_SETTINGS = {
   receipt_footer: 'Xaridingiz uchun rahmat! Yana kutib qolamiz.',
   receipt_width: '80',
   expense_categories: JSON.stringify([
-    'Mahsulotlar', 'Ish haqi', 'Ijara', 'Kommunal', "Go'sht", 'Sabzavot', 'Ichimliklar',
-    'Gaz', 'Transport', "Ta'mirlash", 'Soliq', 'Boshqa',
+    'Mahsulotlar', "Go'sht", 'Sabzavot', 'Ichimliklar', 'Ish haqi', 'Ijara', 'Svet', 'Gaz', 'Suv',
+    'Soliq', 'Reklama', 'Transport', "Ta'mirlash", 'Boshqa',
   ]),
   income_categories: JSON.stringify(['Banket avansi', 'Boshqa kirim']),
   // Waiters may cancel a sent dish only if the boss allows it, and only with the boss's cancel code.
@@ -677,6 +677,44 @@ CREATE INDEX IF NOT EXISTS idx_work_day ON work_log(day, user_id);
 `);
   // Until when a worker's phone counts as being inside the business (a GPS check or a cashier's confirmation).
   addCol('sessions', 'geo_until', 'INTEGER');
+  // Workers who never open the program (a tandir baker, a dishwasher, a guard): on the staff list and the payroll only.
+  addCol('users', 'app', 'INTEGER NOT NULL DEFAULT 1');
+  addCol('users', 'position', "TEXT NOT NULL DEFAULT ''");
+  // Hourly pay (from the "I came / I left" times) needs a new pay type: the table is rebuilt once, rows kept.
+  const rateSql = (db.prepare("SELECT sql FROM sqlite_master WHERE name = 'pay_rates'").get() || {}).sql || '';
+  if (rateSql && !rateSql.includes("'hourly'")) {
+    try {
+    db.exec(`BEGIN;
+      CREATE TABLE pay_rates_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        pay_type TEXT NOT NULL CHECK (pay_type IN ('monthly','daily','hourly','none')),
+        amount INTEGER NOT NULL DEFAULT 0,
+        sales_pct REAL NOT NULL DEFAULT 0,
+        from_day TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      INSERT INTO pay_rates_new (id, user_id, pay_type, amount, sales_pct, from_day, created_at)
+        SELECT id, user_id, pay_type, amount, sales_pct, from_day, created_at FROM pay_rates;
+      DROP TABLE pay_rates;
+      ALTER TABLE pay_rates_new RENAME TO pay_rates;
+      CREATE INDEX IF NOT EXISTS idx_pay_rates_user ON pay_rates(user_id, from_day);
+      COMMIT;`);
+    } catch (e) { try { db.exec('ROLLBACK'); } catch { /* not in a transaction */ } throw e; }
+  }
+  // Monthly costs (rent, electricity, tax, advertising): a list with the day they are due; paying one writes it to the cash book.
+  db.exec(`CREATE TABLE IF NOT EXISTS fixed_costs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    amount INTEGER NOT NULL DEFAULT 0,
+    due_day INTEGER NOT NULL DEFAULT 1,
+    variable INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL
+  )`);
+  addCol('transactions', 'fixed_id', 'INTEGER');
+  addCol('transactions', 'fixed_month', 'TEXT');
   const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
   if (!orderCols.includes('service_type')) db.exec("ALTER TABLE orders ADD COLUMN service_type TEXT NOT NULL DEFAULT 'percent'");
   if (!orderCols.includes('takeaway')) db.exec('ALTER TABLE orders ADD COLUMN takeaway INTEGER NOT NULL DEFAULT 0');

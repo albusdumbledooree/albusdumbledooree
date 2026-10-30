@@ -249,6 +249,12 @@ async function telegramDialog() {
       <p>Bot: <b>@${esc(st.bot)}</b> → <b>${esc(st.chat_title || st.chat_id)}</b> ✅</p>
       <p class="small muted">Yangi ariza kelganda shu chatga xabar keladi. Xabar ostidagi tugmalar ("Qo'ng'iroq qilindi", "Ulandi", "Rad etildi") holatni platformada ham o'zgartiradi.
         Bu tugmalarni faqat shu chat bosa oladi.</p>
+      <div class="card" style="margin-top:10px"><label class="check"><input type="checkbox" id="tg-backup" ${st.backup && st.backup.on ? 'checked' : ''}>
+        <b>Har kecha zaxirani shu chatga yuborish</b></label>
+        <p class="small muted" style="margin:6px 0 0">Soat 3 dan keyin har bir biznes fayli (siqilgan .db.gz) shu chatga keladi. Server buzilsa ham ma'lumot Telegramda qoladi.
+          ${st.backup && st.backup.at ? `<br>Oxirgi: <b>${fmtDateTime(st.backup.at)}</b> — ${st.backup.sent} ta fayl` : ''}</p>
+        ${st.backup && st.backup.error ? `<div class="notice red slim">${icon('triangle-alert', 16)} ${esc(st.backup.error)}</div>` : ''}
+        <button type="button" class="btn sm" id="tg-backup-now" style="margin-top:8px">${icon('database', 16)} Hozir yuborish</button></div>
       ${st.error ? `<div class="notice red">${icon('triangle-alert', 16)} ${esc(st.error)}</div>` : ''}`;
   const form = openModal({
     title: `${icon('send')} Telegram bot — arizalar`,
@@ -265,6 +271,14 @@ async function telegramDialog() {
         { label: 'Sinov xabari', cls: 'primary', icon: 'send', onClick: async () => { await POST('/api/platform/telegram/test'); toast('Yuborildi — Telegramni tekshiring', 'ok'); return false; } }]
         : [{ label: 'Yopish', onClick: () => {} }])],
   });
+  const bk = form.querySelector('#tg-backup');
+  if (bk) bk.onchange = async () => { try { await PUT('/api/platform/telegram/backup', { on: bk.checked }); toast(bk.checked ? 'Yoqildi' : "O'chirildi", 'ok'); } catch (e) { toastError(e); } };
+  const bn = form.querySelector('#tg-backup-now');
+  if (bn) bn.onclick = async () => {
+    bn.disabled = true;
+    try { const r = await POST('/api/platform/telegram/backup'); toast(`Yuborildi: ${r.sent} ta fayl${r.failed.length ? ` · xato: ${r.failed.length}` : ''}`, r.failed.length ? 'warn' : 'ok'); telegramDialog(); }
+    catch (e) { toastError(e); bn.disabled = false; }
+  };
   if (st.configured && !st.chat_id) {
     // Wait for the code from Telegram, then show the linked state.
     const tick = async () => {

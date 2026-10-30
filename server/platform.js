@@ -7,6 +7,8 @@
  * - Session tokens of a choyxona start with "t<id>_", platform tokens with "p_".
  */
 const fs = require('node:fs');
+const os = require('node:os');
+const zlib = require('node:zlib');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 const { open } = require('./db');
@@ -58,12 +60,12 @@ const CODE_RE = /^[a-z0-9][a-z0-9-]{1,30}$/;
  * the three keys stay. max_staff 0 = no limit. A lower plan never deletes anything: it only stops adding more.
  */
 const PLAN_KEYS = ['start', 'biznes', 'pro'];
-const BIZ_MODULES = ['stoplist', 'reports', 'finance', 'payroll', 'reservations', 'history', 'audit', 'export', 'qrmenu', 'qrorder', 'debts'];
+const BIZ_MODULES = ['stoplist', 'reports', 'finance', 'payroll', 'reservations', 'history', 'audit', 'export', 'qrmenu', 'qrorder', 'debts', 'pnl'];
 const PRO_MODULES = [...BIZ_MODULES, 'customers', 'inventory', 'branches'];
 // A section moved into a plan after the plans were saved; each is applied once (the owner may take it out again).
-const PLAN_ADDITIONS = [['biznes', 'debts']];
+const PLAN_ADDITIONS = [['biznes', 'debts'], ['start', 'finance']];
 const DEFAULT_PLANS = {
-  start: { name: 'Start', price: 199000, max_staff: 5, devices_per_staff: 1, modules: ['stoplist', 'reports', 'history', 'qrmenu'] },
+  start: { name: 'Start', price: 199000, max_staff: 5, devices_per_staff: 1, modules: ['stoplist', 'reports', 'finance', 'history', 'qrmenu'] },
   biznes: { name: 'Biznes', price: 349000, max_staff: 15, devices_per_staff: 1, modules: BIZ_MODULES },
   pro: { name: 'Pro', price: 599000, max_staff: 0, devices_per_staff: 0, modules: PRO_MODULES },
 };
@@ -184,12 +186,30 @@ function createPlatform(dataDir) {
   pdb.exec(`CREATE TABLE IF NOT EXISTS tenant_telegram (
     tenant_id INTEGER PRIMARY KEY, chat_id TEXT, chat_title TEXT NOT NULL DEFAULT '', link_code TEXT, linked_at INTEGER, digest_day TEXT NOT NULL DEFAULT ''
   )`);
+  // The evening report: when (HH:MM, '' = off) and the day it was last sent.
+  const ttCols = q('PRAGMA table_info(tenant_telegram)').all().map((c) => c.name);
+  if (!ttCols.includes('report_time')) pdb.exec("ALTER TABLE tenant_telegram ADD COLUMN report_time TEXT NOT NULL DEFAULT '23:00'");
+  if (!ttCols.includes('report_day')) pdb.exec("ALTER TABLE tenant_telegram ADD COLUMN report_day TEXT NOT NULL DEFAULT ''");
   const tgRow = (id) => q('SELECT * FROM tenant_telegram WHERE tenant_id = ?').get(id);
   function telegramFor(id) {
     return {
       status() {
         const r = tgRow(id) || {};
-        return { bot_ready: leads.ready(), bot: leads.botName(), linked: !!r.chat_id, chat_title: r.chat_title || '', link_code: r.chat_id ? '' : r.link_code || '' };
+        return { bot_ready: leads.ready(), bot: leads.botName(), linked: !!r.chat_id, chat_title: r.chat_title || '', link_code: r.chat_id ? '' : r.link_code || '',
+          report_time: r.report_time ?? '23:00' };
+      },
+      setReport(time) {
+        const t = String(time ?? '').trim();
+        if (t && !/^([01]\d|2[0-3]):[0-5]\d$/.test(t)) throw new HttpError(400, "Vaqt 23:00 ko'rinishida bo'lsin");
+        q(`INSERT INTO tenant_telegram (tenant_id, report_time) VALUES (?, ?) ON CONFLICT(tenant_id) DO UPDATE SET report_time = excluded.report_time`).run(id, t);
+        return this.status();
+      },
+      async report() {
+        const r = tgRow(id);
+        if (!r || !r.chat_id) throw new HttpError(400, 'Avval Telegramni ulang');
+        const ctx = context(id);
+        await leads.sendTo(r.chat_id, ctx.api.eveningText());
+        return { ok: true };
       },
       link() {
         if (!leads.ready()) throw new HttpError(409, "Platforma boti hali ulanmagan — FLOWI yordamiga yozing");
@@ -215,7 +235,7 @@ function createPlatform(dataDir) {
     q('UPDATE tenant_telegram SET chat_id = ?, chat_title = ?, link_code = NULL, linked_at = ? WHERE tenant_id = ?').run(String(msg.chat.id), title, now(), r.tenant_id);
     const ctx = context(r.tenant_id);
     if (ctx) ctx.hub.publish('settings');
-    return `✅ Ulandi: ${ctx ? ctx.api.settings().name : ''}. Har kuni ertalab soat 8 da bugungi ishlaringiz shu yerga keladi, vaqti belgilangan ishdan 1 soat oldin eslatma ham keladi.`;
+    return `✅ Ulandi: ${ctx ? ctx.api.settings().name : ''}. Har kuni kechqurun kunlik hisobot (savdo, xarajat, foyda) shu yerga keladi; to'lov kuni kelgan xarajatlar va ishlar haqida ertalab eslatma ham keladi.`;
   });
   let tgBusy = false;
   async function remindTick({ forceMorning = false } = {}) {
@@ -230,15 +250,66 @@ function createPlatform(dataDir) {
         try {
           if (morning && r.digest_day !== day) {
             q('UPDATE tenant_telegram SET digest_day = ? WHERE tenant_id = ?').run(day, r.tenant_id);
-            await leads.sendTo(r.chat_id, ctx.api.morningText());
+            // A choyxona gets a morning message only when something is due (a door shop: its list of tasks every day).
+            const text = ctx.api.morningText();
+            if (text) await leads.sendTo(r.chat_id, text);
+          }
+          const d = new Date(now());
+          const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+          if (r.report_time && hm >= r.report_time && r.report_day !== day) {
+            q('UPDATE tenant_telegram SET report_day = ? WHERE tenant_id = ?').run(day, r.tenant_id);
+            await leads.sendTo(r.chat_id, ctx.api.eveningText());
           }
           for (const text of ctx.api.soonTexts()) await leads.sendTo(r.chat_id, text);
         } catch (e) { console.error(`Telegram eslatma (${ctx.row.code}): ${e.message}`); }
       }
     } finally { tgBusy = false; }
   }
-  const remindTimer = setInterval(() => { remindTick().catch(() => {}); }, 5 * 60 * 1000);
+  const remindTimer = setInterval(() => { remindTick().catch(() => {}); tgBackupTick().catch(() => {}); }, 5 * 60 * 1000);
   remindTimer.unref();
+
+  // ---------- Every night a copy of every business goes to the platform owner's Telegram ----------
+  // The daily copies on the server are lost with the server's disk; a copy in Telegram is not.
+  function backupState() { try { return JSON.parse(pget('tg_backup', '{}')) || {}; } catch { return {}; } }
+  let backupBusy = false;
+  async function sendBackups() {
+    const chat = leads.ownerChat();
+    if (!chat) throw new HttpError(400, 'Avval botni chatga ulang');
+    if (backupBusy) throw new HttpError(409, 'Zaxira hozir yuborilmoqda');
+    backupBusy = true;
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'flowi-tg-'));
+    const sent = []; const failed = [];
+    try {
+      const stamp = stampNow();
+      const files = [['platform', path.join(dataDir, 'platform.db')], ...q('SELECT code, file FROM tenants ORDER BY id').all().map((t) => [t.code, path.join(dataDir, t.file)])];
+      for (const [code, file] of files) {
+        if (!fs.existsSync(file)) continue;
+        try {
+          const out = snapshot(file, path.join(tmp, `${code}.db`));
+          const gz = zlib.gzipSync(fs.readFileSync(out), { level: 9 });
+          if (gz.length > 49 * 1024 * 1024) { failed.push(`${code}: juda katta (${Math.round(gz.length / 1048576)} MB)`); continue; }
+          await leads.sendFile(chat, `flowi-${code}-${stamp}.db.gz`, gz, `💾 <b>${code}</b> · ${stamp.slice(0, 16).replace(/-(\d\d)-(\d\d)$/, ' $1:$2')} · ${Math.max(1, Math.round(gz.length / 1024))} KB`);
+          sent.push(code);
+        } catch (e) { failed.push(`${code}: ${e.message}`); }
+      }
+    } finally { fs.rmSync(tmp, { recursive: true, force: true }); backupBusy = false; }
+    const st = { ...backupState(), at: now(), sent: sent.length, error: failed.join('; ') };
+    pset('tg_backup', JSON.stringify(st));
+    if (failed.length) console.error('Telegram zaxira:', st.error);
+    return { sent: sent.length, failed };
+  }
+  // Once a night, after 3:00 (quiet hours), unless switched off.
+  async function tgBackupTick() {
+    const st = backupState();
+    if (st.off || !leads.ownerChat() || backupBusy) return;
+    const d = new Date(now());
+    const day = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+    if (d.getHours() < 3 || st.day === day) return;
+    pset('tg_backup', JSON.stringify({ ...st, day }));
+    await sendBackups();
+  }
+  function backupStatus() { const st = backupState(); return { on: !st.off, at: st.at || null, sent: st.sent || 0, error: st.error || '' }; }
+  function setBackup({ body }) { pset('tg_backup', JSON.stringify({ ...backupState(), off: !body.on })); return backupStatus(); }
 
   function supportInput(v) {
     const o = v && typeof v === 'object' ? v : {};
@@ -623,7 +694,9 @@ function createPlatform(dataDir) {
     ['PUT', '/api/platform/plans', true, savePlans],
     ['GET', '/api/platform/leads', true, leads.list],
     ['PUT', '/api/platform/leads/:id', true, leads.update],
-    ['GET', '/api/platform/telegram', true, leads.botStatus],
+    ['GET', '/api/platform/telegram', true, () => ({ ...leads.botStatus(), backup: backupStatus() })],
+    ['PUT', '/api/platform/telegram/backup', true, setBackup],
+    ['POST', '/api/platform/telegram/backup', true, () => sendBackups()],
     ['PUT', '/api/platform/telegram', true, leads.setToken],
     ['POST', '/api/platform/telegram/relink', true, leads.relink],
     ['POST', '/api/platform/telegram/test', true, leads.test],
@@ -652,7 +725,7 @@ function createPlatform(dataDir) {
     pdb.close();
   }
 
-  return { handle, byCode, byToken, byGuestKey, remindTick, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, submitLead: leads.submit };
+  return { handle, byCode, byToken, byGuestKey, remindTick, tgBackupTick, sendBackups, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, submitLead: leads.submit };
 }
 
 module.exports = { createPlatform };

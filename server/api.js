@@ -6,7 +6,8 @@ const { hashPassword, verifyPassword, newToken, HttpError, str, int } = require(
 const { createPro } = require('./pro');
 const { createGuest } = require('./guest');
 const { createTasks } = require('./tasks');
-const { createShop } = require('./shop');
+const { createShop, SYSTEM_CATS } = require('./shop');
+const { createMoney, GROUP_KEYS } = require('./money');
 const { createPayroll } = require('./payroll');
 const { createWork, STAFF_ROLES } = require('./work');
 const { snapshot } = require('./backup');
@@ -41,6 +42,7 @@ const MODULES = {
   branches: 'Filiallar hisoboti',
   qrmenu: 'QR-menyu (mijoz telefonida)',
   qrorder: "QR orqali buyurtma va chaqiruv",
+  pnl: 'Sof foyda hisoboti (oylik)',
 };
 // On/off switches of the place features: staff only inside, "I came" with GPS / the desk's QR / a selfie, guest orders only inside.
 const GEO_FLAGS = ['geo_staff', 'att_clock', 'att_gps', 'att_qr', 'att_selfie', 'qr_geo', 'qr_busy'];
@@ -48,6 +50,8 @@ function routeModule(pattern) {
   if (/^\/api\/(kitchen|items\/:id\/(accept|ready))$/.test(pattern)) return 'kitchen';
   if (pattern === '/api/dishes/:id/availability') return 'stoplist';
   if (pattern === '/api/reports' || pattern === '/api/dashboard' || pattern === '/api/profit') return 'reports';
+  if (pattern === '/api/pnl') return 'pnl';
+  if (/^\/api\/fixed-costs/.test(pattern)) return 'finance';
   if (/^\/api\/(transactions|shifts)/.test(pattern)) return 'finance';
   if (/^\/api\/(payroll|my\/payroll|attendance)/.test(pattern)) return 'payroll';
   if (/^\/api\/reservations/.test(pattern)) return 'reservations';
@@ -83,6 +87,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     geo: (body) => work.where(work.posInput(body)),
   });
 
+  // Expense groups, fixed monthly costs and the month's profit and loss.
+  const money = createMoney(db, { settings: () => settings(), audit, events: hub, now, payroll, payrollOn: () => moduleOn('payroll'),
+    isShop: () => SHOP_TYPES.includes(businessType()), shop, SYSTEM_CATS });
   // Work hours, GPS and the cash desk's attendance QR code (all optional, switched on in the settings).
   const work = createWork(db, { settings: () => settings(), audit, events: hub, now });
 
@@ -132,6 +139,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     if (!out.room_types.length) out.room_types = DEFAULT_ROOM_TYPES;
     out.expense_categories = JSON.parse(out.expense_categories || '[]');
     out.income_categories = JSON.parse(out.income_categories || '[]');
+    try { out.expense_groups = JSON.parse(out.expense_groups || '{}') || {}; } catch { out.expense_groups = {}; }
     // The business on the map and what it is used for.
     out.geo_lat = out.geo_lat ? Number(out.geo_lat) : null;
     out.geo_lng = out.geo_lng ? Number(out.geo_lng) : null;
@@ -151,7 +159,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   }
 
   function publicUser(u) {
-    return { id: u.id, name: u.name, username: u.username, role: u.role, phone: u.phone, active: u.active,
+    return { id: u.id, name: u.name, username: u.username, role: u.role, phone: u.phone, active: u.active, app: u.app ?? 1, position: u.position || '',
       has_pin: !!u.pin_hash, perm_print: u.perm_print, perm_close: u.perm_close, perms: perms(u) };
   }
 
@@ -191,7 +199,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     if (f && f.count >= 8 && now() - f.first < 10 * MIN) {
       throw new HttpError(429, "Juda ko'p urinish. 10 daqiqadan keyin qayta urinib ko'ring");
     }
-    const user = q('SELECT * FROM users WHERE username = ? AND active = 1').get(username);
+    const user = q('SELECT * FROM users WHERE username = ? AND active = 1 AND app = 1').get(username);
     if (!user || !verifyPassword(password, user.pass_hash)) {
       const fresh = !f || now() - f.first >= 10 * MIN;
       failures.set(key, fresh ? { count: 1, first: now() } : { ...f, count: f.count + 1 });
@@ -260,7 +268,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   function deviceStaff() {
     const order = { owner: 0, admin: 1, cashier: 2, waiter: 3, chef: 4 };
-    return q('SELECT * FROM users WHERE active = 1').all()
+    return q('SELECT * FROM users WHERE active = 1 AND app = 1').all()
       .sort((a, b) => order[a.role] - order[b.role] || a.name.localeCompare(b.name))
       .map((u) => ({ id: u.id, name: u.name, role: u.role, has_pin: !!u.pin_hash || MANAGERS.includes(u.role),
         open: !u.pin_hash && MANAGERS.includes(u.role) }));
@@ -274,7 +282,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const f = pinFailures.get(key);
     const { pin_lock_attempts: tries, pin_lock_minutes: mins } = settings();
     if (tries > 0 && f && f.count >= tries && now() - f.first < mins * MIN) throw new HttpError(429, `Juda ko'p xato. ${mins} daqiqadan keyin urinib ko'ring`);
-    const user = q('SELECT * FROM users WHERE id = ? AND active = 1').get(id);
+    const user = q('SELECT * FROM users WHERE id = ? AND active = 1 AND app = 1').get(id);
     if (!user) throw new HttpError(404, 'Xodim topilmadi');
     // Boss and admin enter without a password until they set a desktop password (the screen keeps reminding them).
     if (!user.pin_hash && MANAGERS.includes(user.role)) return startSession(user, 'pin_login');
@@ -322,7 +330,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return off;
   }
 
-  const staffCount = () => q("SELECT COUNT(*) c FROM users WHERE active = 1 AND role != 'owner'").get().c;
+  // Only people who use the program count towards the plan; workers kept just for pay (app = 0) are free.
+  const staffCount = () => q("SELECT COUNT(*) c FROM users WHERE active = 1 AND role != 'owner' AND app = 1").get().c;
   // Adding (or switching back on) one more worker must fit the plan; the people already there are never touched.
   function assertStaffRoom() {
     const p = plan();
@@ -366,7 +375,15 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return out;
   }
   // The owner's Telegram: the morning list and a reminder an hour before a task with a time.
+  // The morning message: a door shop's list of tasks every day; other businesses only when a fixed cost is due.
   function morningText() {
+    const due = money.fixedDue();
+    const dueLines = due.map((x) => `• ${esc(x.name)} — ${shop.money(x.amount)} so'm${x.overdue ? ` (${shop.fmtDate(x.due_at)} edi)` : ''}`);
+    if (businessType() !== 'doors') {
+      if (!due.length) return null;
+      return [`☀️ <b>${esc(settings().name)}</b>`, '', `💳 <b>To'lov kuni keldi (${due.length}):</b>`, ...dueLines,
+        '', "To'langanda dasturda Moliya → Doimiy xarajatlar → \"To'landi\" ni bosing."].join('\n');
+    }
     const d = tasks.digest();
     const s = settings();
     const t0 = tasks.startOfDay(now());
@@ -378,6 +395,29 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     if (y.sales) out.push('', `💰 Kecha: savdo <b>${shop.money(y.revenue)}</b> so'm${SHOP_TYPES.includes(businessType()) ? `, sof foyda <b>${shop.money(y.net)}</b> so'm` : ''} (${y.sales} ta chek)`);
     const low = SHOP_TYPES.includes(businessType()) ? shop.lowStock() : [];
     if (low.length) out.push('', `⚠️ Kam qoldi: ${low.slice(0, 8).map((x) => `${esc(x.name)} (${x.stock})`).join(', ')}`);
+    if (due.length) out.push('', `💳 <b>To'lov kuni keldi:</b>`, ...dueLines);
+    return out.join('\n');
+  }
+  // The evening report: today's sales, costs, what is left in the till, the best sellers and open checks.
+  function eveningText() {
+    const s = settings();
+    const t0 = tasks.startOfDay(now());
+    const n = money.dayNumbers(t0, now());
+    const m = (v) => `${shop.money(v)} so'm`;
+    const d = new Date(now());
+    const months = ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr'];
+    const out = [`🌙 <b>${esc(s.name)} — kunlik hisobot</b>`, `${d.getDate()}-${months[d.getMonth()]}`, ''];
+    out.push(`💰 Savdo: <b>${m(n.revenue)}</b> (${n.checks} ta chek${n.guests ? `, ${n.guests} mehmon` : ''})`);
+    const names = { cash: 'Naqd', card: 'Karta', transfer: "O'tkazma" };
+    const ways = Object.entries(n.methods).filter(([, v]) => v).map(([k, v]) => `${names[k] || k} ${shop.money(v)}`);
+    if (ways.length) out.push(`    ${ways.join(' · ')}`);
+    out.push(`💸 Xarajat: <b>${m(n.expense)}</b>`);
+    out.push(`📈 Farq (savdo − xarajat): <b>${m(n.revenue - n.expense)}</b>`);
+    if (n.top.length) out.push('', `🍽 Eng ko'p: ${n.top.map((x) => `${esc(x.name)} (${x.qty})`).join(', ')}`);
+    if (n.open_checks) out.push('', `⚠️ Ochiq cheklar: ${n.open_checks} ta — ${m(n.open_sum)}`);
+    const due = money.fixedDue();
+    if (due.length) out.push('', `💳 To'lanmagan: ${due.map((x) => `${esc(x.name)} ${shop.money(x.amount)}`).join(', ')}`);
+    if (!n.checks && !n.expense) out.push('', 'Bugun savdo va xarajat yozilmagan.');
     return out.join('\n');
   }
   function soonTexts() {
@@ -428,7 +468,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width',
       'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo',
       'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', 'cashback_pct', 'qr_order', 'qr_from', 'qr_to',
-      'geo_lat', 'geo_lng', 'geo_radius', 'work_from', ...GEO_FLAGS, ...OWNER_SETTINGS];
+      'geo_lat', 'geo_lng', 'geo_radius', 'work_from', 'expense_groups', ...GEO_FLAGS, ...OWNER_SETTINGS];
     if (user.role !== 'owner' && OWNER_SETTINGS.some((k) => body[k] !== undefined)) throw new HttpError(403, "Moliya huquqlarini faqat boshliq o'zgartiradi");
     const set = q('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     for (const k of allowed) {
@@ -465,6 +505,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
         if (v && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(v)) throw new HttpError(400, "Vaqt 09:00 ko'rinishida bo'lsin");
       }
       if (k === 'lock_bg') v = JSON.stringify(lockBgInput(v));
+      if (k === 'expense_groups') {
+        const o = v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+        v = JSON.stringify(Object.fromEntries(Object.entries(o).filter(([c, g]) => typeof c === 'string' && c.length <= 60 && GROUP_KEYS.includes(g)).slice(0, 200)));
+      }
       if (k === 'service_pct') {
         v = Number(v);
         if (!(v >= 0 && v <= 50)) throw new HttpError(400, "Xizmat haqi 0–50% oralig'ida bo'lsin");
@@ -579,15 +623,18 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   }
 
   function createUser({ user, body }) {
+    // A worker who never opens the program: a name, a job title and pay only; no login, no PIN, not counted in the plan.
+    const noApp = body.app === false || body.app === 0;
+    if (noApp) body = { ...body, role: 'chef', username: '', password: '', pin: '' };
     const role = str(body.role, 'Lavozim', { required: true });
     if (!ROLES.includes(role)) throw new HttpError(400, "Lavozim noto'g'ri");
     if (!canManageRole(user, role)) throw new HttpError(403, `Sizda ${ROLE_NAMES[role]} tayinlash huquqi yo'q`);
-    if (role !== 'owner') assertStaffRoom();
+    if (role !== 'owner' && !noApp) assertStaffRoom();
     const name = str(body.name, 'Ism', { required: true, max: 80 });
     // Login and password are only needed for a worker's own phone; on shared devices the PIN is enough.
     let username = str(body.username, 'Login', { max: 40 });
     if (!username) {
-      const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 20) || 'xodim';
+      const base = (noApp ? 'x.' : '') + (name.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 20) || 'xodim');
       username = base;
       for (let n = 2; q('SELECT 1 FROM users WHERE username = ?').get(username); n++) username = `${base}${n}`;
     }
@@ -595,12 +642,13 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     if (password.length < 4) throw new HttpError(400, "Parol kamida 4 ta belgi bo'lsin");
     if (q('SELECT 1 FROM users WHERE username = ?').get(username)) throw new HttpError(409, 'Bu login band');
     const pin = body.pin ? pinHash(role, body.pin) : null;
-    const id = q(`INSERT INTO users (name, username, pass_hash, role, phone, salary, pin_hash, perm_print, perm_close, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    const position = str(body.position, 'Lavozim nomi', { max: 40 });
+    const id = q(`INSERT INTO users (name, username, pass_hash, role, phone, salary, pin_hash, perm_print, perm_close, app, position, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       name, username, hashPassword(password), role, str(body.phone, 'Telefon', { max: 30 }), int(body.salary, 'Maosh'), pin,
-      permInput(body.perm_print), permInput(body.perm_close), now()
+      permInput(body.perm_print), permInput(body.perm_close), noApp ? 0 : 1, position, now()
     ).lastInsertRowid;
-    audit(user, 'user_create', `${name} (${ROLE_NAMES[role]})`);
+    audit(user, 'user_create', `${name} (${noApp ? position || 'dasturga kirmaydi' : ROLE_NAMES[role]})`);
     return publicUser(q('SELECT * FROM users WHERE id = ?').get(id));
   }
 
@@ -622,14 +670,19 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       throw new HttpError(409, 'Bu login band');
     }
     const active = body.active === undefined ? target.active : body.active ? 1 : 0;
-    if (active && role !== 'owner' && !(target.active && target.role !== 'owner')) assertStaffRoom();
+    const app = body.app === undefined ? (target.app ?? 1) : body.app ? 1 : 0;
+    if (app === 0 && target.role === 'owner') throw new HttpError(400, "Boshliq dasturdan foydalanadi");
+    if (app === 0 && target.id === user.id) throw new HttpError(400, "O'zingizni dasturdan chiqara olmaysiz");
+    // Counted in the plan when they (start to) use the program.
+    const countedBefore = target.active && target.role !== 'owner' && (target.app ?? 1) === 1;
+    if (active && app && role !== 'owner' && !countedBefore) assertStaffRoom();
     // left_at stops monthly pay from accruing after the worker is switched off.
     const leftAt = active ? null : target.active ? now() : target.left_at;
-    q('UPDATE users SET name = ?, username = ?, role = ?, phone = ?, active = ?, left_at = ? WHERE id = ?').run(
+    q('UPDATE users SET name = ?, username = ?, role = ?, phone = ?, active = ?, left_at = ?, app = ?, position = ? WHERE id = ?').run(
       body.name !== undefined ? str(body.name, 'Ism', { required: true, max: 80 }) : target.name,
       username, role,
       body.phone !== undefined ? str(body.phone, 'Telefon', { max: 30 }) : target.phone,
-      active, leftAt, target.id
+      active, leftAt, app, body.position !== undefined ? str(body.position, 'Lavozim nomi', { max: 40 }) : target.position || '', target.id
     );
     if (body.password) {
       const pw = str(body.password, 'Parol');
@@ -639,7 +692,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     if (body.pin) q('UPDATE users SET pin_hash = ? WHERE id = ?').run(pinHash(role, body.pin), target.id);
     if (body.perm_print !== undefined) q('UPDATE users SET perm_print = ? WHERE id = ?').run(permInput(body.perm_print), target.id);
     if (body.perm_close !== undefined) q('UPDATE users SET perm_close = ? WHERE id = ?').run(permInput(body.perm_close), target.id);
-    if (!active || body.password || role !== target.role) {
+    if (!active || !app || body.password || role !== target.role) {
       q('DELETE FROM sessions WHERE user_id = ?').run(target.id);
       events.disconnectUser(target.id);
     }
@@ -737,7 +790,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   function kitchenLoad() {
     const pending = q("SELECT COUNT(*) c FROM order_items WHERE status = 'new' AND needs_kitchen = 1").get().c;
     const cooking = q("SELECT COUNT(*) c FROM order_items WHERE status = 'cooking'").get().c;
-    const chefs = Math.max(1, q("SELECT COUNT(*) c FROM users WHERE role = 'chef' AND active = 1").get().c);
+    const chefs = Math.max(1, q("SELECT COUNT(*) c FROM users WHERE role = 'chef' AND active = 1 AND app = 1").get().c);
     // Each chef handles a few dishes in parallel; waiting dishes add queue delay.
     const extra = Math.min(40, Math.round((pending * 3 + cooking) / (chefs * 2)));
     return { pending, cooking, chefs, extra_minutes: extra };
@@ -1445,6 +1498,19 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return q(sql + ' ORDER BY t.created_at DESC LIMIT 2000').all(...params);
   }
 
+  // A cost written down later ("yesterday I paid for meat"): that day at noon. Never in the future;
+  // older than two months only by the boss (closed months should not move under their feet).
+  function txDate(user, day) {
+    if (!day) return now();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(day))) throw new HttpError(400, "Sana noto'g'ri");
+    const d = new Date(`${day}T12:00:00`);
+    const today = new Date(now()); today.setHours(0, 0, 0, 0);
+    if (Number.isNaN(d.getTime()) || d.getTime() >= today.getTime() + 24 * 3600 * 1000) throw new HttpError(400, "Kelajakdagi sanaga yozib bo'lmaydi");
+    if (d.getTime() >= today.getTime()) return now();
+    if (user.role !== 'owner' && d.getTime() < today.getTime() - 62 * 24 * 3600 * 1000) throw new HttpError(403, "2 oydan eski sanaga faqat boshliq yoza oladi");
+    return d.getTime();
+  }
+
   function createTransaction({ user, body }) {
     const type = str(body.type, 'Turi', { required: true });
     if (!['income', 'expense'].includes(type)) throw new HttpError(400, "Turi noto'g'ri");
@@ -1452,8 +1518,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     if (!METHODS.includes(method)) throw new HttpError(400, "To'lov turi noto'g'ri");
     const amount = int(body.amount, 'Summa', { min: 1, required: true });
     const category = str(body.category, 'Kategoriya', { required: true, max: 60 });
+    const at = txDate(user, body.day);
     const id = q('INSERT INTO transactions (type, category, amount, method, note, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-      type, category, amount, method, str(body.note, 'Izoh', { max: 300 }), user.id, now()
+      type, category, amount, method, str(body.note, 'Izoh', { max: 300 }), user.id, at
     ).lastInsertRowid;
     audit(user, type === 'income' ? 'income_add' : 'expense_add', `${category}: ${amount}`);
     events.publish('finance');
@@ -1683,7 +1750,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   const LOCK_FREE = /^\/api\/(shifts\/(current|open|close)|my\/payroll|attendance(\/pay)?)$/;
 
   function guard(route, user, financeKey) {
-    const m = route.module;
+    const m = route.module === 'pnl' ? 'reports' : route.module;
     if (!user || !['reports', 'finance', 'payroll'].includes(m) || LOCK_FREE.test(route.pattern)) return;
     const access = moneyAccess(user);
     if (!access[m]) throw new HttpError(403, "Bu bo'limni ko'rishga boshliq ruxsat bermagan");
@@ -1700,7 +1767,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   function attendanceDay({ user, query }) {
     const d = payroll.dayView({ query });
     d.can_pay = canPayDaily(user);
-    if (!d.can_pay) d.staff = d.staff.map(({ id, name, role, status, auto }) => ({ id, name, role, status, auto }));
+    if (!d.can_pay) d.staff = d.staff.map(({ id, name, role, app, position, status, auto }) => ({ id, name, role, app, position, status, auto }));
     return d;
   }
   // A daily worker's pay handed over in the evening (an admin: at most what is left for that day).
@@ -1853,6 +1920,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['POST', '/api/telegram/link', ['owner'], tgApi('link')],
     ['POST', '/api/telegram/test', ['owner'], tgApi('test')],
     ['DELETE', '/api/telegram', ['owner'], tgApi('unlink')],
+    ['PUT', '/api/telegram/report', ['owner'], ({ user, body }) => { if (!telegram) throw new HttpError(404, 'Topilmadi'); return tgApi('status')({ user }) && telegram.setReport(body.time); }],
+    ['POST', '/api/telegram/report', ['owner'], tgApi('report')],
     ['GET', '/api/tasks', ALL, tasks.list],
     ['POST', '/api/tasks', ['owner', 'admin', 'cashier'], tasks.create],
     ['PUT', '/api/tasks/:id', MANAGERS, tasks.update],
@@ -1923,6 +1992,13 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['GET', '/api/payroll/users/:id', ['owner'], payroll.userLedger],
     ['GET', '/api/my/payroll', ALL, payroll.myPayroll],
     ['GET', '/api/attendance', MANAGERS, attendanceDay],
+    ['GET', '/api/expense-groups', MONEY, () => money.groups()],
+    ['GET', '/api/fixed-costs', MONEY, money.fixedList],
+    ['POST', '/api/fixed-costs', MANAGERS, money.fixedCreate],
+    ['PUT', '/api/fixed-costs/:id', MANAGERS, money.fixedUpdate],
+    ['DELETE', '/api/fixed-costs/:id', MANAGERS, money.fixedRemove],
+    ['POST', '/api/fixed-costs/:id/pay', MONEY, money.fixedPay],
+    ['GET', '/api/pnl', ['owner'], money.pnl],
     ['POST', '/api/geo/check', ALL, work.geoCheck],
     ['GET', '/api/work/me', ALL, ({ user }) => work.state(user)],
     ['POST', '/api/work/in', ALL, work.clockIn],
@@ -1979,7 +2055,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   }
 
   return { match, guard, workGate: (route, user) => work.gate(route, user), authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, planInfo, wasKicked, summary, ROLES,
-    guestInfo: guest.info, guestImage: guest.image, guestRequest: guest.request, morningText, soonTexts };
+    guestInfo: guest.info, guestImage: guest.image, guestRequest: guest.request, morningText, eveningText, soonTexts };
 }
 
 module.exports = { createApi, MODULES, BUSINESS_TYPES, SHOP_TYPES };

@@ -2,6 +2,31 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.15.0 — To'liq oylik hisobot: barcha xodimlar, doimiy xarajatlar, sof foyda
+- **Dasturga kirmaydigan xodimlar** (tandirchi, idishchi, qorovul, farrosh…): Xodimlar → "Dasturga kirmaydi (faqat maosh)".
+  Faqat ism, lavozim, telefon va maosh kiritiladi; login/PIN yo'q, tarif limitiga kirmaydi. Davomat, avans, bonus va jarima ular uchun ham ishlaydi.
+- Yangi xodim qo'shishda **maoshi shu oynaning o'zida** kiritiladi (oylik / kunlik / soatbay / foiz).
+- **Soatbay maosh**: "Ishga keldim / Ishni tugatdim" vaqtlari bo'yicha hisoblanadi.
+- **Doimiy xarajatlar** (Moliya → Doimiy xarajatlar): ijara, svet, gaz, suv, soliq, internet, reklama… har oyning qaysi kuni to'lanishi bilan.
+  - To'lov kuni kelganda Xonalar sahifasida va Telegramda eslatma chiqadi.
+  - "To'landi" bosilsa, kassaga o'zi yoziladi; svet va gaz kabi o'zgaruvchan summani to'lashda to'g'rilash mumkin.
+- **Sof foyda** (Moliya → Sof foyda, Biznes va Pro, faqat boshliq uchun): oy bo'yicha savdo − mahsulot − ish haqi − ijara, kommunal, soliq, reklama… = sof foyda.
+  - Ish haqi berilgani emas, **hisoblangani** bo'yicha olinadi; to'lov kuni kelib to'lanmagan doimiy xarajatlar ham shu oyga kiradi.
+  - Har bir guruhning savdodagi ulushi, o'tgan oy bilan solishtirish, "Hali to'lanmagan" ro'yxati, Excelga yuklab olish.
+- **Xarajat guruhlari**: har bir xarajat kategoriyasi guruhga tegishli (mahsulot, ish haqi, ijara, kommunal, soliq, reklama, ta'mirlash, transport, boshqa).
+  Guruh nomdan o'zi aniqlanadi, Sozlamalar → Muassasa'da o'zgartirish mumkin. Choyxona uchun yangi kategoriyalar: Svet, Suv, Reklama.
+- **Tez kirim-chiqim**: Xonalar (va kassa) sahifasida "+ Kirim / − Chiqim" tugmalari; xarajatni **kechagi yoki boshqa kunga** yozish mumkin.
+- **Start tarifida** ham oddiy kirim-chiqim, kassa smenasi va doimiy xarajatlar ochildi.
+- **Telegram**:
+  - har kuni kechqurun (vaqti sozlanadi, standart 23:00) kunlik hisobot: savdo, to'lov turlari, xarajat, eng ko'p sotilganlar, ochiq cheklar;
+  - choyxonaga ertalab faqat to'lov kuni kelgan xarajatlar haqida xabar keladi (ishlar ro'yxati — faqat eshik do'konida).
+- **Har kecha zaxira Telegramga** (platforma egasining chatiga): soat 3 dan keyin har bir biznes fayli siqilgan holda yuboriladi —
+  server buzilsa ham ma'lumot qoladi. Platforma → Telegram oynasida yoqish/o'chirish va "Hozir yuborish".
+- "Bugun" bo'limi endi faqat eshik do'konida; do'konlarda "Tayyor (taom)" bo'limi olib tashlandi.
+- Tuzatishlar:
+  - masalliq ombori sahifasi jonli yangilanadi va "kam qoldi" ogohlantirishi chiqadi;
+  - telefonda tasdiqlash oynasi va platforma kartochkasidagi tugma matnlari endi kesilmaydi.
+
 ## 1.14.0 — Joylashuv: avtomatik davomat, GPS, selfi va QR-menyu himoyasi
 Hammasi ixtiyoriy: Sozlamalar → **Joylashuv** bo'limida ega o'zi yoqadi (standart holatda o'chiq).
 - **Ish joyi joylashuvi**: ega ish joyi ichida turib "Hozirgi joyni saqlash" ni bosadi, radius tanlanadi (50 m – 1 km).

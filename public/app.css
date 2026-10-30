@@ -886,3 +886,40 @@ details.upcoming summary { cursor: pointer; font-weight: 650; color: var(--muted
 @media (max-width: 420px) { .wk-card { padding: 16px; } .wk-step { flex-wrap: wrap; } .wk-step .btn { margin-left: 52px; } }
 @media (max-width: 620px) { .wl-card .wl-row { flex-wrap: wrap; } .wl-time { text-align: left; width: 100%; padding-left: 52px; } }
 @media (max-width: 620px) { .btn.wk-out span { display: none; } }
+
+/* ---------- Money: categories with groups, the day of a cost, profit and loss ---------- */
+.exp-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.tx-day { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tx-day input[type=date] { flex: 1; min-width: 140px; }
+.pnl .pnl-line { display: flex; align-items: baseline; gap: 10px; padding: 8px 0; }
+.pnl .pnl-line > span:first-child, .pnl-line > a:first-child { flex: 1; }
+.pnl-line.big b { font-size: 26px; }
+.pnl-line.total { border-top: 2px solid var(--text); margin-top: 8px; padding-top: 12px; font-size: 20px; }
+.pnl-line.total.good b { color: var(--green); } .pnl-line.total.bad b { color: var(--red); }
+.pnl-row { border-top: 1px solid var(--line); }
+.pnl-row summary { display: flex; align-items: center; gap: 10px; padding: 10px 0; cursor: pointer; list-style: none; }
+.pnl-row summary::-webkit-details-marker { display: none; }
+.pnl-bar { width: 120px; height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; flex: none; }
+.pnl-bar i { display: block; height: 100%; background: var(--red); opacity: .7; }
+.pnl-pct { width: 42px; text-align: right; flex: none; }
+.pnl-sum { min-width: 110px; text-align: right; color: var(--red); }
+.pnl-items { padding: 0 0 10px 14px; display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
+.pnl-items div { display: flex; justify-content: space-between; gap: 10px; }
+#fixed-due:empty { display: none; }
+#fixed-due .notice { margin: 0 0 12px; text-decoration: none; color: inherit; }
+@media (max-width: 620px) { .pnl-bar { display: none; } .pnl-sum { min-width: 0; } .exp-row { grid-template-columns: minmax(0, 1fr) auto; } .exp-row select { grid-column: 1; } }
+/* Long button labels wrap on a phone instead of being cut ("Tasdiqlash va yuborish", "Tahrirlash"). */
+@media (max-width: 600px) {
+  .modal-foot .btn { min-width: 0; white-space: normal; line-height: 1.2; }
+  .tcard footer .btn { flex: 1 1 auto; font-size: 13px; gap: 4px; }
+}
+.fx-list { padding: 4px 16px; }
+.fx-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px 14px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+.fx-row:first-child { border-top: 0; }
+.fx-name { display: grid; gap: 2px; min-width: 0; }
+.fx-act { display: flex; gap: 6px; justify-content: flex-end; }
+@media (max-width: 620px) {
+  .fx-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .fx-st, .fx-act { grid-column: 1 / -1; } .fx-act { justify-content: flex-start; }
+  .btn.q-money span { display: none; }
+}

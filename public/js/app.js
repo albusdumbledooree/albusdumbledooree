@@ -13,16 +13,17 @@ function navOrder(role) {
       chef: ['today', 'settings'],
     }[role];
   }
-  const home = isShop() ? ['pos', 'today'] : App.biz === 'fastfood' ? ['pos', 'rooms', 'today'] : ['rooms', 'today'];
+  // "Bugun" (tasks of the day) is a door shop's page; a seller in a shop has no dishes to take from the kitchen.
+  const home = isShop() ? ['pos'] : App.biz === 'fastfood' ? ['pos', 'rooms'] : ['rooms'];
   return {
     owner: [...home, 'kitchen', 'history', 'reservations', 'menuadmin', 'staff', 'settings', 'money'],
     admin: [...home, 'kitchen', 'history', 'reservations', 'menuadmin', 'staff', 'settings', 'money'],
     cashier: [...home, 'history', 'reservations', 'stoplist', 'settings', 'money'],
-    waiter: [...home, 'ready', 'settings'],
-    chef: ['kitchen', 'today', 'stoplist', 'inventory', 'settings'],
+    waiter: [...home, ...(isShop() ? [] : ['ready']), 'settings'],
+    chef: ['kitchen', 'stoplist', 'inventory', 'settings'],
   }[role];
 }
-const CHILD_OF = { room: 'rooms', order: 'rooms', soboy: 'rooms', reports: 'money', finance: 'money', payroll: 'money', attendance: 'staff', customers: 'money', inventory: 'money', branches: 'money',
+const CHILD_OF = { fixed: 'money', pnl: 'money', room: 'rooms', order: 'rooms', soboy: 'rooms', reports: 'money', finance: 'money', payroll: 'money', attendance: 'staff', customers: 'money', inventory: 'money', branches: 'money',
   profit: 'money', purchases: 'money', debts: 'money', masters: 'money' };
 let currentView = null;
 let currentParams = [];
@@ -320,6 +321,11 @@ Live.on('bill_requested', (d) => {
   toast(t("{0} hisob so'ramoqda", d.room), 'warn', 8000);
 });
 Live.on('stoplist', (d) => toast(t('"{0}" tugadi', d.name), 'warn', 6000));
+// Pro: ingredients running low after a sale (meat, rice…).
+Live.on('stock_low', (d) => {
+  const items = (d.items || []).slice(0, 4).map(String);
+  if (items.length) toast(t('Omborda kam qoldi: {0}', items.join(', ')), 'warn', 9000);
+});
 Live.on('payroll', (d) => {
   const text = { payment: t('Sizga {0} ish haqi berildi', moneyText(d.amount)), bonus: t('Sizga {0} bonus yozildi', moneyText(d.amount)), fine: t('Sizga {0} jarima yozildi', moneyText(d.amount)) }[d.type];
   if (text) toast(text, d.type === 'fine' ? 'warn' : 'ok', 8000);
@@ -334,8 +340,10 @@ async function refreshBadges() {
     }
     if (['chef', 'owner', 'admin'].includes(role) && App.kitchenMode !== 'off') App.badges.kitchen = (await GET('/api/kitchen')).load.pending;
     if (['cashier', 'owner', 'admin'].includes(role)) App.badges.bills = (await GET('/api/orders?status=open')).filter((o) => o.bill_requested).length;
-    const tk = await GET('/api/tasks');
-    App.badges.tasks = tk.overdue.length + tk.today.length;
+    if (isDoors()) {
+      const tk = await GET('/api/tasks');
+      App.badges.tasks = tk.overdue.length + tk.today.length;
+    }
     App.guestReqs = moduleOn('qrorder') && ['owner', 'admin', 'cashier', 'waiter'].includes(role) ? await GET('/api/guest-requests') : [];
     App.workAsks = App.settings.att_clock && ['owner', 'admin', 'cashier'].includes(role) ? await GET('/api/work/pending') : [];
     updateNav();

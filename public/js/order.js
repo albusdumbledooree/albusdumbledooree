@@ -80,7 +80,9 @@ Views.rooms = {
       <button class="mode ${mode === 'takeaway' ? 'active' : ''}" data-mode="takeaway">${icon('shopping-bag', 20)} ${fast ? t('Ochiq buyurtmalar') : t('Olib ketish')}<span class="cnt">${takeaway.orders.length}</span></button>
       ${moduleOn('reservations') && can('owner', 'admin', 'cashier') ? `<a class="mode" href="#/reservations">${icon('calendar', 20)} ${t('Bronlar')}<span class="cnt">${rooms.reduce((n, r) => n + r.reservations.length, 0)}</span></a>` : ''}
       <span class="grow"></span>
-      ${showShift ? `<button class="btn ${shift ? '' : 'primary'}" id="shift">${icon(shift ? 'lock' : 'circle-plus', 18)} ${shift ? t('Smenani yopish') : t('Smenani ochish')}</button>` : ''}</div>`;
+      ${quickMoneyHtml()}
+      ${showShift ? `<button class="btn ${shift ? '' : 'primary'}" id="shift">${icon(shift ? 'lock' : 'circle-plus', 18)} ${shift ? t('Smenani yopish') : t('Smenani ochish')}</button>` : ''}</div>
+      <div id="fixed-due"></div>`;
 
     if (mode === 'takeaway') {
       return `${modes}<div class="floor">
@@ -103,6 +105,8 @@ Views.rooms = {
       <section class="rooms-main">${body}${legend}</section></div>`;
   },
   bind(root, data) {
+    bindQuickMoney(root);
+    fixedDueNotice(root.querySelector('#fixed-due'));
     root.querySelectorAll('[data-room]').forEach((b) => b.onclick = () => { location.hash = `#/room/${b.dataset.room}`; });
     root.querySelectorAll('[data-section]').forEach((b) => b.onclick = () => { UI.section = b.dataset.section; store('cp_section', UI.section || null); renderView(data); });
     root.querySelectorAll('[data-mode]').forEach((b) => b.onclick = () => { UI.roomsMode = b.dataset.mode; store('cp_rooms_mode', UI.roomsMode); renderView(data); });
@@ -526,6 +530,7 @@ function openPayment(order) {
 // ---------- Waiter: ready dishes ----------
 Views.ready = {
   title: () => t('Tayyor'), icon: () => 'bell', roles: ['waiter'], refreshOn: ['rooms', 'kitchen'], badge: 'ready',
+  on: () => !isShop(),
   async load() { return { items: await GET('/api/my/ready') }; },
   render({ items }) {
     return `<div class="page-head"><h1>${t('Tayyor taomlar')}</h1></div>

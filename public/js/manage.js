@@ -228,7 +228,9 @@ Views.history = {
 // ---------- Money: one quiet entry that opens reports, the cash book and payroll ----------
 const MONEY_PAGES = () => [
   ['reports', 'chart-column', t('Hisobot'), t("Kirim, chiqim va foyda — kunlar bo'yicha")],
+  ['pnl', 'trending-up', t('Sof foyda'), t("Oy bo'yicha: savdo − barcha xarajatlar (ish haqi, ijara, kommunal…)")],
   ['finance', 'arrow-right-left', t('Kirim-chiqim'), t('Xarajat va boshqa kirimlarni yozish')],
+  ['fixed', 'repeat', t('Doimiy xarajatlar'), t("Ijara, svet, gaz, soliq, reklama — to'lov kuni eslatiladi")],
   ['payroll', 'hand-coins', t('Ish haqi'), t('Maosh, avans, xarajat, bonus va jarima')],
   ['attendance', 'calendar', t('Davomat'), t("Kim keldi, kunlik ish haqini berish")],
   ['profit', 'coins', t('Foyda hisoboti'), t("Sof foyda, nima ko'p sotildi, pul qayerga ketdi")],
@@ -321,23 +323,35 @@ Views.reports = {
 };
 
 // ---------- Cash book ----------
-function openTransaction(type) {
-  const cats = type === 'expense' ? App.settings.expense_categories : App.settings.income_categories;
-  openModal({
+// Income or a cost written by hand: what for, how much, how paid, and the day (today, yesterday or another day).
+function openTransaction(type, preset = {}) {
+  const all = type === 'expense' ? App.settings.expense_categories : App.settings.income_categories;
+  const cats = isShop() ? all.filter((c) => c !== 'Mahsulotlar') : all;
+  const today = localDay();
+  const yesterday = localDay(Date.now() - 864e5);
+  const form = openModal({
     title: `${icon(type === 'expense' ? 'minus' : 'plus')} ${type === 'expense' ? t('Xarajat') : t('Kirim')}`,
-    body: `<div class="form-grid">
-      <label class="field">${t('Summa')}<input type="number" name="amount" min="1" required></label>
-      <label class="field">${t('Kategoriya')}<select name="category">${cats.map((c) => `<option>${esc(c)}</option>`).join('')}</select></label>
+    body: `<div class="cat-pick">${cats.map((c, i) => `<label class="pill"><input type="radio" name="category" value="${esc(c)}" ${(preset.category ? preset.category === c : i === 0) ? 'checked' : ''}><span>${esc(c)}</span></label>`).join('')}</div>
+      <div class="form-grid" style="margin-top:12px">
+      <label class="field">${t('Summa')}<input type="number" name="amount" min="1" inputmode="numeric" value="${esc(preset.amount || '')}" required></label>
       <label class="field">${t("To'lov turi")}<select name="method">${['cash', 'card', 'transfer'].map((m) => `<option value="${m}">${methodName(m)}</option>`).join('')}</select></label>
-      </div><label class="field" style="margin-top:12px">${t('Izoh')}<input name="note" placeholder="${esc(t("Masalan: 20 kg go'sht"))}"></label>`,
-    actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: type === 'expense' ? 'warn' : 'primary', onClick: async (f) => {
+      <label class="field">${t('Sana')}<span class="seg tx-day">
+        <button type="button" data-d="${today}" class="active">${t('Bugun')}</button><button type="button" data-d="${yesterday}">${t('Kecha')}</button>
+        <input type="date" name="day" value="${today}" max="${today}"></span></label>
+      </div><label class="field" style="margin-top:12px">${t('Izoh')}<input name="note" maxlength="300" placeholder="${esc(type === 'expense' ? t("Masalan: 20 kg go'sht") : t('Masalan: banket avansi'))}"></label>`,
+    actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: type === 'expense' ? 'warn' : 'primary', icon: 'check', onClick: async (f) => {
       const d = formData(f);
       if (!d.amount) { toast(t('Summani kiriting'), 'warn'); return false; }
-      await POST('/api/transactions', { ...d, type });
-      toast(t('Saqlandi'), 'ok');
+      if (!d.category) { toast(t('Turini tanlang'), 'warn'); return false; }
+      await POST('/api/transactions', { ...d, type, day: d.day && d.day !== today ? d.day : undefined });
+      toast(d.day && d.day !== today ? t('Saqlandi ({0})', fmtDate(new Date(`${d.day}T12:00`).getTime())) : t('Saqlandi'), 'ok');
       refreshView();
     } }],
   });
+  const day = form.querySelector('[name=day]');
+  const mark = () => form.querySelectorAll('[data-d]').forEach((b) => b.classList.toggle('active', b.dataset.d === day.value));
+  form.querySelectorAll('[data-d]').forEach((b) => b.onclick = () => { day.value = b.dataset.d; mark(); });
+  day.onchange = mark;
 }
 
 Views.finance = {
@@ -375,7 +389,10 @@ Views.finance = {
 
 // ---------- Payroll (boss only) ----------
 const MONTHS = () => [t('Yanvar'), t('Fevral'), t('Mart'), t('Aprel'), t('May'), t('Iyun'), t('Iyul'), t('Avgust'), t('Sentabr'), t('Oktabr'), t('Noyabr'), t('Dekabr')];
-const PAY_TYPES = () => ({ monthly: t('Oylik'), daily: t('Kunlik'), none: t('Faqat foiz') });
+const PAY_TYPES = () => ({ monthly: t('Oylik'), daily: t('Kunlik'), hourly: t('Soatbay'), none: t('Faqat foiz') });
+// A worker's job: the role for program users, the job title for those who never open it (a baker, a guard).
+const staffJob = (u) => (u.app === 0 ? (u.position || t('Dasturga kirmaydi')) : roleName(u.role));
+const JOB_TITLES = () => [t('Tandirchi'), t('Somsapaz'), t('Kabobchi'), t('Oshpaz yordamchisi'), t('Idish yuvuvchi'), t('Farrosh'), t('Qorovul'), t('Haydovchi'), t('Ombor mudiri')];
 const ENTRY_TYPES = () => ({ payment: [t("To'lov"), 'served', 'banknote'], advance: [t('Avans'), 'served', 'wallet'], bonus: [t('Bonus'), 'ready', 'gift'],
   fine: [t('Jarima'), 'red', 'triangle-alert'], deduction: [t('Xodim xarajati'), 'red', 'utensils'] });
 const EXPENSE_KINDS = () => [['Ovqat', t('Ovqat')], ['Ichimlik', t('Ichimlik')], ['Boshqa', t('Boshqa')]];
@@ -388,7 +405,7 @@ function monthTitle(m) { const [y, mm] = m.split('-').map(Number); return `${MON
 function shiftMonth(m, n) { const [y, mm] = m.split('-').map(Number); const d = new Date(y, mm - 1 + n, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; }
 function rateText(r) {
   if (!r) return `<span class="chip red">${t('Belgilanmagan')}</span>`;
-  const base = r.pay_type === 'none' ? '' : `${PAY_TYPES()[r.pay_type]}: ${money(r.amount)}`;
+  const base = r.pay_type === 'none' ? '' : `${PAY_TYPES()[r.pay_type]}: ${money(r.amount)}${r.pay_type === 'hourly' ? ` / ${t('soat')}` : ''}`;
   return `${base}${r.sales_pct ? `${base ? ' + ' : ''}${t('{0}% savdodan', r.sales_pct)}` : ''}`;
 }
 function balanceHtml(b) {
@@ -418,8 +435,8 @@ Views.payroll = {
       ${d.staff.length ? `<div class="table-wrap"><table>
         <tr><th>${t('Xodim')}</th><th>${t('Maosh')}</th><th class="right">${t('Kun')}</th><th class="right">${t('Hisoblangan')}</th><th class="right">${t('Xarajat')}</th><th class="right">${t('Berilgan')}</th><th>${t('Holat')}</th><th></th></tr>
         ${d.staff.map((r) => `<tr style="${r.active ? '' : 'opacity:.6'}">
-          <td><div class="row" style="flex-wrap:nowrap"><span class="avatar ${r.role}">${esc(initials(r.name))}</span><div><b>${esc(r.name)}</b><br><span class="small muted">${roleName(r.role)}</span></div></div></td>
-          <td class="small">${rateText(r.rate)}</td><td class="right">${r.days_worked}</td>
+          <td><div class="row" style="flex-wrap:nowrap"><span class="avatar ${r.role}">${esc(initials(r.name))}</span><div><b>${esc(r.name)}</b><br><span class="small muted">${esc(staffJob(r))}</span></div></div></td>
+          <td class="small">${rateText(r.rate)}</td><td class="right">${r.days_worked}${r.minutes ? `<br><span class="small muted">${hoursText(r.minutes)}</span>` : ''}</td>
           <td class="right num">${money(r.accrued)}${r.bonus || r.fine ? `<br><span class="small muted">+${num(r.bonus)} / −${num(r.fine)}</span>` : ''}</td>
           <td class="right num">${r.deduction ? `−${money(r.deduction)}` : '—'}</td>
           <td class="right num">${r.paid ? money(r.paid) : '—'}${r.advance ? `<br><span class="small muted">${t('avans')} ${num(r.advance)}</span>` : ''}</td><td>${balanceHtml(r.balance)}</td>
@@ -570,7 +587,7 @@ Views.attendance = {
       const daily = r.rate && r.rate.pay_type === 'daily';
       return `<div class="att-row">
         <div class="att-who"><span class="avatar ${r.role}">${esc(initials(r.name))}</span><div><b>${esc(r.name)}</b>
-          <span class="small muted">${roleName(r.role)}${d.can_pay && r.rate ? ` · ${rateText(r.rate)}` : ''}${r.auto ? ` · ${t('dasturga kirgan')}` : ''}</span></div></div>
+          <span class="small muted">${esc(staffJob(r))}${d.can_pay && r.rate ? ` · ${rateText(r.rate)}` : ''}${r.auto ? ` · ${t('dasturga kirgan')}` : ''}</span></div></div>
         <div class="att-btns">${Object.entries(A).map(([k, [n, , cls]]) => `<button class="att-btn ${cls} ${r.status === k ? 'active' : ''}" data-set="${r.id}" data-st="${k}">${n}</button>`).join('')}</div>
         ${d.can_pay ? `<div class="att-money">
           ${daily ? `<span class="small muted">${t('Ishladi')} <b>${num(r.earned)}</b>${r.spent ? ` · ${t('xarajat')} <b class="red">−${num(r.spent)}</b>` : ''}${r.paid ? ` · ${t('berildi')} <b>${num(r.paid)}</b>` : ''}</span>
@@ -1146,14 +1163,18 @@ Views.staff = {
     const pl = App.plan;
     return `<div class="page-head"><h1>${t('Xodimlar')}</h1>${viewOn('attendance') ? `<a class="btn" href="#/attendance">${icon('calendar', 18)} ${t('Davomat')}</a>` : ''}${pl && pl.max_staff > 0 ? `<span class="chip ${pl.staff_used >= pl.max_staff ? 'red' : ''}" title="${esc(t('Tarif'))}: ${esc(pl.name)}">${icon('users', 14)} ${pl.staff_used}/${pl.max_staff}</span>` : ''}<button class="btn primary" id="add">${icon('plus', 18)} ${t('Xodim')}</button></div>
       <div class="card"><div class="table-wrap"><table>
-      ${order.flatMap((role) => users.filter((u) => u.role === role)).map((u) => `<tr style="${u.active ? '' : 'opacity:.5'}" class="${canEditRole(u.role) ? 'clickable' : ''}" data-edit="${u.id}">
+      ${[...order.flatMap((role) => users.filter((u) => u.role === role && u.app !== 0)), ...users.filter((u) => u.app === 0)].map((u) => u.app === 0 ? `<tr style="${u.active ? '' : 'opacity:.5'}" class="${canEditRole('chef') ? 'clickable' : ''}" data-edit="${u.id}">
+        <td><div class="row" style="flex-wrap:nowrap"><span class="avatar">${esc(initials(u.name))}</span><div><b>${esc(u.name)}</b><br><span class="small muted">${icon('user-round', 13)} ${esc(staffJob(u))}</span></div></div></td>
+        <td colspan="3"><span class="chip">${t('Dasturga kirmaydi')}</span></td>
+        <td class="actions">${u.active ? '' : `<span class="chip">${t('Bloklangan')}</span>`} ${icon('chevron-right', 18)}</td></tr>` : `<tr style="${u.active ? '' : 'opacity:.5'}" class="${canEditRole(u.role) ? 'clickable' : ''}" data-edit="${u.id}">
         <td><div class="row" style="flex-wrap:nowrap"><span class="avatar ${u.role}">${esc(initials(u.name))}</span><div><b>${esc(u.name)}</b><br><span class="small muted">${icon(ROLE_ICONS[u.role], 13)} ${roleName(u.role)}</span></div></div></td>
         <td>${u.has_pin ? `<span class="chip green">${icon('key-round', 14)} PIN</span>` : `<span class="chip red">${icon('key-round', 14)} ${t("PIN yo'q")}</span>`}</td>
         <td>${u.perms.print ? `<span class="chip" title="${esc(t('Chek chiqaradi'))}">${icon('printer', 14)}</span>` : ''} ${u.perms.close ? `<span class="chip" title="${esc(t('Chek yopadi'))}">${icon('wallet', 14)}</span>` : ''}</td>
         <td class="small muted">${u.role === 'waiter' && !sellsAtCounter() ? (u.rooms.map((r) => esc(r.number)).join(', ') || '—') : ''}</td>
         <td class="actions">${u.active ? '' : `<span class="chip">${t('Bloklangan')}</span>`} ${canEditRole(u.role) ? icon('chevron-right', 18) : ''}</td></tr>`).join('')}
       </table></div></div>
-      ${sellsAtCounter() ? '' : `<p class="small muted" style="margin-top:12px">${icon('info', 14)} ${t("Ofitsantni xonaga biriktirish: Sozlamalar → Xonalar.")}</p>`}`;
+      <p class="small muted" style="margin-top:12px">${icon('info', 14)} ${t("Dasturga kirmaydigan xodimlarni ham qo'shing (tandirchi, idishchi, qorovul…) — ularning maoshi ham xarajatga va sof foydaga kiradi. Ular tarif limitiga kirmaydi.")}
+        ${sellsAtCounter() ? '' : `<br>${icon('info', 14)} ${t("Ofitsantni xonaga biriktirish: Sozlamalar → Xonalar.")}`}</p>`;
   },
   bind(root, { users }) {
     const permSel = (name, val, def) => `<select name="${name}"><option value="" ${val === null ? 'selected' : ''}>${t('Lavozim bo\'yicha')} (${def ? t('Ha') : t("Yo'q")})</option>
@@ -1163,35 +1184,69 @@ Views.staff = {
       const roles = ['owner', 'admin', 'cashier', 'waiter', 'chef'].filter((r) => canEditRole(r) && !(isShop() && r === 'chef'));
       const role = u.role || 'waiter';
       const boss = (r) => r === 'owner' || r === 'admin';
+      // New workers get their pay right away (the boss), so the month's costs are complete.
+      const withPay = !u.id && can('owner') && moduleOn('payroll');
       const form = openModal({
         title: `${icon('user')} ${u.id ? esc(u.name) : t('Yangi xodim')}`, size: 'wide',
-        body: `<div class="form-grid">
+        body: `${u.role === 'owner' || u.id === App.user.id ? '' : `<div class="seg" style="margin-bottom:12px">
+            <button type="button" data-app="1" class="${u.app === 0 ? '' : 'active'}">${icon('smartphone', 16)} ${t('Dasturdan foydalanadi')}</button>
+            <button type="button" data-app="0" class="${u.app === 0 ? 'active' : ''}">${icon('user-round', 16)} ${t('Dasturga kirmaydi (faqat maosh)')}</button></div>`}
+          <input type="hidden" name="app" value="${u.app === 0 ? '0' : '1'}">
+          <div class="form-grid">
           <label class="field">${t("To'liq ism")}<input name="name" value="${esc(u.name || '')}" required></label>
+          <label class="field" id="pos-f">${t('Lavozimi')}<input name="position" list="job-titles" value="${esc(u.position || '')}" placeholder="${esc(t('Masalan: Tandirchi'))}">
+            <datalist id="job-titles">${JOB_TITLES().map((x) => `<option value="${esc(x)}">`).join('')}</datalist></label>
           <label class="field">${t('Lavozim')}<select name="role">${roles.map((r) => `<option value="${r}" ${role === r ? 'selected' : ''}>${roleName(r)}</option>`).join('')}</select></label>
-          <label class="field"><span id="pin-label"></span><input name="pin" inputmode="numeric" autocomplete="off" placeholder="${u.id ? esc(t("O'zgartirish uchun yozing")) : ''}"></label>
+          <label class="field" id="pin-f"><span id="pin-label"></span><input name="pin" inputmode="numeric" autocomplete="off" placeholder="${u.id ? esc(t("O'zgartirish uchun yozing")) : ''}"></label>
           <label class="field">${t('Telefon')}<input name="phone" type="tel" value="${esc(u.phone || '')}"></label></div>
+          ${withPay ? `<h3 style="margin:14px 0 8px">${icon('hand-coins', 18)} ${t('Maosh')}</h3><div class="form-grid">
+            <label class="field">${t('Maosh turi')}<select name="pay_type">${Object.entries(PAY_TYPES()).map(([k, v]) => `<option value="${k}" ${k === 'monthly' ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+            <label class="field">${t('Summa')}<input type="number" name="pay_amount" min="0" step="1000" placeholder="${esc(t('Masalan: 3 000 000'))}"></label></div>` : ''}
           <div id="perm-box" style="margin-top:14px"><h3 style="margin-bottom:8px">${t('Huquqlar')}</h3><div class="form-grid">
             <label class="field"><span>${icon('printer', 15)} ${t('Printerdan chek chiqarish')}</span>${permSel('perm_print', u.perm_print ?? null, (DEF[role] || [1])[0])}</label>
             <label class="field"><span>${icon('wallet', 15)} ${t('Chekni yopish (to\'lov qabul qilish)')}</span>${permSel('perm_close', u.perm_close ?? null, (DEF[role] || [1, 1])[1])}</label></div></div>
           ${u.id && u.id !== App.user.id ? `<label class="check" style="margin-top:14px"><input type="checkbox" name="active" ${u.active ? 'checked' : ''}> ${t('Faol (o\'chirilsa tizimga kira olmaydi)')}</label>` : ''}`,
         actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: 'primary', onClick: async (f) => {
           const d = formData(f);
+          const noApp = d.app === '0';
+          d.app = !noApp;
+          const pay = { pay_type: d.pay_type, amount: Number(d.pay_amount) || 0 };
+          delete d.pay_type; delete d.pay_amount;
+          if (noApp) {
+            if (!u.id && !d.position) { toast(t('Lavozimini yozing'), 'warn'); return false; }
+            delete d.pin; delete d.perm_print; delete d.perm_close; delete d.role;
+            if (u.id) d.app = false;
+            const saved = u.id ? await PUT(`/api/users/${u.id}`, d) : await POST('/api/users', d);
+            if (withPay && pay.amount) await PUT(`/api/payroll/rates/${saved.id}`, { pay_type: pay.pay_type, amount: pay.amount, sales_pct: 0 });
+            toast(t('Saqlandi'), 'ok'); refreshView(); return;
+          }
           if (!d.pin) delete d.pin;
           if (!d.password) delete d.password;
           if (!d.username) delete d.username;
           d.perm_print = d.perm_print === '' ? null : d.perm_print === '1';
           d.perm_close = d.perm_close === '' ? null : d.perm_close === '1';
           if (!u.id && !d.pin) { toast(t('PIN kiriting'), 'warn'); return false; }
-          if (u.id) await PUT(`/api/users/${u.id}`, d); else await POST('/api/users', d);
+          if (u.id && u.app === 0 && !d.pin) { toast(t('Dasturga kirishi uchun PIN kiriting'), 'warn'); return false; }
+          const saved = u.id ? await PUT(`/api/users/${u.id}`, d) : await POST('/api/users', d);
+          if (withPay && pay.amount && !boss(d.role)) await PUT(`/api/payroll/rates/${saved.id}`, { pay_type: pay.pay_type, amount: pay.amount, sales_pct: 0 });
           toast(t('Saqlandi'), 'ok'); refreshView();
         } }],
       });
       const sync = () => {
         const r = form.role.value;
+        const noApp = form.app.value === '0';
         form.querySelector('#pin-label').textContent = boss(r) ? t('Parol (4–32 belgi)') : t('PIN (1–4 raqam)');
         form.pin.inputMode = boss(r) ? 'text' : 'numeric';
-        form.querySelector('#perm-box').style.display = boss(r) ? 'none' : '';
+        form.querySelector('#perm-box').style.display = boss(r) || noApp ? 'none' : '';
+        form.querySelector('#pin-f').style.display = noApp ? 'none' : '';
+        form.role.closest('.field').style.display = noApp ? 'none' : '';
+        form.querySelector('#pos-f').style.display = noApp ? '' : 'none';
       };
+      form.querySelectorAll('[data-app]').forEach((b) => b.onclick = () => {
+        form.app.value = b.dataset.app;
+        form.querySelectorAll('[data-app]').forEach((x) => x.classList.toggle('active', x === b));
+        sync();
+      });
       form.role.onchange = sync; sync();
     };
     root.querySelector('#add').onclick = () => edit();
@@ -1212,6 +1267,7 @@ const AUDIT_NAMES = () => ({
   stock_in: t('Omborga kirim qildi'), stock_receive: t('Omborga kirim qildi'), stock_count: t('Ombor sanog\'i'), stock_writeoff: t('Hisobdan chiqardi'), recipe_set: t('Tex-kartani saqladi'), staff_meal: t('Xodim hisobiga yopdi'),
   guest_approve: t('QR buyurtmani tasdiqladi'), guest_reject: t('QR buyurtmani rad etdi'), qr_renew: t('QR kodni yangiladi'), work_in: t('Ishga keldi'), work_out: t('Ishni tugatdi'), work_ask: t('Ishga keldi (kassir tasdig\'i so\'raldi)'), work_confirm: t('Ishga kelganini tasdiqladi'),
   work_reject: t('Ishga kelganini rad etdi'), work_close: t('Ish vaqtini yopdi'), geo_outside: t('Ish joyidan tashqarida'),
+  fixed_add: t("Doimiy xarajat qo'shdi"), fixed_edit: t('Doimiy xarajatni tahrirladi'), fixed_remove: t('Doimiy xarajatni olib tashladi'), fixed_pay: t("Doimiy xarajatni to'ladi"),
 });
 const SETTINGS_TABS = () => [
   ['general', 'store', t('Muassasa'), ['owner', 'admin']],
@@ -1236,6 +1292,7 @@ Views.settings = {
     if (!tabs.some(([k]) => k === UI.settingsTab)) UI.settingsTab = tabs[0][0];
     const tab = UI.settingsTab;
     const data = { tab };
+    if (tab === 'general') data.groups = await GET('/api/expense-groups').catch(() => null);
     if (tab === 'rooms') [data.rooms, data.users] = await Promise.all([GET('/api/rooms?all=1'), GET('/api/users')]);
     if (tab === 'devices') data.devices = await GET('/api/devices');
     if (tab === 'qr') data.qr = await GET('/api/qr');
@@ -1258,8 +1315,13 @@ Views.settings = {
     if (fn) fn.call(this, root, d);
   },
 
-  tab_general() {
+  tab_general({ groups }) {
     const s = App.settings;
+    // Each cost category belongs to a group of the profit report (products, pay, rent, utilities, tax, advertising…).
+    const catRow = (c = { name: '', group: 'boshqa' }) => `<div class="exp-row"><input data-cn value="${esc(c.name)}" maxlength="60" placeholder="${esc(t('Nomi'))}">
+      ${groups ? `<select data-cg>${groups.groups.map((g) => `<option value="${g.key}" ${g.key === c.group ? 'selected' : ''}>${esc(t(g.name))}</option>`).join('')}</select>` : ''}
+      <button type="button" class="icon-btn danger" data-cat-rm title="${esc(t("O'chirish"))}">${icon('x', 16)}</button></div>`;
+    this.catRow = catRow;
     return `<form id="org-form" class="card"><div class="form-grid">
         <label class="field">${t('Nomi')}<input name="name" value="${esc(s.name)}"></label>
         <label class="field">${t('Manzil')}<input name="address" value="${esc(s.address)}"></label>
@@ -1285,7 +1347,9 @@ Views.settings = {
       <p class="small muted" style="margin-top:8px">${t("Bonus keyingi tashrifda chekdan ayiriladi. 0 qo'ysangiz keshbek o'chadi.")}</p>` : ''}
       <h3 style="margin:18px 0 10px">${icon('list', 18)} ${t('Kategoriyalar')}</h3>
       <div class="form-grid">
-        <label class="field">${t('Xarajat kategoriyalari (har biri yangi qatorda)')}<textarea name="expense_categories" rows="6">${esc(s.expense_categories.join('\n'))}</textarea></label>
+        <div class="field">${t('Xarajat kategoriyalari va guruhi')}<div id="exp-cats" class="stack">${(groups ? groups.categories : s.expense_categories.map((name) => ({ name, group: 'boshqa' }))).map(catRow).join('')}</div>
+          <button type="button" class="btn sm" id="cat-add" style="justify-self:start">${icon('plus', 14)} ${t('Kategoriya')}</button>
+          <span class="small muted">${t("Guruh \"Sof foyda\" hisobotida xarajat qaysi qatorga tushishini belgilaydi.")}</span></div>
         <label class="field">${t('Kirim kategoriyalari')}<textarea name="income_categories" rows="6">${esc(s.income_categories.join('\n'))}</textarea></label></div>
       <button class="btn primary" style="margin-top:16px">${icon('check', 18)} ${t('Saqlash')}</button></form>`;
   },
@@ -1296,10 +1360,17 @@ Views.settings = {
       f.querySelector('#sv-guest').style.display = f.service_type.value === 'per_guest' ? '' : 'none';
     };
     f.service_type.onchange = sync; sync();
+    const cats = f.querySelector('#exp-cats');
+    const bindRm = () => cats.querySelectorAll('[data-cat-rm]').forEach((b) => b.onclick = () => b.closest('.exp-row').remove());
+    bindRm();
+    f.querySelector('#cat-add').onclick = () => { cats.insertAdjacentHTML('beforeend', this.catRow()); bindRm(); cats.lastElementChild.querySelector('input').focus(); };
     f.onsubmit = async (e) => {
       e.preventDefault();
       const d = formData(f);
-      d.expense_categories = d.expense_categories.split('\n').map((x) => x.trim()).filter(Boolean);
+      const rows = [...f.querySelectorAll('.exp-row')].map((r) => ({ name: r.querySelector('[data-cn]').value.trim(), group: (r.querySelector('[data-cg]') || {}).value }))
+        .filter((r) => r.name);
+      d.expense_categories = [...new Set(rows.map((r) => r.name))];
+      if (rows.some((r) => r.group)) d.expense_groups = Object.fromEntries(rows.filter((r) => r.group).map((r) => [r.name, r.group]));
       d.income_categories = d.income_categories.split('\n').map((x) => x.trim()).filter(Boolean);
       try { App.settings = await PUT('/api/settings', d); toast(t('Saqlandi'), 'ok'); render(); } catch (err) { toastError(err); }
     };

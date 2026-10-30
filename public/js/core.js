@@ -218,7 +218,7 @@ const Live = {
       }
     };
     for (const type of ['rooms', 'kitchen', 'menu', 'finance', 'settings', 'kitchen_new', 'kitchen_cancel', 'item_ready',
-      'item_accepted', 'bill_requested', 'stoplist', 'payroll', 'guest', 'guest_request', 'tasks', 'jobs', 'work', 'work_ask']) {
+      'item_accepted', 'bill_requested', 'stoplist', 'payroll', 'guest', 'guest_request', 'tasks', 'jobs', 'work', 'work_ask', 'inventory', 'stock_low']) {
       this.es.addEventListener(type, (e) => {
         let data = {};
         try { data = JSON.parse(e.data); } catch { /* ignore */ }

@@ -703,7 +703,7 @@ test('plans: limits, sections, editable prices, view-only after the term — and
   assert.equal(plans.plans.biznes.max_staff, 15);
   assert.equal(plans.terms.trial_days, 14);
 
-  // A business on Start: 5 workers at most, no cash book, no payroll, no Excel.
+  // A business on Start: 5 workers at most, a simple cash book (since 1.15), no payroll, no Excel.
   const c = await call('POST', '/api/platform/tenants', admin, { name: 'Tarif test', code: 'tarif', owner_name: 'E', owner_username: 'ega', owner_password: 'ega12345',
     plan: 'start', paid_until: Date.now() + 864e5 });
   assert.equal(c.status, 200, JSON.stringify(c.data));
@@ -711,8 +711,9 @@ test('plans: limits, sections, editable prices, view-only after the term — and
   const me = (await call('GET', '/api/me', boss)).data;
   assert.equal(me.plan.key, 'start');
   assert.equal(me.plan.fee, 199000);
-  assert.ok(me.disabled.includes('finance') && me.disabled.includes('payroll') && me.disabled.includes('export'));
-  assert.equal((await call('GET', '/api/transactions', boss)).status, 403);
+  assert.ok(!me.disabled.includes('finance') && me.disabled.includes('payroll') && me.disabled.includes('export') && me.disabled.includes('pnl'));
+  assert.equal((await call('GET', '/api/transactions', boss)).status, 200);
+  assert.equal((await call('GET', '/api/pnl', boss)).status, 403);
   assert.equal((await call('GET', `/api/reports?from=${Date.now() - 864e5}&to=${Date.now()}`, boss)).status, 200);
   const ids = [];
   for (let i = 0; i < 5; i++) {
@@ -722,6 +723,10 @@ test('plans: limits, sections, editable prices, view-only after the term — and
   }
   const sixth = await call('POST', '/api/users', boss, { name: 'X6', role: 'waiter' });
   assert.equal(sixth.status, 403);
+  // A worker who never opens the program (tandir baker) does not take a place.
+  const baker = await call('POST', '/api/users', boss, { name: 'Tandirchi', app: false, position: 'Tandirchi' });
+  assert.equal(baker.status, 200, JSON.stringify(baker.data));
+  assert.equal(baker.data.app, 0);
   assert.match(sixth.data.error, /5 tagacha/);
   // Switching one off frees a place; switching it back on is checked the same way.
   assert.equal((await call('PUT', `/api/users/${ids[0]}`, boss, { active: false })).status, 200);
@@ -763,7 +768,7 @@ test('plans: limits, sections, editable prices, view-only after the term — and
   assert.equal((await call('POST', '/api/orders', boss, { room_id: room.id })).status, 402);
   const kept = (await call('GET', `/api/orders/${o.id}`, boss)).data;
   assert.equal(kept.items.reduce((s, i) => s + i.qty, 0), 3);
-  assert.equal((await call('GET', '/api/users', boss)).data.length, 7);
+  assert.equal((await call('GET', '/api/users', boss)).data.length, 8, 'six workers, the boss and the baker');
   await login('ega', 'ega12345', 'tarif');
 
   // Paid again: everything goes on where it stopped.
@@ -773,7 +778,7 @@ test('plans: limits, sections, editable prices, view-only after the term — and
   // A lower plan never deletes: down to 3 workers allowed, all 6 stay active, only adding is stopped.
   edited.plans.start.max_staff = 3;
   await call('PUT', '/api/platform/plans', admin, edited);
-  assert.equal((await call('GET', '/api/users', boss)).data.filter((u) => u.active).length, 7);
+  assert.equal((await call('GET', '/api/users', boss)).data.filter((u) => u.active).length, 8);
   assert.equal((await call('POST', '/api/users', boss, { name: 'X7', role: 'waiter' })).status, 403);
 
   // Branch and own price.
@@ -1592,4 +1597,149 @@ test('work hours and the place: GPS, the desk QR, a selfie, a cashier confirms, 
   assert.notEqual(fresh[0].qr_token, key);
   assert.equal((await call('GET', `/api/guest/${key}`, null)).status, 404);
   assert.ok(t.id);
+});
+
+test('the month in full: staff without the program, hourly pay, fixed costs, dated costs, profit and loss, evening report, Telegram backup', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  await call('POST', '/api/platform/tenants', admin, { name: 'Oila choyxona', code: 'oila', owner_name: 'Ega', owner_username: 'ega', owner_password: 'ega12345', plan: 'biznes', sample: true, kitchen_mode: 'off' });
+  const boss = await login('ega', 'ega12345', 'oila');
+  const month = localDay().slice(0, 7);
+
+  // A baker who never opens the program: on the list and the payroll, cannot sign in, not counted in the plan.
+  const used0 = (await call('GET', '/api/me', boss)).data.plan.staff_used;
+  const baker = (await call('POST', '/api/users', boss, { name: 'Anvar', app: false, position: 'Tandirchi', phone: '+998901112233' })).data;
+  assert.equal(baker.app, 0); assert.equal(baker.position, 'Tandirchi');
+  assert.equal((await call('GET', '/api/me', boss)).data.plan.staff_used, used0);
+  assert.equal((await call('POST', '/api/login', null, { code: 'oila', username: baker.username, password: 'whatever' })).status, 401);
+  assert.equal((await call('PUT', `/api/payroll/rates/${baker.id}`, boss, { pay_type: 'monthly', amount: 3000000, from_day: `${month}-01` })).status, 200);
+  const dev = (await call('POST', '/api/device/register', null, { code: 'oila', username: 'ega', password: 'ega12345', name: 'Kassa' })).data.device_token;
+  assert.ok(!(await call('GET', '/api/device/staff', dev)).data.some((u) => u.id === baker.id), 'not on the PIN screen');
+
+  // Hourly pay from the "I came / I left" times.
+  const helper = (await call('POST', '/api/users', boss, { name: 'Sardor', role: 'waiter', username: 'sardor', password: 'pass1234', pin: '7777' })).data;
+  await call('PUT', `/api/payroll/rates/${helper.id}`, boss, { pay_type: 'hourly', amount: 20000, from_day: `${month}-01` });
+  const db = server.platform; // reach the tenant file through a work entry written by the API
+  await call('PUT', '/api/settings', boss, { att_clock: true });
+  const sardor = await login('sardor', 'pass1234', 'oila');
+  assert.equal((await call('POST', '/api/work/in', sardor, {})).status, 200);
+  const pay = (await call('GET', `/api/payroll?month=${month}`, boss)).data;
+  const row = pay.staff.find((r) => r.id === helper.id);
+  assert.equal(row.rate.pay_type, 'hourly');
+  assert.ok(row.minutes >= 0 && row.accrued >= 0);
+  assert.equal(pay.staff.find((r) => r.id === baker.id).position, 'Tandirchi');
+  await call('PUT', '/api/settings', boss, { att_clock: false });
+  assert.ok(db);
+
+  // Fixed costs: a list with due days; paying writes to the cash book once per month.
+  const rent = (await call('POST', '/api/fixed-costs', boss, { name: 'Ijara', category: 'Ijara', amount: 5000000, due_day: 1 })).data;
+  const light = (await call('POST', '/api/fixed-costs', boss, { name: 'Svet', category: 'Svet', amount: 800000, due_day: 1, variable: true })).data;
+  await call('POST', '/api/fixed-costs', boss, { name: 'Reklama', category: 'Reklama', amount: 400000, due_day: 28 });
+  let fx = (await call('GET', `/api/fixed-costs?month=${month}`, boss)).data;
+  assert.equal(fx.items.length, 3); assert.equal(fx.totals.planned, 6200000);
+  assert.equal((await call('POST', `/api/fixed-costs/${light.id}/pay`, boss, { amount: 950000, month })).status, 200);
+  assert.equal((await call('POST', `/api/fixed-costs/${light.id}/pay`, boss, { amount: 950000, month })).status, 409);
+  fx = (await call('GET', `/api/fixed-costs?month=${month}`, boss)).data;
+  assert.equal(fx.items.find((x) => x.id === light.id).paid.amount, 950000);
+  assert.equal(fx.items.find((x) => x.id === light.id).amount, 950000, 'a changing bill remembers the last amount');
+  assert.ok(fx.items.find((x) => x.id === rent.id).overdue || Number(localDay().slice(8)) === 1);
+  const waiter = await login('jasur', 'pass1234', 'oila').catch(() => null);
+  assert.equal(waiter, null, 'sample tenant has no waiter login — fine');
+
+  // A cost written for yesterday lands on yesterday; never in the future.
+  const y = localDay(-1);
+  const meat = (await call('POST', '/api/transactions', boss, { type: 'expense', category: "Go'sht", amount: 700000, day: y })).data;
+  assert.equal(new Date(meat.created_at).getDate(), new Date(`${y}T12:00`).getDate());
+  assert.equal((await call('POST', '/api/transactions', boss, { type: 'expense', category: "Go'sht", amount: 1, day: localDay(1) })).status, 400);
+  await call('POST', '/api/transactions', boss, { type: 'expense', category: 'Ish haqi', amount: 100 }).catch(() => {});
+
+  // A sale.
+  const menu = (await call('GET', '/api/menu', boss)).data;
+  const rooms = (await call('GET', '/api/rooms', boss)).data;
+  const o = (await call('POST', '/api/orders', boss, { room_id: rooms[0].id })).data;
+  await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: menu.dishes[0].id, qty: 10 }] });
+  const full = (await call('GET', `/api/orders/${o.id}`, boss)).data;
+  assert.equal((await call('POST', `/api/orders/${o.id}/close`, boss, { paid_cash: full.total })).status, 200);
+
+  // Groups: categories fall into report rows; the boss can move one.
+  const groups = (await call('GET', '/api/expense-groups', boss)).data;
+  assert.equal(groups.categories.find((c) => c.name === "Go'sht").group, 'mahsulot');
+  assert.equal(groups.categories.find((c) => c.name === 'Svet').group, 'kommunal');
+  assert.equal(groups.categories.find((c) => c.name === 'Reklama').group, 'reklama');
+  await call('PUT', '/api/settings', boss, { expense_groups: { Transport: 'mahsulot', Bad: 'nope' } });
+  assert.deepEqual((await call('GET', '/api/me', boss)).data.settings.expense_groups, { Transport: 'mahsulot' });
+
+  // Profit and loss: sales − products − pay as earned − fixed costs (paid or due) − other.
+  const p = (await call('GET', `/api/pnl?month=${month}`, boss)).data;
+  assert.equal(p.revenue, full.total);
+  const g = Object.fromEntries(p.groups.map((x) => [x.key, x]));
+  assert.equal(g.kommunal.amount, 950000);
+  if (y.slice(0, 7) === month) assert.equal(g.mahsulot.amount, 700000);
+  assert.ok(g.ish_haqi.amount > 0, 'monthly pay accrued so far');
+  assert.ok(g.ijara.unpaid === 5000000 || Number(localDay().slice(8)) === 1);
+  assert.equal(p.net, p.revenue + p.other_income - p.expenses);
+  // Fixed costs added this month are not last month's costs.
+  const prevMonth = (() => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; })();
+  assert.equal((await call('GET', `/api/fixed-costs?month=${prevMonth}`, boss)).data.items.length, 0);
+  assert.ok(!(await call('GET', `/api/pnl?month=${prevMonth}`, boss)).data.groups.some((x) => x.unpaid));
+  assert.ok(p.unpaid.pay > 0);
+  assert.equal((await call('GET', `/api/pnl?month=${month}`, await login('sardor', 'pass1234', 'oila'))).status, 403);
+
+  // Telegram: the business owner's evening report and the platform owner's nightly backup.
+  const http = require('node:http');
+  const zlib = require('node:zlib');
+  const sent = []; const files = []; const updates = [];
+  const tg = http.createServer((req, res) => {
+    const chunks = []; req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      const method = /\/(\w+)$/.exec(req.url)[1];
+      const raw = Buffer.concat(chunks);
+      const ok = (result) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, result })); };
+      if (method === 'getMe') return ok({ username: 'flowi_bot' });
+      if (method === 'getUpdates') return setTimeout(() => ok(updates.splice(0)), 60);
+      if (method === 'sendDocument') {
+        const text = raw.toString('latin1');
+        const name = /filename="([^"]+)"/.exec(text)[1];
+        // The file part: after the blank line of its headers, up to the closing boundary.
+        const head = text.indexOf('\r\n\r\n', text.indexOf(`filename="${name}"`)) + 4;
+        const boundary = text.slice(0, text.indexOf('\r\n'));
+        const body = raw.subarray(head, text.indexOf(`\r\n${boundary}`, head));
+        files.push({ name, body });
+        return ok({ message_id: 1 });
+      }
+      if (method === 'sendMessage') { sent.push(JSON.parse(raw.toString())); return ok({ message_id: sent.length }); }
+      return ok(true);
+    });
+  });
+  await new Promise((r) => tg.listen(0, r));
+  process.env.TELEGRAM_API = `http://127.0.0.1:${tg.address().port}`;
+  const waitFor = async (fn, what) => { for (let i = 0; i < 100; i++) { const v = await fn(); if (v) return v; await new Promise((r) => setTimeout(r, 50)); } throw new Error(what); };
+  try {
+    const bot = (await call('PUT', '/api/platform/telegram', admin, { token: '123456:ABCdefGHIjklMNOpqrSTUvwxYZ_12345' })).data;
+    assert.equal((await call('POST', '/api/platform/telegram/backup', admin)).status, 400, 'no chat yet');
+    updates.push({ update_id: 1, message: { message_id: 1, chat: { id: 999, type: 'private', first_name: 'Owner' }, text: `/start ${bot.link_code}` } });
+    await waitFor(async () => (await call('GET', '/api/platform/telegram', admin)).data.chat_id, 'platform chat linked');
+    const st = (await call('POST', '/api/telegram/link', boss)).data;
+    updates.push({ update_id: 2, message: { message_id: 2, chat: { id: 4343, type: 'private', first_name: 'Ega' }, text: `/start ${st.link_code}` } });
+    await waitFor(async () => (await call('GET', '/api/telegram', boss)).data.linked, 'business linked');
+    assert.equal((await call('PUT', '/api/telegram/report', boss, { time: '25:00' })).status, 400);
+    assert.equal((await call('PUT', '/api/telegram/report', boss, { time: '22:30' })).data.report_time, '22:30');
+    assert.equal((await call('POST', '/api/telegram/report', boss)).status, 200);
+    const rep = sent.find((m) => String(m.chat_id) === '4343' && /— kunlik hisobot/.test(m.text));
+    assert.ok(rep, JSON.stringify(sent));
+    assert.match(rep.text, /Savdo/); assert.match(rep.text, /Xarajat/);
+    // The nightly backup: every business and the platform list, gzipped, each a valid database.
+    const r = (await call('POST', '/api/platform/telegram/backup', admin)).data;
+    assert.ok(r.sent >= 2 && !r.failed.length, JSON.stringify(r));
+    const mine = files.find((f) => /^flowi-oila-.*\.db\.gz$/.test(f.name));
+    assert.ok(mine && files.some((f) => /^flowi-platform-/.test(f.name)), files.map((f) => f.name).join(','));
+    const dbBytes = zlib.gunzipSync(mine.body);
+    assert.equal(dbBytes.subarray(0, 15).toString(), 'SQLite format 3');
+    const plat = (await call('GET', '/api/platform/telegram', admin)).data;
+    assert.equal(plat.backup.on, true); assert.equal(plat.backup.sent, r.sent);
+    assert.equal((await call('PUT', '/api/platform/telegram/backup', admin, { on: false })).data.on, false);
+    // A choyxona's morning message only when something is due.
+    const morning = server.platform;
+    assert.ok(morning.tgBackupTick);
+  } finally { delete process.env.TELEGRAM_API; tg.close(); await call('DELETE', '/api/platform/telegram', admin); }
+  const evening = server.platform; assert.ok(evening.sendBackups);
 });

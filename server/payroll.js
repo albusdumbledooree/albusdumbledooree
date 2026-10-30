@@ -56,7 +56,7 @@ function createPayroll(db, { audit, events, now = () => Date.now() }) {
   function accrue(user, from, to) {
     const start = [from, dayOf(user.created_at)].sort()[1];
     const end = [to, today(), user.left_at ? dayOf(user.left_at) : '9999-12-31'].sort()[0];
-    const out = { base: 0, pct: 0, sales: 0, days_worked: 0 };
+    const out = { base: 0, pct: 0, sales: 0, days_worked: 0, minutes: 0 };
     if (start > end) return out;
     const rates = ratesOf(user.id);
     const present = new Set(q(`SELECT day FROM attendance WHERE user_id = ? AND day >= ? AND day <= ? AND source NOT IN ${NOT_PRESENT}`).all(user.id, start, end).map((r) => r.day));
@@ -68,12 +68,20 @@ function createPayroll(db, { audit, events, now = () => Date.now() }) {
       const k = dayOf(o.closed_at);
       sales.set(k, (sales.get(k) || 0) + o.total);
     }
+    // Hourly workers: the minutes between "I came" and "I left" (an open day counts up to now).
+    const minutes = new Map();
+    for (const w of q("SELECT day, in_at, out_at FROM work_log WHERE user_id = ? AND status = 'ok' AND day >= ? AND day <= ?").all(user.id, start, end)) {
+      const m = Math.max(0, ((w.out_at || now()) - w.in_at) / 60000);
+      minutes.set(w.day, (minutes.get(w.day) || 0) + m);
+    }
     for (let d = start; d <= end; d = addDays(d, 1)) {
       if (present.has(d)) out.days_worked += 1;
+      out.minutes += minutes.get(d) || 0;
       const r = rateOn(rates, d);
       if (!r) continue;
       if (r.pay_type === 'monthly') out.base += r.amount / daysInMonth(d);
       else if (r.pay_type === 'daily' && present.has(d)) out.base += r.amount;
+      else if (r.pay_type === 'hourly') out.base += (r.amount * (minutes.get(d) || 0)) / 60;
       if (r.sales_pct && sales.has(d)) {
         out.sales += sales.get(d);
         out.pct += (sales.get(d) * r.sales_pct) / 100;
@@ -81,6 +89,7 @@ function createPayroll(db, { audit, events, now = () => Date.now() }) {
     }
     out.base = Math.round(out.base);
     out.pct = Math.round(out.pct);
+    out.minutes = Math.round(out.minutes);
     return out;
   }
 
@@ -103,7 +112,7 @@ function createPayroll(db, { audit, events, now = () => Date.now() }) {
     const e = entrySums(user.id, from, to);
     const rate = rateOn(ratesOf(user.id), [to, today()].sort()[0]);
     return {
-      id: user.id, name: user.name, role: user.role, active: user.active,
+      id: user.id, name: user.name, role: user.role, active: user.active, app: user.app ?? 1, position: user.position || '', minutes: a.minutes,
       rate: rate && { pay_type: rate.pay_type, amount: rate.amount, sales_pct: rate.sales_pct, from_day: rate.from_day },
       days_worked: a.days_worked, sales: a.sales, accrued_base: a.base, accrued_pct: a.pct, accrued: a.base + a.pct,
       bonus: e.bonus, fine: e.fine, deduction: e.deduction, advance: e.advance, paid: e.payment + e.advance,
@@ -143,7 +152,7 @@ function createPayroll(db, { audit, events, now = () => Date.now() }) {
   function setRate({ user, params, body }) {
     const target = getUser(params.id);
     const pay_type = str(body.pay_type, 'Turi', { required: true });
-    if (!['monthly', 'daily', 'none'].includes(pay_type)) throw new HttpError(400, "Maosh turi noto'g'ri");
+    if (!['monthly', 'daily', 'hourly', 'none'].includes(pay_type)) throw new HttpError(400, "Maosh turi noto'g'ri");
     const amount = pay_type === 'none' ? 0 : int(body.amount, 'Summa', { required: true });
     const sales_pct = Number(body.sales_pct) || 0;
     if (!(sales_pct >= 0 && sales_pct <= 50)) throw new HttpError(400, "Foiz 0–50 oralig'ida bo'lsin");
@@ -237,7 +246,7 @@ function createPayroll(db, { audit, events, now = () => Date.now() }) {
       const src = marks.get(u.id);
       const status = !src ? null : src === 'auto' || src === 'manual' ? 'present' : src;
       return {
-        id: u.id, name: u.name, role: u.role, status, auto: src === 'auto',
+        id: u.id, name: u.name, role: u.role, app: u.app ?? 1, position: u.position || '', status, auto: src === 'auto', minutes: a.minutes,
         rate: rate && { pay_type: rate.pay_type, amount: rate.amount, sales_pct: rate.sales_pct },
         earned: a.base + a.pct, spent: e.deduction, fine: e.fine, bonus: e.bonus, paid: e.payment + e.advance,
         day_due: a.base + a.pct + e.bonus - e.fine - e.deduction - e.payment - e.advance,

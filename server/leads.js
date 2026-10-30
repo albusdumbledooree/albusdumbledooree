@@ -251,6 +251,22 @@ function createLeads({ pdb, pget, pset, now = Date.now, log = console }) {
     return call('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true });
   }
   const ready = () => !!tg().token;
+  // A file to a chat (the nightly backup). Telegram takes up to 50 MB from a bot.
+  async function sendFile(chatId, name, buf, caption = '') {
+    const token = tg().token;
+    if (!token) throw new HttpError(400, 'Telegram bot ulanmagan');
+    const form = new FormData();
+    form.append('chat_id', String(chatId));
+    if (caption) { form.append('caption', caption); form.append('parse_mode', 'HTML'); }
+    form.append('document', new Blob([buf]), name);
+    let res;
+    try { res = await fetch(`${apiBase()}/bot${token}/sendDocument`, { method: 'POST', body: form }); } catch {
+      throw new HttpError(502, "Telegram bilan aloqa yo'q");
+    }
+    const j = await res.json().catch(() => ({}));
+    if (!j.ok) throw new HttpError(502, `Telegram: ${j.description || res.status}`);
+    return j.result;
+  }
 
   async function onUpdate(u) {
     const s = tg();
@@ -318,7 +334,7 @@ function createLeads({ pdb, pget, pset, now = Date.now, log = console }) {
   function start() { if (running) return; running = true; loop(); }
   function stop() { running = false; kick(); }
 
-  return { submit, list, update, botStatus, setToken, relink, unlink, test, start, stop, STATUSES, onMessage, sendTo, ready, botName: () => tg().bot || '' };
+  return { submit, list, update, botStatus, setToken, relink, unlink, test, start, stop, STATUSES, onMessage, sendTo, sendFile, ready, botName: () => tg().bot || '', ownerChat: () => tg().chat_id || null };
 }
 
 module.exports = { createLeads };

@@ -66,6 +66,7 @@ Views.pos = {
           <div class="menu-bar">
             <div class="scan">${icon(isShop() ? 'scan-barcode' : 'search', 20)}<input type="search" id="pos-scan" autocomplete="off" placeholder="${esc(isShop() ? t('Shtrix-kod yoki nomi') : W('Taom qidirish'))}" value="${esc(UI.search)}"></div>
             ${isShop() && camOk() ? `<button class="btn cam-btn" id="pos-cam" title="${esc(t('Kamera bilan skanerlash'))}">${icon('camera', 20)}<span class="hide-xs"> ${t('Kamera')}</span></button>` : ''}
+            ${isDoors() ? '' : quickMoneyHtml()}
             ${showShift ? `<button class="btn ${shift ? '' : 'primary'}" id="shift">${icon(shift ? 'lock' : 'circle-plus', 16)} ${shift ? t('Smenani yopish') : t('Smenani ochish')}</button>` : ''}</div>
           ${filters}
           <div class="dishes">${list.map((x) => dishTile(menu, x, { qty: (PosCart.lines.find((c) => c.dish_id === x.id) || {}).qty, sub: productSub(x) })).join('') || emptyState('search', W('Taom topilmadi'))}</div>
@@ -75,6 +76,7 @@ Views.pos = {
     </div>`;
   },
   bind(root, d) {
+    bindQuickMoney(root);
     const { menu } = d;
     const rerender = () => renderView(d);
     const scan = root.querySelector('#pos-scan');
