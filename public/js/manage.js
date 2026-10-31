@@ -126,7 +126,8 @@ function checkDetailHtml(o) {
       <div class="grow"><b>${t('Chek')} #${o.id}</b><span class="small muted">${esc(placeName(o))} · ${icon('user-round', 12)} ${esc(o.waiter.name)} · ${icon('users', 12)} ${o.guests}</span></div>
       ${o.status === 'cancelled' ? `<span class="chip red">${t('Bekor')}</span>` : ''}</div>
     <div class="cp-body">
-      <p class="small muted" style="margin:8px 0">${icon('clock', 12)} ${fmtDateTime(o.opened_at)} → ${fmtDateTime(o.closed_at)}${o.cashier ? ` · ${icon('wallet', 12)} ${esc(o.cashier.name)}` : ''}${o.print_count ? ` · ${icon('printer', 12)} ${o.print_count}` : ''}</p>
+      <p class="small muted" style="margin:8px 0">${icon('clock', 12)} ${fmtDateTime(o.opened_at)} → ${fmtDateTime(o.closed_at)}${o.cashier ? ` · ${icon('wallet', 12)} ${esc(o.cashier.name)}` : ''}${o.print_count ? ` · ${icon('printer', 12)} ${o.print_count}` : ''}
+        ${can('owner', 'admin', 'cashier') ? ` <button class="btn sm" id="h-story">${icon('history', 14)} ${t('Chek tarixi')}</button>` : ''}</p>
       ${o.items.map((i, n) => `<div class="line ${i.status === 'cancelled' ? 'cancelled' : ''}"><span class="q">${n + 1}</span><span class="n">${esc(i.name)} <span class="muted">× ${i.qty}</span></span><span class="p">${num(i.price * i.qty)}</span></div>`).join('')}
       ${o.cancel_reason ? `<p class="small" style="color:var(--red);margin-top:8px">${esc(o.cancel_reason)}</p>` : ''}
     </div>
@@ -211,6 +212,8 @@ Views.history = {
     });
     const pr = root.querySelector('#h-print');
     if (pr) pr.onclick = () => printCheck(d.order.id);
+    const st = root.querySelector('#h-story');
+    if (st) st.onclick = () => checkStory(d.order.id);
     const rf = root.querySelector('#h-refund');
     if (rf) rf.onclick = () => refundDialog(d.order);
     const inv = root.querySelector('#h-invoice');
@@ -285,43 +288,6 @@ function refundDialog(o) {
 }
 
 // ---------- Reports: income, expenses, profit ----------
-Views.reports = {
-  title: () => t('Hisobot'), icon: () => 'chart-column', roles: ['owner', 'admin', 'cashier'], refreshOn: ['finance'], module: 'reports', on: () => !!App.money.reports,
-  async load() { const r = periodRange(); return { rep: await GET(`/api/reports?from=${r.from}&to=${r.to}`) }; },
-  render({ rep: r }) {
-    const s = r.sales;
-    return `<div class="page-head"><a class="btn sm" href="#/money">${icon('arrow-left', 16)}</a><h1>${t('Hisobot')}</h1>${moduleOn('export') ? `<button class="btn" id="csv">${icon('file-spreadsheet', 18)} Excel</button>` : ''}</div>
-      ${periodPicker()}
-      <div class="kpis">
-        ${kpi(t('Kirim'), money(r.gross_income), t('{0} chek · o\'rtacha {1}', s.orders, moneyText(s.avg_check)), 'good', 'trending-up')}
-        ${kpi(t('Chiqim'), money(r.expense), '', 'bad', 'arrow-right-left')}
-        ${kpi(t('Foyda'), money(r.net_profit), '', r.net_profit >= 0 ? 'good' : 'bad', 'coins')}
-        ${kpi(t('Mehmonlar'), s.guests, `${t('Xizmat haqi')}: ${money(s.service)}`, '', 'users')}
-      </div>
-      <div class="card"><div class="card-head"><h2>${r.hourly ? t("Soatlar bo'yicha") : t("Kunlar bo'yicha")}</h2></div>${barChart(r.series)}</div>
-      <div class="grid grid-2" style="margin-top:16px">
-        <div class="card"><div class="card-head"><h2>${t("To'lov turlari")}</h2></div>
-          ${hbars([{ label: t('Naqd'), value: s.cash }, { label: t('Karta'), value: s.card }, { label: t("O'tkazma"), value: s.transfer }, ...(s.debt ? [{ label: t('Qarzga'), value: s.debt }] : []), ...(s.bonus ? [{ label: t('Bonus bilan'), value: s.bonus }] : []), ...(s.staff ? [{ label: t('Xodim hisobiga'), value: s.staff }] : []), ...(r.other_income ? [{ label: t('Boshqa kirim'), value: r.other_income }] : [])])}</div>
-        <div class="card"><div class="card-head"><h2>${t('Xarajatlar')}</h2></div>${hbars(r.expense_by_category.map((x) => ({ label: x.key, value: x.value })), { red: true })}</div>
-        <div class="card"><div class="card-head"><h2>${t('Eng ko\'p sotilgan')}</h2></div>${hbars(r.dishes.slice(0, 8).map((d) => ({ label: `${d.name} (${d.qty})`, value: d.revenue })))}</div>
-        <div class="card"><div class="card-head"><h2>${isShop() ? t('Sotuvchilar') : t('Ofitsantlar')}</h2></div>${hbars(r.waiters.map((w) => ({ label: `${w.name} (${w.orders})`, value: w.total })))}</div>
-      </div>`;
-  },
-  bind(root, { rep: r }) {
-    bindPeriod(root);
-    (root.querySelector('#csv') || {}).onclick = async () => {
-      const txs = moduleOn('finance') ? await GET(`/api/transactions?from=${r.from}&to=${r.to}`) : [];
-      downloadCsv(`hisobot_${localDay(r.from)}_${localDay(r.to - 1)}.csv`, [
-        [t('Hisobot'), `${fmtDate(r.from)} — ${fmtDate(r.to - 1)}`], [],
-        [t('Kirim'), r.gross_income], [t('Chiqim'), r.expense], [t('Foyda'), r.net_profit], [t('Cheklar'), r.sales.orders],
-        [t('Naqd'), r.sales.cash], [t('Karta'), r.sales.card], [t("O'tkazma"), r.sales.transfer], [t('Xizmat haqi'), r.sales.service], [t('Chegirma'), r.sales.discount], [],
-        [t('Taomlar')], ...r.dishes.map((d) => [d.name, d.qty, d.revenue]), [],
-        [t('Kirim-chiqim')], ...txs.map((x) => [fmtDateTime(x.created_at), x.type === 'income' ? t('Kirim') : t('Chiqim'), x.category, methodName(x.method), x.amount, x.note]),
-      ]);
-    };
-  },
-};
-
 // ---------- Cash book ----------
 // Income or a cost written by hand: what for, how much, how paid, and the day (today, yesterday or another day).
 function openTransaction(type, preset = {}) {
@@ -1817,7 +1783,8 @@ Views.settings = {
     const voices = Voice.voices();
     const picked = Voice.pick();
     const boss = can('owner', 'admin');
-    return `<div class="grid grid-2">
+    return `${boss ? '' : `<a class="card notice blue" href="#/mystats" style="margin-bottom:16px;text-decoration:none">${icon('chart-column', 18)} <span><b>${t('Mening natijalarim')}</b> — ${t('bugun nechta chek, qancha savdo, qaysi taomlar')} →</span></a>`}
+      <div class="grid grid-2">
       <div class="card"><div class="card-head"><h2>${icon('languages')} ${t('Til va ko\'rinish')}</h2></div>
         <div class="stack">${langSelect('me-lang')}
           <div class="seg">${[['light', 'sun', t("Yorug'")], ['dark', 'moon', t("Qorong'i")]].map(([k, ic, n]) => `<button class="${(store('cp_theme') || 'light') === k ? 'active' : ''}" data-theme="${k}">${icon(ic, 16)} ${n}</button>`).join('')}</div>

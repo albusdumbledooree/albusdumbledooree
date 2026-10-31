@@ -8,6 +8,7 @@ const { createGuest } = require('./guest');
 const { createTasks } = require('./tasks');
 const { createShop, SYSTEM_CATS } = require('./shop');
 const { createMoney, GROUP_KEYS } = require('./money');
+const { createStats } = require('./stats');
 const { createPayroll } = require('./payroll');
 const { createWork, STAFF_ROLES } = require('./work');
 const { snapshot } = require('./backup');
@@ -51,6 +52,8 @@ function routeModule(pattern) {
   if (pattern === '/api/dishes/:id/availability') return 'stoplist';
   if (pattern === '/api/reports' || pattern === '/api/dashboard' || pattern === '/api/profit') return 'reports';
   if (pattern === '/api/pnl') return 'pnl';
+  if (/^\/api\/stats/.test(pattern)) return 'reports';
+  if (pattern === '/api/orders/:id/story') return 'history';
   if (/^\/api\/fixed-costs/.test(pattern)) return 'finance';
   if (/^\/api\/(transactions|shifts)/.test(pattern)) return 'finance';
   if (/^\/api\/(payroll|my\/payroll|attendance)/.test(pattern)) return 'payroll';
@@ -90,6 +93,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   // Expense groups, fixed monthly costs and the month's profit and loss.
   const money = createMoney(db, { settings: () => settings(), audit, events: hub, now, payroll, payrollOn: () => moduleOn('payroll'),
     isShop: () => SHOP_TYPES.includes(businessType()), shop, SYSTEM_CATS });
+  // The detailed report: categories, each worker's day, a check's story, things worth a second look.
+  const stats = createStats(db, { now });
   // Work hours, GPS and the cash desk's attendance QR code (all optional, switched on in the settings).
   const work = createWork(db, { settings: () => settings(), audit, events: hub, now });
 
@@ -414,6 +419,11 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     out.push(`💸 Xarajat: <b>${m(n.expense)}</b>`);
     out.push(`📈 Farq (savdo − xarajat): <b>${m(n.revenue - n.expense)}</b>`);
     if (n.top.length) out.push('', `🍽 Eng ko'p: ${n.top.map((x) => `${esc(x.name)} (${x.qty})`).join(', ')}`);
+    // Who sold how much today, and how many things are worth a look in the report.
+    const st = stats.overview({ query: { from: t0, to: now() + 1 } });
+    const sellers = st.staff.filter((x) => x.revenue).slice(0, 5);
+    if (sellers.length) out.push('', `👤 ${SHOP_TYPES.includes(businessType()) ? 'Sotuvchilar' : 'Ofitsantlar'}: ${sellers.map((x) => `${esc(x.name)} ${shop.money(x.revenue)} (${x.checks})`).join(', ')}`);
+    if (st.suspicious_count) out.push(`🔎 Shubhali holatlar: <b>${st.suspicious_count} ta</b> — dasturda Hisobot → Shubhali`);
     if (n.open_checks) out.push('', `⚠️ Ochiq cheklar: ${n.open_checks} ta — ${m(n.open_sum)}`);
     const due = money.fixedDue();
     if (due.length) out.push('', `💳 To'lanmagan: ${due.map((x) => `${esc(x.name)} ${shop.money(x.amount)}`).join(', ')}`);
@@ -1999,6 +2009,11 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['DELETE', '/api/fixed-costs/:id', MANAGERS, money.fixedRemove],
     ['POST', '/api/fixed-costs/:id/pay', MONEY, money.fixedPay],
     ['GET', '/api/pnl', ['owner'], money.pnl],
+    ['GET', '/api/stats', MONEY, stats.overview],
+    ['GET', '/api/stats/user/:id', MONEY, stats.person],
+    ['GET', '/api/orders/:id/story', MONEY, stats.orderStory],
+    // A worker's own results (a waiter sees only theirs).
+    ['GET', '/api/my/stats', ALL, ({ user, query }) => stats.person({ params: { id: user.id }, query })],
     ['POST', '/api/geo/check', ALL, work.geoCheck],
     ['GET', '/api/work/me', ALL, ({ user }) => work.state(user)],
     ['POST', '/api/work/in', ALL, work.clockIn],

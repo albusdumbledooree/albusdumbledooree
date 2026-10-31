@@ -23,7 +23,7 @@ function navOrder(role) {
     chef: ['kitchen', 'stoplist', 'inventory', 'settings'],
   }[role];
 }
-const CHILD_OF = { fixed: 'money', pnl: 'money', room: 'rooms', order: 'rooms', soboy: 'rooms', reports: 'money', finance: 'money', payroll: 'money', attendance: 'staff', customers: 'money', inventory: 'money', branches: 'money',
+const CHILD_OF = { staffday: 'money', mystats: 'settings', fixed: 'money', pnl: 'money', room: 'rooms', order: 'rooms', soboy: 'rooms', reports: 'money', finance: 'money', payroll: 'money', attendance: 'staff', customers: 'money', inventory: 'money', branches: 'money',
   profit: 'money', purchases: 'money', debts: 'money', masters: 'money' };
 let currentView = null;
 let currentParams = [];

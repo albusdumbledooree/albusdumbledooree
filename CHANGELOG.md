@@ -2,6 +2,25 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.16.0 — Batafsil hisobot: kategoriyalar, xodimlar, chek tarixi, shubhali holatlar
+Moliya → **Hisobot** yangilandi. Tepada davr (bugun / kecha / hafta / oy / sana) va **xodim** tanlanadi — xodim tanlansa,
+hamma yorliq faqat o'shaniki bo'ladi. Telefon, planshet va kompyuterda bir xil qulay.
+- **Umumiy**: savdo (o'tgan davr bilan solishtirish), chiqim, foyda, mehmonlar, to'lov turlari, soatlar bo'yicha grafik.
+- **Taomlar**: kategoriya bo'yicha (Suyuq taomlar, Quyuq taomlar…), bosilsa ichidagi taomlar — nechta, qancha, foydasi;
+  bekor qilinganlar alohida.
+- **Xodimlar**: har biri — cheklar, mehmonlar, savdo, o'rtacha chek, chegirma, bekor qilganlari, yopgan cheklari, kelgan–ketgan vaqti.
+  Xodim bosilsa — **uning kuni**: daqiqama-daqiqa nima qilgani (chek ochdi, taom qo'shdi, bekor qildi, chop etdi, yopdi),
+  uning cheklari va sotgan taomlari.
+- **Smenalar**: kim ochdi va yopdi, kutilgan va haqiqiy naqd, kamomad yoki ortiqcha.
+- **Shubhali**: dastur o'zi topadi — chek chop etilgandan keyin taom olib tashlangan, tayyor taom bekor qilingan,
+  10% dan katta chegirma, butun chek bekor qilingan, chek 8 soatdan ko'p ochiq turgan, kassada kamomad.
+- **Chek tarixi**: Cheklar bo'limida va hisobotda chek raqami bosilsa — kim ochdi, kim qaysi taomni qo'shdi,
+  oshxona qachon qabul qildi, kim bekor qildi va nega, necha marta chop etildi, kim va soat nechada yopdi.
+- **Mening natijalarim**: ofitsant va kassir Sozlamalar'da faqat o'zining kunini ko'radi.
+- Excelga: kategoriya va taomlar, xodimlar, shubhali holatlar.
+- Telegram'dagi kechki hisobotga ofitsantlar savdosi va shubhali holatlar soni qo'shildi.
+- Eski cheklar ham to'liq ko'rinadi: amallar tarixi har doim yozib borilgan.
+
 ## 1.15.0 — To'liq oylik hisobot: barcha xodimlar, doimiy xarajatlar, sof foyda
 - **Dasturga kirmaydigan xodimlar** (tandirchi, idishchi, qorovul, farrosh…): Xodimlar → "Dasturga kirmaydi (faqat maosh)".
   Faqat ism, lavozim, telefon va maosh kiritiladi; login/PIN yo'q, tarif limitiga kirmaydi. Davomat, avans, bonus va jarima ular uchun ham ishlaydi.

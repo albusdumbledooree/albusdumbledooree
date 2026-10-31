@@ -1675,7 +1675,7 @@ test('the month in full: staff without the program, hourly pay, fixed costs, dat
   assert.equal(g.kommunal.amount, 950000);
   if (y.slice(0, 7) === month) assert.equal(g.mahsulot.amount, 700000);
   assert.ok(g.ish_haqi.amount > 0, 'monthly pay accrued so far');
-  assert.ok(g.ijara.unpaid === 5000000 || Number(localDay().slice(8)) === 1);
+  assert.ok((g.ijara && g.ijara.unpaid === 5000000) || Number(localDay().slice(8)) === 1, JSON.stringify(p.groups));
   assert.equal(p.net, p.revenue + p.other_income - p.expenses);
   // Fixed costs added this month are not last month's costs.
   const prevMonth = (() => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; })();
@@ -1742,4 +1742,72 @@ test('the month in full: staff without the program, hourly pay, fixed costs, dat
     assert.ok(morning.tgBackupTick);
   } finally { delete process.env.TELEGRAM_API; tg.close(); await call('DELETE', '/api/platform/telegram', admin); }
   const evening = server.platform; assert.ok(evening.sendBackups);
+});
+
+test('detailed report: categories, each worker and their day, a check story, things worth a second look', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  await call('POST', '/api/platform/tenants', admin, { name: 'Hisobot choyxona', code: 'hisob', owner_name: 'Ega', owner_username: 'ega', owner_password: 'ega12345', plan: 'biznes', sample: true, kitchen_mode: 'off' });
+  const boss = await login('ega', 'ega12345', 'hisob');
+  const w = (await call('POST', '/api/users', boss, { name: 'Jasur', role: 'waiter', username: 'jasur', password: 'pass1234', pin: '1111' })).data;
+  await call('POST', '/api/users', boss, { name: 'Lola', role: 'cashier', username: 'lola', password: 'pass1234', pin: '2222' });
+  const waiter = await login('jasur', 'pass1234', 'hisob');
+  const cashier = await login('lola', 'pass1234', 'hisob');
+  const menu = (await call('GET', '/api/menu', boss)).data;
+  const rooms = (await call('GET', '/api/rooms', boss)).data;
+  await call('PUT', `/api/rooms/${rooms[0].id}`, boss, { waiter_ids: [w.id] });
+  const [d1, d2] = menu.dishes;
+  // A check: two dishes, the bill printed, then one dish taken off, then paid with a big discount.
+  const o = (await call('POST', '/api/orders', waiter, { room_id: rooms[0].id })).data;
+  await call('POST', `/api/orders/${o.id}/items`, waiter, { items: [{ dish_id: d1.id, qty: 3 }, { dish_id: d2.id, qty: 2 }] });
+  let full = (await call('GET', `/api/orders/${o.id}`, boss)).data;
+  assert.equal((await call('POST', `/api/orders/${o.id}/print`, cashier)).status, 200);
+  const line = full.items.find((i) => i.dish_id === d2.id);
+  assert.equal((await call('POST', `/api/items/${line.id}/cancel`, cashier, { qty: 1, reason: 'mijoz qaytardi' })).status, 200);
+  full = (await call('GET', `/api/orders/${o.id}`, boss)).data;
+  const discount = Math.round(full.total * 0.3);
+  assert.equal((await call('POST', `/api/orders/${o.id}/close`, cashier, { paid_cash: full.total - discount, discount })).status, 200);
+
+  const from = Date.now() - 3600e3; const to = Date.now() + 60e3;
+  const r = (await call('GET', `/api/stats?from=${from}&to=${to}`, boss)).data;
+  assert.equal(r.summary.checks, 1);
+  assert.equal(r.summary.dishes_qty, 4);
+  assert.equal(r.summary.cancelled_qty, 1);
+  const allDishes = r.categories.flatMap((c) => c.dishes);
+  assert.equal(allDishes.find((x) => x.name === d1.name).qty, 3);
+  assert.equal(allDishes.find((x) => x.name === d2.name).qty, 1);
+  assert.ok(r.categories.every((c) => c.dishes.reduce((s, x) => s + x.qty, 0) === c.qty));
+  const sj = r.staff.find((x) => x.id === w.id);
+  assert.equal(sj.checks, 1); assert.equal(sj.guests >= 1, true);
+  const sl = r.staff.find((x) => x.name === 'Lola');
+  assert.equal(sl.closed, 1); assert.equal(sl.cancels, 1);
+  const kinds = r.suspicious.map((x) => x.kind);
+  assert.ok(kinds.includes('after_print'), JSON.stringify(r.suspicious));
+  assert.ok(kinds.includes('discount'));
+  assert.equal(r.suspicious.find((x) => x.kind === 'after_print').amount, line.price);
+
+  // Narrowed to one worker.
+  const rw = (await call('GET', `/api/stats?from=${from}&to=${to}&user=${w.id}`, boss)).data;
+  assert.equal(rw.user.name, 'Jasur'); assert.equal(rw.summary.checks, 1); assert.equal(rw.staff.length, 1);
+
+  // A worker's day: opened, added; the cashier's: printed, cancelled, closed.
+  const day = (await call('GET', `/api/stats/user/${w.id}?from=${from}&to=${to}`, boss)).data;
+  assert.deepEqual(day.timeline.map((x) => x.action), ['order_open', 'items_add']);
+  assert.equal(day.timeline[0].order_id, o.id);
+  const lola = (await call('GET', `/api/stats/user/${sl.id}?from=${from}&to=${to}`, boss)).data;
+  assert.deepEqual(lola.timeline.map((x) => x.action), ['check_print', 'item_cancel', 'order_close']);
+  assert.equal(lola.closed.length, 1);
+
+  // The check's story, in order, with who did each step.
+  const st = (await call('GET', `/api/orders/${o.id}/story`, boss)).data;
+  const acts = st.events.map((x) => x.action);
+  assert.ok(acts.indexOf('order_open') < acts.indexOf('check_print') && acts.indexOf('check_print') < acts.indexOf('item_cancel') && acts.indexOf('item_cancel') < acts.indexOf('order_close'), acts.join(','));
+  assert.equal(st.events.find((x) => x.action === 'item_cancel').user, 'Lola');
+  assert.equal(st.order.cashier_name, 'Lola');
+
+  // A waiter sees only their own results.
+  assert.equal((await call('GET', `/api/stats?from=${from}&to=${to}`, waiter)).status, 403);
+  assert.equal((await call('GET', `/api/stats/user/${sl.id}?from=${from}&to=${to}`, waiter)).status, 403);
+  const mine = (await call('GET', `/api/my/stats?from=${from}&to=${to}`, waiter)).data;
+  assert.equal(mine.user.id, w.id); assert.equal(mine.summary.checks, 1);
+  assert.equal((await call('GET', `/api/stats?from=${to}&to=${from}`, boss)).status, 400);
 });
