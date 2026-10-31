@@ -973,3 +973,4 @@ details.upcoming summary { cursor: pointer; font-weight: 650; color: var(--muted
   .rep-tabs { flex-wrap: wrap; overflow: visible; }
   .rep-tabs button { flex: 1 1 30%; justify-content: center; padding-left: 6px; padding-right: 6px; }
 }
+.sb-item.sb-warn { color: var(--red); font-weight: 700; }

@@ -491,9 +491,10 @@ function moreMenu(t) {
     ['reset', 'key-round', 'Boshliq parolini tiklash'],
     ['backups', 'database', 'Zaxiradan tiklash'],
     t.status === 'active' ? ['block', 'ban', 'Bloklash'] : ['unblock', 'circle-check', 'Faollashtirish'],
+    ['delete', 'trash-2', "Butunlay o'chirish"],
   ];
   const form = openModal({ title: `${icon(TYPE_ICONS[t.business_type] || 'store')} ${esc(t.name)}`,
-    body: `<div class="stack">${acts.map(([k, ic, n]) => `<button type="button" class="btn lg block ${k === 'block' ? 'red-text' : ''}" data-act="${k}" style="justify-content:flex-start">${icon(ic)} ${n}</button>`).join('')}</div>` });
+    body: `<div class="stack">${acts.map(([k, ic, n]) => `<button type="button" class="btn lg block ${k === 'block' || k === 'delete' ? 'red-text' : ''}" data-act="${k}" style="justify-content:flex-start">${icon(ic)} ${n}</button>`).join('')}</div>` });
   form.querySelectorAll('[data-act]').forEach((b) => b.onclick = async () => {
     closeModal();
     const k = b.dataset.act;
@@ -505,9 +506,28 @@ function moreMenu(t) {
     else if (k === 'block') {
       if (!(await confirmModal('Bloklash', `"${esc(t.name)}" bloklansinmi? Barcha xodimlari darhol tizimdan chiqariladi. Ma'lumotlar o'chmaydi.`, 'Bloklash'))) return;
       try { await PUT(`/api/platform/tenants/${t.id}`, { status: 'blocked' }); reload(); } catch (e) { toastError(e); }
-    } else if (k === 'unblock') {
+    } else if (k === 'delete') deleteTenant(t);
+    else if (k === 'unblock') {
       try { await PUT(`/api/platform/tenants/${t.id}`, { status: 'active' }); reload(); } catch (e) { toastError(e); }
     }
+  });
+}
+
+// Taking a business off the platform for good: its code typed by hand and the owner's password.
+function deleteTenant(t) {
+  openModal({
+    title: `${icon('trash-2')} "${esc(t.name)}" ni o'chirish`,
+    body: `<div class="notice red">${icon('triangle-alert', 18)} <span>Biznes platformadan <b>butunlay o'chiriladi</b>: xodimlari kira olmaydi, havolasi (<b>/c/${esc(t.code)}</b>) ishlamaydi.
+        Oxirgi nusxasi serverda (<code>data/backups/deleted/</code>) saqlanadi${P.tg && P.tg.chat_id ? " va Telegramingizga yuboriladi" : ''}.</span></div>
+      <p class="small muted">Faqat vaqtincha to'xtatmoqchi bo'lsangiz — "Bloklash" ni tanlang, unda ma'lumotlar joyida qoladi.</p>
+      <label class="field">Tasdiqlash uchun biznes kodini yozing: <b>${esc(t.code)}</b><input name="code" autocomplete="off" autocapitalize="none"></label>
+      <label class="field" style="margin-top:10px">Sizning parolingiz (platforma)<input name="password" type="password" autocomplete="current-password"></label>`,
+    actions: [{ label: 'Bekor', onClick: () => {} }, { label: "Butunlay o'chirish", cls: 'danger', icon: 'trash-2', onClick: async (f) => {
+      if (f.code.value.trim().toLowerCase() !== t.code) { toast("Kodni to'g'ri yozing", 'warn'); return false; }
+      const r = await POST(`/api/platform/tenants/${t.id}/delete`, { code: f.code.value, password: f.password.value });
+      toast(`O'chirildi. Nusxa: ${r.saved_as}`, 'ok', 8000);
+      reload();
+    } }],
   });
 }
 

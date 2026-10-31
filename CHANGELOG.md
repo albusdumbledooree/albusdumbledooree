@@ -2,6 +2,22 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.17.0 — Oshxona printerlari va platformadan biznesni o'chirish
+- **Buyurtma printeri sozlamalari** (qurilmaning qulf ekrani → ⚙ → "Buyurtma printeri"):
+  - **faqat oshxona taomlari** chop etiladi (choy, non, ichimlik oshxona qog'oziga tushmaydi) yoki hammasi;
+  - **bo'lim bo'yicha printerlar**: har bir printer o'z bo'limlarini tanlaydi — kabobxonaga faqat kaboblar, barga ichimliklar;
+  - "Sinov qog'ozi" va **oxirgi qog'ozlarni qayta chop etish**.
+- **Hech bir buyurtma yo'qolmaydi**: har bir qog'oz avval serverga yoziladi. Printer kompyuteri o'chib qolsa,
+  oxirgi 3 soatda chop etilmay qolganlar u yoqilganda o'zi chiqadi ("KECHIKIB CHIQDI" belgisi bilan).
+- **Printer ulanmagan bo'lsa ogohlantirish**: kassa, ofitsant va boshliq ekranining pastki qatorida
+  "Printer ulanmagan: Oshxona" chiqadi va bir marta xabar keladi.
+- **Oshxonaga qayta chop etish**: chek → ☰ → "Oshxonaga qayta chop etish" (qog'oz yo'qolsa yoki printerda qog'oz tugasa) — "QAYTA CHOP ETILDI" belgisi bilan.
+- Bekor qilingan taom qog'ozi ("BEKOR QILINDI") faqat o'sha taom chiqqan printerga boradi.
+- **Platforma: biznesni butunlay o'chirish** (biznes kartasi → ⋮ → "Butunlay o'chirish"). Tasdiqlash uchun biznes kodi
+  va platforma paroli so'raladi. Oxirgi nusxasi serverda (data/backups/deleted/) saqlanadi va Telegramga yuboriladi.
+  Vaqtincha to'xtatish uchun "Bloklash" avvalgidek ishlaydi.
+- Eski qurilmalarda yoqilgan printer o'zi yangi tizimga o'tadi (faqat oshxona taomlari rejimida).
+
 ## 1.16.1 — Kichik tuzatish
 - "Xodimning kuni" sahifasi xodim tanlanmasdan ochilsa, xato o'rniga Hisobotga qaytadi.
 

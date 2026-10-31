@@ -629,7 +629,8 @@ test('a new business boss enters the desktop without a password until setting on
   assert.equal((await call('POST', '/api/device/pin', dev, { user_id: staff[0].id, pin: '' })).status, 401);
   assert.equal((await call('POST', '/api/device/pin', dev, { user_id: staff[0].id, pin: 'kalit77' })).status, 200);
 
-  // The device's own event stream receives every new order.
+  // Switched on as an order printer, the device's own event stream wakes it for every new order.
+  assert.equal((await call('PUT', '/api/device/printer', dev, { on: true, all: true })).data.on, true);
   const ctrl = new AbortController();
   const stream = await fetch(`${base}/api/events?token=${dev}`, { signal: ctrl.signal });
   assert.equal(stream.status, 200);
@@ -641,7 +642,9 @@ test('a new business boss enters the desktop without a password until setting on
   let text = '';
   while (!text.includes('order_print')) text += new TextDecoder().decode((await reader.read()).value);
   ctrl.abort();
-  assert.match(text, /achchiq/);
+  const jobs = (await call('GET', '/api/device/print-jobs', dev)).data.jobs;
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0].items[0].note, 'achchiq');
 });
 
 test('v1.5: cancel part of a line, PIN lock settings, room type names, built-in wallpaper, check logo', async () => {
@@ -1810,4 +1813,88 @@ test('detailed report: categories, each worker and their day, a check story, thi
   const mine = (await call('GET', `/api/my/stats?from=${from}&to=${to}`, waiter)).data;
   assert.equal(mine.user.id, w.id); assert.equal(mine.summary.checks, 1);
   assert.equal((await call('GET', `/api/stats?from=${to}&to=${from}`, boss)).status, 400);
+});
+
+test('order printers: kitchen dishes only, chosen sections, catch-up after being off, reprint, cancel slip, offline warning', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  await call('POST', '/api/platform/tenants', admin, { name: 'Printer choyxona', code: 'printer', owner_name: 'Ega', owner_username: 'ega', owner_password: 'ega12345', plan: 'biznes', sample: true, kitchen_mode: 'off' });
+  const boss = await login('ega', 'ega12345', 'printer');
+  const reg = async (name) => (await call('POST', '/api/device/register', null, { code: 'printer', username: 'ega', password: 'ega12345', name })).data.device_token;
+  const kitchen = await reg('Oshxona'); const kebab = await reg('Kabobxona');
+  const menu = (await call('GET', '/api/menu', boss)).data;
+  const cook = menu.dishes.find((d) => d.needs_kitchen);
+  const tea = menu.dishes.find((d) => !d.needs_kitchen);
+  const kebabCat = menu.categories.find((c) => /kabob/i.test(c.name)) || menu.categories[1];
+  const kebabDish = menu.dishes.find((d) => d.category_id === kebabCat.id);
+  // Kitchen printer: every kitchen dish, no tea. Kebab printer: only its section.
+  const cfg = (await call('GET', '/api/device/printer', kitchen)).data;
+  assert.equal(cfg.on, false); assert.ok(cfg.categories.length > 0);
+  await call('PUT', '/api/device/printer', kitchen, { on: true, all: false, cats: [] });
+  await call('PUT', '/api/device/printer', kebab, { on: true, all: false, cats: [kebabCat.id] });
+  let st = (await call('GET', '/api/printers', boss)).data;
+  assert.equal(st.length, 2); assert.ok(st.every((p) => p.online));
+
+  const room = (await call('GET', '/api/rooms', boss)).data[0];
+  const o = (await call('POST', '/api/orders', boss, { room_id: room.id })).data;
+  await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: cook.id, qty: 2 }, { dish_id: tea.id, qty: 1 }, { dish_id: kebabDish.id, qty: 4 }] });
+  let k = (await call('GET', '/api/device/print-jobs', kitchen)).data;
+  assert.equal(k.jobs.length, 1);
+  const names = k.jobs[0].items.map((i) => i.name);
+  assert.ok(names.includes(cook.name) && !names.includes(tea.name), names.join(','));
+  const kb = (await call('GET', '/api/device/print-jobs', kebab)).data;
+  assert.deepEqual(kb.jobs[0].items.map((i) => i.name), [kebabDish.name]);
+  // Printed: acknowledged, not printed again.
+  await call('POST', '/api/device/print-ack', kitchen, { upto: k.last });
+  await call('POST', '/api/device/print-ack', kebab, { upto: kb.last });
+  assert.equal((await call('GET', '/api/device/print-jobs', kitchen)).data.jobs.length, 0);
+
+  // The kebab stand's computer is off: its tickets wait and come out when it is back.
+  const o2 = (await call('POST', '/api/orders', boss, { room_id: room.id })).data;
+  await call('POST', `/api/orders/${o2.id}/items`, boss, { items: [{ dish_id: kebabDish.id, qty: 2 }] });
+  const back = (await call('GET', '/api/device/print-jobs', kebab)).data;
+  assert.equal(back.jobs.length, 1); assert.equal(back.jobs[0].order_id, o2.id);
+  await call('POST', '/api/device/print-ack', kebab, { upto: back.last });
+
+  // A cancelled dish: a cancel slip, only where the dish was printed.
+  const line = (await call('GET', `/api/orders/${o.id}`, boss)).data.items.find((i) => i.dish_id === kebabDish.id);
+  await call('POST', `/api/items/${line.id}/cancel`, boss, { qty: 1, reason: 'mijoz voz kechdi' });
+  const slip = (await call('GET', '/api/device/print-jobs', kebab)).data;
+  assert.equal(slip.jobs.length, 1); assert.equal(slip.jobs[0].cancel, true);
+  await call('POST', '/api/device/print-ack', kebab, { upto: slip.last });
+  // The kitchen printer skips it (not its dish) and moves past it.
+  await call('POST', '/api/device/print-ack', kitchen, { upto: (await call('GET', '/api/device/print-jobs', kitchen)).data.last });
+
+  // Reprint: the whole check again, marked as a reprint.
+  const rp = (await call('POST', `/api/orders/${o.id}/reprint`, boss)).data;
+  assert.equal(rp.ok, true);
+  const again = (await call('GET', '/api/device/print-jobs', kitchen)).data.jobs;
+  assert.equal(again.length, 1); assert.equal(again[0].reprint, true);
+  assert.ok((await call('GET', '/api/device/print-recent', kitchen)).data.length >= 2);
+
+  // Switched off: no more tickets, and no longer listed.
+  await call('PUT', '/api/device/printer', kebab, { on: false });
+  st = (await call('GET', '/api/printers', boss)).data;
+  assert.deepEqual(st.map((p) => p.name), ['Oshxona']);
+  assert.equal((await call('GET', '/api/device/print-jobs', kebab)).data.jobs.length, 0);
+  assert.equal((await call('GET', '/api/printers', null)).status, 401);
+});
+
+test('platform: a business is deleted only with its code and the owner password; a last copy is kept', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  const t = (await call('POST', '/api/platform/tenants', admin, { name: "O'chiriladigan", code: 'ketadi', owner_name: 'Ega', owner_username: 'ega', owner_password: 'ega12345', sample: true })).data;
+  const boss = await login('ega', 'ega12345', 'ketadi');
+  assert.equal((await call('GET', '/api/me', boss)).status, 200);
+  assert.equal((await call('POST', `/api/platform/tenants/${t.id}/delete`, admin, { code: 'boshqa', password: 'super123' })).status, 400);
+  assert.equal((await call('POST', `/api/platform/tenants/${t.id}/delete`, admin, { code: 'ketadi', password: 'xato' })).status, 403);
+  assert.equal((await call('POST', `/api/platform/tenants/${t.id}/delete`, boss, { code: 'ketadi', password: 'super123' })).status, 401, 'not for a business boss');
+  const r = await call('POST', `/api/platform/tenants/${t.id}/delete`, admin, { code: 'ketadi', password: 'super123' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.match(r.data.saved_as, /backups[\\/]deleted[\\/].*ketadi/);
+  assert.ok(fs.existsSync(path.join(server.dataDir, r.data.saved_as)), 'the last copy is on disk');
+  assert.ok(!fs.existsSync(path.join(server.dataDir, 'tenants', 'ketadi.db')));
+  assert.equal((await call('GET', '/api/me', boss)).status, 401);
+  assert.equal((await call('POST', '/api/login', null, { code: 'ketadi', username: 'ega', password: 'ega12345' })).status, 404);
+  assert.ok(!(await call('GET', '/api/platform/tenants', admin)).data.some((x) => x.code === 'ketadi'));
+  // The code is free again.
+  assert.equal((await call('POST', '/api/platform/tenants', admin, { name: 'Yangi', code: 'ketadi', owner_name: 'E', owner_username: 'ega', owner_password: 'ega12345' })).status, 200);
 });

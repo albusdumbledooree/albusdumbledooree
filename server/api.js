@@ -9,6 +9,7 @@ const { createTasks } = require('./tasks');
 const { createShop, SYSTEM_CATS } = require('./shop');
 const { createMoney, GROUP_KEYS } = require('./money');
 const { createStats } = require('./stats');
+const { createPrint } = require('./print');
 const { createPayroll } = require('./payroll');
 const { createWork, STAFF_ROLES } = require('./work');
 const { snapshot } = require('./backup');
@@ -95,6 +96,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     isShop: () => SHOP_TYPES.includes(businessType()), shop, SYSTEM_CATS });
   // The detailed report: categories, each worker's day, a check's story, things worth a second look.
   const stats = createStats(db, { now });
+  // Kitchen tickets for the order printers (with catch-up and reprint).
+  const print = createPrint(db, { now, events: hub, audit });
   // Work hours, GPS and the cash desk's attendance QR code (all optional, switched on in the settings).
   const work = createWork(db, { settings: () => settings(), audit, events: hub, now });
 
@@ -1101,7 +1104,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
         d.prep_minutes, t, kitchen ? t + (d.prep_minutes + (mode === 'full' ? load.extra_minutes : 0)) * MIN : null,
         kitchen ? null : t, status === 'cooking' ? t : null
       ).lastInsertRowid;
-      out.push({ id, name: d.name, qty, kitchen, note: str(it.note, 'Izoh', { max: 200 }) });
+      out.push({ id, name: d.name, qty, kitchen, note: str(it.note, 'Izoh', { max: 200 }), dish_id: d.id, category_id: d.category_id, cook: d.needs_kitchen === 1 });
     }
     q('UPDATE orders SET bill_requested = 0 WHERE id = ?').run(o.id);
     return out;
@@ -1117,7 +1120,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       events.publish('kitchen_new', { order_id: o.id, room: room.name, waiter: waiter && waiter.name, at: t, items: kitchenItems }, { roles: KITCHEN });
     }
     // Every order (waiter's or cashier's) goes to the computers chosen as order printers.
-    events.publish('order_print', { order_id: o.id, room: room.name, waiter: waiter && waiter.name, by: user.name, at: t, items: added }, { roles: ['device'] });
+    print.job('new', { order_id: o.id, room: room.name, waiter: waiter && waiter.name, by: user.name, at: t,
+      items: added.map((a) => ({ name: a.name, qty: a.qty, note: a.note, cook: a.cook, category_id: a.category_id })) });
     events.publish('rooms');
     if (added.some((a) => !a.kitchen)) events.publish('menu');
   }
@@ -1211,9 +1215,25 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     }
     // The cancellation slip prints at once on the order printers.
     const waiter = q('SELECT name FROM users WHERE id = ?').get(it.waiter_id);
-    events.publish('order_print', { cancel: true, order_id: it.order_id, room: it.room_name, waiter: waiter && waiter.name, by: user.name, at: now(),
-      items: [{ name: it.name, qty, note: reason }] }, { roles: ['device'] });
+    const dish = it.dish_id ? q('SELECT category_id, needs_kitchen FROM dishes WHERE id = ?').get(it.dish_id) : null;
+    print.job('cancel', { cancel: true, order_id: it.order_id, room: it.room_name, waiter: waiter && waiter.name, by: user.name, at: now(),
+      items: [{ name: it.name, qty, note: reason, cook: dish ? dish.needs_kitchen === 1 : !!it.needs_kitchen, category_id: dish ? dish.category_id : null }] });
     return orderDetails(it.order_id);
+  }
+
+  // The kitchen ticket again (the paper ran out, the ticket got lost): every dish still on the check.
+  function reprintOrder({ user, params }) {
+    const o = getOrderRow(params.id);
+    assertOrderAccess(user, o);
+    const items = q(`SELECT i.name, i.qty, i.note, d.category_id, d.needs_kitchen FROM order_items i LEFT JOIN dishes d ON d.id = i.dish_id
+      WHERE i.order_id = ? AND i.status != 'cancelled' AND i.service = ''`).all(o.id);
+    if (!items.length) throw new HttpError(400, "Chekda taom yo'q");
+    const room = q('SELECT name FROM rooms WHERE id = ?').get(o.room_id);
+    const waiter = q('SELECT name FROM users WHERE id = ?').get(o.waiter_id);
+    print.job('reprint', { reprint: true, order_id: o.id, room: placeName(o, room), waiter: waiter && waiter.name, by: user.name, at: now(),
+      items: items.map((i) => ({ name: i.name, qty: i.qty, note: i.note, cook: i.needs_kitchen !== 0, category_id: i.category_id })) });
+    audit(user, 'kitchen_reprint', `#${o.id}`);
+    return { ok: true, printers: print.status() };
   }
 
   function requestBill({ user, params }) {
@@ -1883,6 +1903,13 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['POST', '/api/device/register', null, registerDevice],
     ['GET', '/api/device/staff', 'device', deviceStaff],
     ['GET', '/api/device/backup', 'device', deviceBackup],
+    ['GET', '/api/device/printer', 'device', print.config],
+    ['PUT', '/api/device/printer', 'device', print.setConfig],
+    ['GET', '/api/device/print-jobs', 'device', print.pending],
+    ['POST', '/api/device/print-ack', 'device', print.ack],
+    ['GET', '/api/device/print-recent', 'device', print.recent],
+    ['GET', '/api/printers', ALL, () => print.status()],
+    ['POST', '/api/orders/:id/reprint', ['owner', 'admin', 'cashier', 'waiter'], reprintOrder],
     ['PUT', '/api/devices/backup', ['owner'], setDeviceBackup],
     ['GET', '/api/backup/download', ['owner'], downloadBackup],
     ['POST', '/api/assets', MANAGERS, uploadAsset],

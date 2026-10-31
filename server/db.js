@@ -714,6 +714,20 @@ CREATE INDEX IF NOT EXISTS idx_work_day ON work_log(day, user_id);
     created_at INTEGER NOT NULL
   )`);
   addCol('transactions', 'fixed_id', 'INTEGER');
+  // Order printers: which device prints, what it prints (kitchen dishes only / everything, chosen sections),
+  // the last ticket it printed and when it last asked (to warn when it is off).
+  addCol('devices', 'printer', 'INTEGER NOT NULL DEFAULT 0');
+  addCol('devices', 'print_all', 'INTEGER NOT NULL DEFAULT 0');
+  addCol('devices', 'print_cats', "TEXT NOT NULL DEFAULT ''");
+  addCol('devices', 'print_upto', 'INTEGER NOT NULL DEFAULT 0');
+  addCol('devices', 'print_seen', 'INTEGER');
+  db.exec(`CREATE TABLE IF NOT EXISTS print_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    order_id INTEGER,
+    data TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  )`);
   addCol('transactions', 'fixed_month', 'TEXT');
   const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
   if (!orderCols.includes('service_type')) db.exec("ALTER TABLE orders ADD COLUMN service_type TEXT NOT NULL DEFAULT 'percent'");

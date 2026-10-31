@@ -663,6 +663,36 @@ function createPlatform(dataDir) {
     return { ok: true, saved_as: path.relative(dataDir, keep) };
   }
 
+  /*
+   * A business taken off the platform for good (it stopped working with us, a test business).
+   * Asked twice: its code typed by hand and the platform owner's own password. A last copy of its file stays
+   * on the server (data/backups/deleted/) and goes to the owner's Telegram — nothing is lost by a wrong click.
+   */
+  function deleteTenant({ admin, params, body }) {
+    const t = tenantRow(params.id);
+    if (!t) throw new HttpError(404, 'Biznes topilmadi');
+    if (String(body.code || '').trim().toLowerCase() !== t.code) throw new HttpError(400, "Tasdiqlash uchun biznes kodini to'g'ri yozing");
+    if (!verifyPassword(String(body.password || ''), admin.pass_hash)) throw new HttpError(403, "Parol noto'g'ri");
+    if (q('SELECT 1 FROM tenants WHERE parent_id = ?').get(t.id)) throw new HttpError(409, "Bu biznesning filiallari bor. Avval filiallarni o'chiring");
+    const file = path.join(dataDir, t.file);
+    const keep = path.join(dataDir, 'backups', 'deleted', `${stampNow()}-${t.code}`, path.basename(t.file));
+    if (fs.existsSync(file)) snapshot(file, keep);
+    const ctx = contexts.get(t.id);
+    if (ctx) { ctx.hub.disconnectUser(); ctx.db.close(); contexts.delete(t.id); }
+    for (const ext of ['', '-wal', '-shm']) fs.rmSync(file + ext, { force: true });
+    q('DELETE FROM tenant_telegram WHERE tenant_id = ?').run(t.id);
+    try { q('UPDATE leads SET tenant_id = NULL WHERE tenant_id = ?').run(t.id); } catch { /* no leads table yet */ }
+    q('DELETE FROM tenants WHERE id = ?').run(t.id);
+    console.log(`Biznes o'chirildi: ${t.code} (${t.name}) — nusxa: ${path.relative(dataDir, keep)}`);
+    // The last copy also to the platform owner's Telegram, when the bot is linked.
+    const chat = leads.ownerChat();
+    if (chat && fs.existsSync(keep)) {
+      leads.sendFile(chat, `flowi-${t.code}-ochirilgan-${stampNow()}.db.gz`, zlib.gzipSync(fs.readFileSync(keep), { level: 9 }),
+        `🗑 <b>${t.code}</b> (${t.name}) platformadan o'chirildi. Bu — uning oxirgi nusxasi.`).catch((e) => console.error('Telegram:', e.message));
+    }
+    return { ok: true, saved_as: path.relative(dataDir, keep) };
+  }
+
   function restoreFromServer({ params, body }) {
     const t = tenantRow(params.id);
     if (!t) throw new HttpError(404, 'Choyxona topilmadi');
@@ -687,6 +717,7 @@ function createPlatform(dataDir) {
     ['POST', '/api/platform/tenants/:id/impersonate', true, impersonate],
     ['GET', '/api/platform/tenants/:id/backups', true, backupsOf],
     ['POST', '/api/platform/tenants/:id/restore', true, restoreFromServer],
+    ['POST', '/api/platform/tenants/:id/delete', true, deleteTenant],
     ['GET', '/api/platform/settings', true, getPlatformSettings],
     ['PUT', '/api/platform/settings', true, savePlatformSettings],
     ['GET', '/api/platform/types', true, () => BUSINESS_TYPES],

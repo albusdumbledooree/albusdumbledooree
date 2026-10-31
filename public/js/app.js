@@ -97,6 +97,7 @@ function statusBarHtml() {
   const dot = (on, label) => `<span class="sb-item"><i class="${on ? 'on' : ''}"></i>${label}</span>`;
   return `<span class="sb-item conn-item"><i class="conn"></i>${t('Jonli aloqa')}</span>
     ${App.device ? dot(OrderPrinter.on(), t('Buyurtma printeri')) : ''}
+    ${(App.printers || []).filter((p) => !p.online).map((p) => `<span class="sb-item sb-warn">${icon('triangle-alert', 14)} ${t('Printer ulanmagan')}: ${esc(p.name)}</span>`).join('')}
     ${App.device && App.device.name ? `<span class="sb-item">${icon('monitor-smartphone', 14)} ${esc(App.device.name)}</span>` : ''}
     <span class="grow"></span>
     <span class="sb-item muted" title="${esc(App.version || '')}">FLOWI ${App.info && App.info.release ? `v${esc(App.info.release)}` : ''}</span>
@@ -274,6 +275,24 @@ setInterval(() => {
   if (App.user && App.device && mins > 0 && Date.now() - lastActivity > mins * MIN) logout();
 }, 15000);
 
+// ---------- Order printers: warn everyone when one is off (a computer switched off, no internet) ----------
+async function refreshPrinters() {
+  if (!App.user) return;
+  try {
+    const list = await GET('/api/printers');
+    const offBefore = new Set((App.printers || []).filter((p) => !p.online).map((p) => p.id));
+    App.printers = list;
+    const newlyOff = list.filter((p) => !p.online && !offBefore.has(p.id));
+    if (newlyOff.length && ['owner', 'admin', 'cashier', 'waiter'].includes(App.user.role)) {
+      toast(t("Oshxona printeri ulanmagan: {0}. Buyurtmalar ekranda ko'rinadi, qog'oz kompyuter yoqilganda chiqadi.", newlyOff.map((p) => p.name).join(', ')), 'warn', 9000);
+    }
+    const sb = document.querySelector('.statusbar');
+    if (sb) { sb.innerHTML = statusBarHtml(); updateConn(); }
+  } catch { /* keep the last state */ }
+}
+setInterval(() => { if (App.user && !document.hidden) refreshPrinters(); }, 60000);
+Live.on('printers', () => refreshPrinters());
+
 // ---------- Live reactions ----------
 const refreshSoon = (() => {
   let timer = null;
@@ -340,6 +359,7 @@ async function refreshBadges() {
     }
     if (['chef', 'owner', 'admin'].includes(role) && App.kitchenMode !== 'off') App.badges.kitchen = (await GET('/api/kitchen')).load.pending;
     if (['cashier', 'owner', 'admin'].includes(role)) App.badges.bills = (await GET('/api/orders?status=open')).filter((o) => o.bill_requested).length;
+    await refreshPrinters();
     if (isDoors()) {
       const tk = await GET('/api/tasks');
       App.badges.tasks = tk.overdue.length + tk.today.length;
@@ -476,6 +496,6 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && Ap
     if (code) await loadInfo(code);
   }
   if (App.user && (!location.hash || ['#/login', '#/setup', '#/lock'].includes(location.hash))) location.hash = homeRoute();
-  if (App.device) { FolderBackup.run(); OrderPrinter.sync(); }
+  if (App.device) { FolderBackup.run(); OrderPrinter.load().then(() => OrderPrinter.sync()); }
   render();
 })();

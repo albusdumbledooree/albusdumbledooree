@@ -1792,7 +1792,7 @@ Views.settings = {
           <button class="btn" id="full">${icon('maximize', 18)} ${t("To'liq ekran")}</button>
           ${keyboardSelect()}</div></div>
       ${App.device ? `<div class="card"><div class="card-head"><h2>${icon('printer')} ${t('Buyurtma printeri')}</h2></div>
-        <label class="check"><input type="checkbox" id="order-print" ${OrderPrinter.on() ? 'checked' : ''}> ${t('Shu qurilmadan har bir yangi buyurtmani chop etish')}</label>
+        <button class="btn" id="order-print">${icon('sliders-horizontal', 18)} ${t('Printer sozlamalari')}: <b>${OrderPrinter.on() ? t('yoqilgan') : t("o'chiq")}</b></button>
         <p class="small muted" style="margin-top:8px">${t("Ofitsant yoki kassir yozgan har bir buyurtma (taomlar, soni, izoh) shu kompyuterga ulangan printerdan chiqadi. Xodimlar ro'yxati ochiq turganda ham ishlaydi.")}</p>
         <div class="notice blue" style="margin:10px 0 8px">${icon('info', 18)} <span>${t("Chek chiqqanda chop etish oynasi ochilmasligi uchun FLOWI'ni maxsus yorliq orqali oching: yuklab oling, ish stoliga qo'ying va shu bilan ishga tushiring. Chek darhol asosiy printerdan chiqadi.")}</span></div>
         <button class="btn primary" id="kiosk-bat">${icon('download', 18)} ${t('Kassa yorlig\'ini yuklab olish (Windows)')}</button></div>` : ''}
@@ -1826,7 +1826,7 @@ Views.settings = {
     const kb = root.querySelector('#kiosk-bat');
     if (kb) kb.onclick = downloadKioskLauncher;
     const op = root.querySelector('#order-print');
-    if (op) op.onchange = () => { OrderPrinter.set(op.checked); toast(op.checked ? t('Yangi buyurtmalar shu qurilmada avtomatik chop etiladi') : t("Avtomatik chop etish o'chirildi"), 'ok'); };
+    if (op) op.onclick = async () => { await printerDialog(); };
     const full = root.querySelector('#full');
     if (full) full.onclick = () => Screen.toggleFull();
     const vf = root.querySelector('#voice-form');

@@ -169,13 +169,13 @@ Views.lock = {
     root.querySelector('#lock-menu').onclick = () => openModal({
       title: `${icon('monitor-smartphone')} ${esc(App.device.name || t('Qurilma'))}`,
       body: `<p>${t('Kod')}: <b>${esc(App.device.code)}</b></p>
-        <label class="check" style="margin:12px 0"><input type="checkbox" id="order-print" ${OrderPrinter.on() ? 'checked' : ''}> ${icon('printer', 18)} ${t('Shu qurilmadan har bir yangi buyurtmani chop etish')}</label>
+        <button type="button" class="btn block" id="order-print" style="margin:12px 0">${icon('printer', 18)} ${t('Buyurtma printeri')}: <b>${OrderPrinter.on() ? t('yoqilgan') : t("o'chiq")}</b></button>
         ${keyboardSelect()}
         <button type="button" class="btn block" id="kiosk-bat" style="margin-top:12px">${icon('download', 18)} ${t('Kassa yorlig\'ini yuklab olish (Windows)')}</button>
         <p class="small muted" style="margin-top:6px">${t("Shu yorliq bilan ochilsa, chek chiqqanda chop etish oynasi ochilmaydi — darhol printerdan chiqadi.")}</p>
         <p class="small muted">${t("Qurilmani uzsangiz, uni qayta ulash uchun boshliq logini kerak bo'ladi.")}</p>`,
       onMount: (f) => {
-        f.querySelector('#order-print').onchange = (e) => OrderPrinter.set(e.target.checked);
+        f.querySelector('#order-print').onclick = () => { closeModal(); printerDialog(); };
         f.querySelector('#kb-mode').onchange = (e) => Keyboard.setMode(e.target.value);
         f.querySelector('#kiosk-bat').onclick = downloadKioskLauncher;
       },

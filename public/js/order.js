@@ -413,6 +413,7 @@ function moreActions(d) {
   const acts = [];
   if (can('owner', 'admin', 'cashier')) acts.push(['transfer', 'arrow-right-left', t("Boshqa xonaga ko'chirish")]);
   const live = order.items.filter((i) => i.status !== 'cancelled').length;
+  if (live && (App.printers || []).length) acts.push(['reprint', 'printer', t('Oshxonaga qayta chop etish')]);
   if (can('owner', 'admin') || (!live && App.user.role !== 'chef')) acts.push(['cancel', 'trash-2', t('Chekni bekor qilish')]);
   const form = openModal({
     title: `${icon('list')} ${t('Chek')} #${order.id}`,
@@ -421,6 +422,14 @@ function moreActions(d) {
   });
   form.querySelectorAll('[data-act]').forEach((b) => b.onclick = async () => {
     closeModal();
+    if (b.dataset.act === 'reprint') {
+      try {
+        const r = await POST(`/api/orders/${order.id}/reprint`);
+        const off = r.printers.filter((p) => !p.online);
+        toast(off.length ? t("Yuborildi, lekin printer ulanmagan: {0}", off.map((p) => p.name).join(', ')) : t('Oshxonaga qayta yuborildi'), off.length ? 'warn' : 'ok', 7000);
+      } catch (e) { toastError(e); }
+      return;
+    }
     if (b.dataset.act === 'transfer') {
       const all = rooms || await GET('/api/rooms?all=1');
       const free = all.filter((r) => !r.order && r.active);
