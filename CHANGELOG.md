@@ -2,6 +2,9 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.16.1 — Kichik tuzatish
+- "Xodimning kuni" sahifasi xodim tanlanmasdan ochilsa, xato o'rniga Hisobotga qaytadi.
+
 ## 1.16.0 — Batafsil hisobot: kategoriyalar, xodimlar, chek tarixi, shubhali holatlar
 Moliya → **Hisobot** yangilandi. Tepada davr (bugun / kecha / hafta / oy / sana) va **xodim** tanlanadi — xodim tanlansa,
 hamma yorliq faqat o'shaniki bo'ladi. Telefon, planshet va kompyuterda bir xil qulay.

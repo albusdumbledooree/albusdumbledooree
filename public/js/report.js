@@ -142,7 +142,10 @@ Views.reports = {
 // ---------- One worker's whole day ----------
 Views.staffday = {
   title: () => t('Xodimning kuni'), icon: () => 'user-round', roles: ['owner', 'admin', 'cashier'], module: 'reports', on: () => !!App.money.reports, refreshOn: ['finance', 'rooms'],
-  async load(p) { return GET(`/api/stats/user/${Number(p[0])}?${(() => { const r = periodRange(); return `from=${r.from}&to=${r.to}`; })()}`); },
+  async load(p) {
+    if (!Number(p[0])) { location.hash = '#/reports'; return null; }
+    return GET(`/api/stats/user/${Number(p[0])}?${(() => { const r = periodRange(); return `from=${r.from}&to=${r.to}`; })()}`);
+  },
   render(d) { return personDayHtml(d, '#/reports'); },
   bind(root) { bindPersonDay(root); },
 };
