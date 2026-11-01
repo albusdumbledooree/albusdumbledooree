@@ -272,6 +272,23 @@ Bekor qilingan cheklar alohida, chek raqami / xona / ofitsant bo'yicha qidiruv, 
   Shunda chek dialog oynasisiz darhol chiqadi.
 - Hozircha chek **fiskal emas** (soliq kassasi o'rnini bosmaydi).
 
+## FLOWI Windows dasturi (kassa kompyuteri)
+
+Kassa kompyuteri uchun alohida dastur: FLOWI o'z oynasida ochiladi, kompyuter yoqilganda o'zi ishga tushadi,
+chek va oshxona qog'ozi **chop etish oynasisiz** tanlangan printerga chiqadi.
+
+1. GitHub → **Releases** → `FLOWI Windows …` → `FLOWI-Setup-<versiya>.exe` ni yuklab oling.
+2. Kassa kompyuterida ikki marta bosing (birinchi marta Windows "Noma'lum nashriyotchi" desa:
+   "Подробнее / More info" → "Выполнить в любом случае / Run anyway").
+3. Biznes havolasini yozing (masalan `flowi.uz/c/navruz`), chek printeri va oshxona printerini tanlang,
+   "Sinov cheki" ni bosing, keyin "Saqlash va ochish".
+4. Tugmalar: **Ctrl+Shift+S** — sozlamalar, **F11** — to'liq ekran, **F5** — yangilash.
+   "Kassa rejimi" yoqilsa, dastur doim to'liq ekranda ochiladi.
+
+Dastur saytning o'zini ochadi, shuning uchun FLOWI'dagi har bir yangilanish dasturda ham darrov bo'ladi.
+Dasturning yangi versiyasi `desktop/` papkasi o'zgarganda GitHub Actions'da o'zi yasaladi.
+Bir kompyuterdan bir nechta printer (masalan, LAN orqali shashlikchi printeri) uchun — Sozlamalar → Printerlar → FLOWI Printer.
+
 ## Qo'shimcha zamonaviy imkoniyatlar
 
 - ⚡ Real vaqt rejimida yangilanish (sahifani yangilash shart emas)
