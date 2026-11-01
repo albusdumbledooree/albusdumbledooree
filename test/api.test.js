@@ -1807,11 +1807,11 @@ test('detailed report: categories, each worker and their day, a check story, thi
   assert.equal(st.events.find((x) => x.action === 'item_cancel').user, 'Lola');
   assert.equal(st.order.cashier_name, 'Lola');
 
-  // A waiter sees only their own results.
+  // Results are for the boss only: a waiter sees neither others' nor their own.
   assert.equal((await call('GET', `/api/stats?from=${from}&to=${to}`, waiter)).status, 403);
   assert.equal((await call('GET', `/api/stats/user/${sl.id}?from=${from}&to=${to}`, waiter)).status, 403);
-  const mine = (await call('GET', `/api/my/stats?from=${from}&to=${to}`, waiter)).data;
-  assert.equal(mine.user.id, w.id); assert.equal(mine.summary.checks, 1);
+  assert.equal((await call('GET', `/api/stats/user/${w.id}?from=${from}&to=${to}`, waiter)).status, 403);
+  assert.equal((await call('GET', `/api/my/stats?from=${from}&to=${to}`, waiter)).status, 404);
   assert.equal((await call('GET', `/api/stats?from=${to}&to=${from}`, boss)).status, 400);
 });
 

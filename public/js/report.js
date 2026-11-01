@@ -177,13 +177,6 @@ function bindPersonDay(root) {
   root.querySelectorAll('[data-story]').forEach((b) => b.onclick = () => checkStory(Number(b.dataset.story)));
 }
 
-// A worker's own results (a waiter sees only theirs).
-Views.mystats = {
-  title: () => t('Mening natijalarim'), icon: () => 'chart-column', roles: ['admin', 'cashier', 'waiter', 'chef'], refreshOn: ['rooms', 'finance'],
-  async load() { const r = periodRange(); return GET(`/api/my/stats?from=${r.from}&to=${r.to}`); },
-  render(d) { return personDayHtml(d, '#/settings'); },
-  bind(root) { bindPersonDay(root); },
-};
 
 // ---------- One check's story ----------
 async function checkStory(id) {

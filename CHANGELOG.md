@@ -2,6 +2,10 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.18.1 — "Mening natijalarim" olib tashlandi
+- Xodimlar (ofitsant, kassir, oshpaz) sozlamalaridagi **"Mening natijalarim"** bo'limi olib tashlandi — natijalar faqat boshliq uchun
+  (Moliya → Hisobot → xodim bo'yicha). Xodim o'z natijasini havola orqali ham ocha olmaydi.
+
 ## 1.18.0 — Printerlar boshliq sozlamalarida, bir kompyuterdan bir nechta printer
 - **Printer sozlamalari faqat boshliqda**: Sozlamalar → **Printerlar**. Ofitsant va oshpaz qurilmada printerni o'chira olmaydi;
   qurilmaning ⚙ menyusida faqat holati ko'rinadi. Avval yoqilgan printerlar o'z-o'zidan yoqiq qoladi.

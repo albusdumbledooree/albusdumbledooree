@@ -2065,7 +2065,6 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['GET', '/api/stats/user/:id', MONEY, stats.person],
     ['GET', '/api/orders/:id/story', MONEY, stats.orderStory],
     // A worker's own results (a waiter sees only theirs).
-    ['GET', '/api/my/stats', ALL, ({ user, query }) => stats.person({ params: { id: user.id }, query })],
     ['POST', '/api/geo/check', ALL, work.geoCheck],
     ['GET', '/api/work/me', ALL, ({ user }) => work.state(user)],
     ['POST', '/api/work/in', ALL, work.clockIn],

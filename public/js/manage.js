@@ -1787,7 +1787,7 @@ Views.settings = {
     const voices = Voice.voices();
     const picked = Voice.pick();
     const boss = can('owner', 'admin');
-    return `${boss ? '' : `<a class="card notice blue" href="#/mystats" style="margin-bottom:16px;text-decoration:none">${icon('chart-column', 18)} <span><b>${t('Mening natijalarim')}</b> — ${t('bugun nechta chek, qancha savdo, qaysi taomlar')} →</span></a>`}
+    return `
       <div class="grid grid-2">
       <div class="card"><div class="card-head"><h2>${icon('languages')} ${t('Til va ko\'rinish')}</h2></div>
         <div class="stack">${langSelect('me-lang')}
