@@ -1476,6 +1476,27 @@ test("a business owner's Telegram: linked with a code, the morning list of tasks
     await server.platform.remindTick({ forceMorning: true });
     assert.equal(sent.length, n, 'once a day, each reminder once');
     assert.equal((await call('POST', '/api/telegram/test', boss)).status, 200);
+    // A second person (a partner's group) is added from the platform: both get the reports; the first one stays.
+    const eshik = (await call('GET', '/api/platform/tenants', admin)).data.find((x) => x.code === 'eshik');
+    const pl = (await call('POST', `/api/platform/tenants/${eshik.id}/telegram/link`, admin)).data;
+    assert.equal(pl.url, `https://t.me/flowi_bot?start=${pl.link_code}`);
+    updates.push({ update_id: 2, message: { message_id: 2, chat: { id: -777, type: 'group', title: 'Sheriklar' }, text: `/start ${pl.link_code}` } });
+    await waitFor(async () => (await call('GET', '/api/telegram', boss)).data.chats.length === 2, 'second chat');
+    st = (await call('GET', `/api/platform/tenants/${eshik.id}/telegram`, admin)).data;
+    assert.deepEqual(st.chats.map((c) => c.title), ['Aziz', 'Sheriklar']);
+    assert.equal(st.link_code, '', 'the code is used up');
+    const card = (await call('GET', '/api/platform/tenants', admin)).data.find((x) => x.code === 'eshik');
+    assert.deepEqual(card.telegram.chats, ['Aziz', 'Sheriklar']);
+    assert.equal((await call('PUT', `/api/platform/tenants/${eshik.id}/telegram`, admin, { time: '22:00' })).data.report_time, '22:00');
+    let before = sent.length;
+    assert.equal((await call('POST', `/api/platform/tenants/${eshik.id}/telegram/report`, admin)).data.sent, 2);
+    assert.deepEqual(sent.slice(before).map((m) => String(m.chat_id)).sort(), ['-777', '4242']);
+    assert.equal((await call('GET', `/api/platform/tenants/${eshik.id}/telegram`, boss)).status, 401, 'only the platform');
+    // One taken off: only the other gets the next message.
+    assert.equal((await call('DELETE', '/api/telegram?chat=-777', boss)).data.chats.length, 1);
+    before = sent.length;
+    await call('POST', '/api/telegram/test', boss);
+    assert.deepEqual(sent.slice(before).map((m) => String(m.chat_id)), ['4242']);
     const ali = await login('ali', 'ali12345', 'eshik');
     assert.equal((await call('GET', '/api/telegram', ali)).status, 403);
     assert.equal((await call('DELETE', '/api/telegram', boss)).data.linked, false);
@@ -1978,4 +1999,41 @@ test('FLOWI Printer program: several printers on one computer (USB and LAN), nam
   await call('PUT', '/api/settings', boss, { print_agent: true });
   assert.equal((await call('DELETE', `/api/printers/agent/${kassa.id}`, boss)).status, 200);
   assert.equal((await call('GET', '/api/device/agent-jobs', token)).status, 401);
+});
+
+test('platform: a discount on what a business pays, back to full price when it ends; the list of versions', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  const day = 24 * 3600 * 1000;
+  assert.equal((await call('POST', '/api/platform/tenants', admin, { name: 'Chegirma', code: 'chegirma', owner_name: 'E', owner_username: 'ega', owner_password: 'ega12345', plan: 'biznes', discount: { type: 'percent', value: 150 } })).status, 400);
+  assert.equal((await call('GET', '/api/platform/tenants', admin)).data.some((x) => x.code === 'chegirma'), false, 'nothing half-made');
+  const t = (await call('POST', '/api/platform/tenants', admin, { name: 'Chegirma', code: 'chegirma', owner_name: 'E', owner_username: 'ega', owner_password: 'ega12345', plan: 'biznes',
+    discount: { type: 'percent', value: 20, until: Date.now() + 30 * day, note: 'Birinchi mijozlar' } })).data;
+  const plans = (await call('GET', '/api/platform/plans', admin)).data.plans;
+  const price = plans.biznes.price;
+  let row = (await call('GET', '/api/platform/tenants', admin)).data.find((x) => x.id === t.id);
+  assert.equal(row.plan_info.base_fee, price);
+  assert.equal(row.plan_info.fee, Math.round(price * 0.8));
+  assert.equal(row.plan_info.discount.note, 'Birinchi mijozlar');
+  // The owner sees the price with the discount, not the reason.
+  const boss = await login('ega', 'ega12345', 'chegirma');
+  const mine = (await call('GET', '/api/me', boss)).data.plan;
+  assert.equal(mine.fee, Math.round(price * 0.8)); assert.equal(mine.discount.value, 20); assert.equal(mine.discount.note, undefined);
+  // A sum off, then a discount whose term is over: full price again.
+  await call('PUT', `/api/platform/tenants/${t.id}`, admin, { discount: { type: 'amount', value: 50000 } });
+  row = (await call('GET', '/api/platform/tenants', admin)).data.find((x) => x.id === t.id);
+  assert.equal(row.plan_info.fee, price - 50000); assert.equal(row.plan_info.discount.until, null);
+  await call('PUT', `/api/platform/tenants/${t.id}`, admin, { discount: { type: 'percent', value: 50, until: Date.now() - day } });
+  row = (await call('GET', '/api/platform/tenants', admin)).data.find((x) => x.id === t.id);
+  assert.equal(row.plan_info.fee, price); assert.equal(row.plan_info.discount, null);
+  assert.equal(row.discount_type, 'percent', 'kept on the card, just not in force');
+  await call('PUT', `/api/platform/tenants/${t.id}`, admin, { discount: null });
+  row = (await call('GET', '/api/platform/tenants', admin)).data.find((x) => x.id === t.id);
+  assert.equal(row.discount_type, '');
+  // Versions: from the change list, newest first, the running one dated.
+  const cl = (await call('GET', '/api/platform/changelog', admin)).data;
+  const pkg = JSON.parse(require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'package.json'), 'utf8'));
+  assert.equal(cl.versions[0].version, pkg.version);
+  assert.ok(cl.versions[0].installed_at > 0);
+  assert.ok(cl.versions.length > 10 && cl.versions.every((v) => /^\d+\.\d+\.\d+$/.test(v.version)));
+  assert.equal((await call('GET', '/api/platform/changelog', boss)).status, 401);
 });

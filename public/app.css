@@ -620,6 +620,8 @@ table.att .today { background: var(--primary-soft); }
 .tcard footer .btn { flex: 1 1 0; min-width: 0; padding-left: 8px; padding-right: 8px; overflow: hidden; }
 .term-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .ph3 { display: flex; align-items: center; gap: 6px; margin: 18px 0 6px; }
+.disc-box { grid-column: 1 / -1; border: 1px dashed var(--line); border-radius: var(--radius); padding: 8px 12px 12px; margin: 4px 0 0; min-width: 0; }
+.disc-box legend { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 0 4px; }
 .plan-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
 .plan-cols > .plan-col { padding: 14px; margin: 0; }
 .plan-cols { align-items: start; }
@@ -1000,3 +1002,20 @@ details.upcoming summary { cursor: pointer; font-weight: 650; color: var(--muted
   .pr-row { padding: 10px; }
   .pr-body > select { max-width: none; }
 }
+
+/* ---------- Platform → Versions ---------- */
+details.ver { margin-bottom: 10px; }
+details.ver summary { display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none; flex-wrap: wrap; }
+details.ver summary::-webkit-details-marker { display: none; }
+details.ver summary .grow { flex: 1 1 200px; min-width: 0; }
+.ver-list { margin: 12px 0 0; padding-left: 20px; }
+.ver-list li { margin: 4px 0; overflow-wrap: anywhere; }
+.ver-list li.sub { margin-left: 20px; list-style: circle; }
+
+/* ---------- Telegram recipients ---------- */
+.tg-chats { display: flex; flex-direction: column; gap: 6px; }
+.tg-chat { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-2); min-width: 0; }
+.tg-chat .grow { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.tg-chat > svg { color: var(--green); flex: none; }
+.tg-link { margin-top: 8px; }
+.tg-url { display: inline-block; max-width: 100%; overflow-wrap: anywhere; user-select: all; }

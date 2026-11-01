@@ -2,6 +2,19 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.19.0 — Chegirmalar, har bir biznesga Telegram hisobot, versiyalar ro'yxati
+- **Chegirma** (platforma → biznesni tahrirlash → "Chegirma"): foiz yoki summa, muddati bilan yoki doimiy, sababi bilan.
+  - Kartada eski narx o'chirilgan holda va yangi narx ko'rinadi; "Oylik tushum" chegirma bilan hisoblanadi.
+  - Muddat tugasa, narx o'zi tarif narxiga qaytadi.
+  - Biznes egasi o'z "Tarif" sahifasida chegirmali narxni ko'radi (sababi ko'rinmaydi).
+- **Telegram hisobot — har bir biznesga alohida**:
+  - bitta biznesga **bir nechta odam** ulanadi: egasi, sherigi, boshqaruvchi yoki guruh — har biri o'z hisobotini oladi;
+  - platformada har bir biznes kartasida kim ulanganini va hisobot vaqtini ko'rasiz;
+  - "Telegram hisobot" oynasidan **ulash havolasini** olib, mijozga yuborasiz — u bitta bosishda ulanadi;
+  - hisobot vaqtini o'zgartirish, kimnidir uzish, hisobotni hozir yuborish ham shu yerda.
+  - Zaxira nusxalar avvalgidek **faqat sizga** boradi.
+- **Versiyalar** (platforma → "Versiyalar"): har bir yangilanishda nima o'zgargani; sana — serverda o'rnatilgan kun.
+
 ## 1.18.1 — "Mening natijalarim" olib tashlandi
 - Xodimlar (ofitsant, kassir, oshpaz) sozlamalaridagi **"Mening natijalarim"** bo'limi olib tashlandi — natijalar faqat boshliq uchun
   (Moliya → Hisobot → xodim bo'yicha). Xodim o'z natijasini havola orqali ham ocha olmaydi.

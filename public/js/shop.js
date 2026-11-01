@@ -704,28 +704,36 @@ function payMasterDialog(m) {
 // ---------- Settings: the owner's Telegram ----------
 async function telegramSettingsHtml() {
   const s = await GET('/api/telegram');
+  const chats = s.chats || [];
+  const linkBlock = s.link_code ? `<div class="tg-link"><a class="btn primary" href="https://t.me/${esc(s.bot)}?start=${esc(s.link_code)}" target="_blank" rel="noopener">${icon('send', 18)} ${t('Telegramni ochish va ulash')}</a>
+      <p class="small muted">${t('Telegram ochilgach "Start" ni bosing. Ishlamasa, botga shu xabarni yozing')}: <b>/start ${esc(s.link_code)}</b></p>
+      <p class="small muted">${t("Boshqa odamni qo'shish uchun shu havolani unga yuboring")}: <code class="tg-url">https://t.me/${esc(s.bot)}?start=${esc(s.link_code)}</code></p>
+      <button class="btn sm" id="tg-check">${icon('refresh-cw', 16)} ${t('Ulandimi? Tekshirish')}</button></div>` : '';
   return { s, html: `<div class="card" style="max-width:640px">
       <h3 style="margin-top:0">${icon('send', 18)} ${t('Telegram eslatmalar')}</h3>
       <p class="muted">${t('Har kuni kechqurun kunlik hisobot keladi: savdo, xarajat, eng ko\'p sotilgan taomlar, ochiq cheklar.')}
         ${isDoors() ? t("Ertalab soat 8 da bugungi ishlaringiz keladi, vaqti belgilangan ishdan 1 soat oldin ham eslatadi.") : t("To'lov kuni kelgan doimiy xarajatlar (ijara, svet…) haqida ertalab eslatadi.")}</p>
       ${!s.bot_ready ? `<div class="notice">${icon('info', 18)} ${t('Hozircha mavjud emas — FLOWI yordamiga yozing.')}</div>`
-        : s.linked ? `<p>${icon('circle-check', 18)} <b>${t('Ulangan')}</b>${s.chat_title ? `: ${esc(s.chat_title)}` : ''}</p>
+        : chats.length ? `<h4 style="margin:12px 0 6px">${t('Hisobot oladiganlar')}</h4>
+          <div class="tg-chats">${chats.map((c) => `<div class="tg-chat">${icon('circle-check', 18)} <b class="grow">${esc(c.title || 'Telegram')}</b>
+            <button class="icon-btn danger" data-tg-del="${esc(c.id)}" title="${esc(t('Uzish'))}">${icon('x', 16)}</button></div>`).join('')}</div>
+          ${linkBlock || `<button class="btn sm" id="tg-link" style="margin-top:8px">${icon('plus', 16)} ${t("Yana bir kishini qo'shish")}</button>`}
           <div class="form-grid" style="margin:12px 0"><label class="field">${t('Kunlik hisobot vaqti')}<select id="tg-time">
             ${['', '20:00', '21:00', '22:00', '22:30', '23:00', '23:30'].map((x) => `<option value="${x}" ${(s.report_time ?? '23:00') === x ? 'selected' : ''}>${x || t("Yubormaslik")}</option>`).join('')}</select></label></div>
           <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" id="tg-report">${icon('chart-column', 16)} ${t('Hisobotni hozir yuborish')}</button>
-            <button class="btn" id="tg-test">${icon('send', 16)} ${t('Sinov xabari')}</button><button class="btn danger" id="tg-off">${icon('x', 16)} ${t('Uzish')}</button></div>`
-        : s.link_code ? `<a class="btn primary" href="https://t.me/${esc(s.bot)}?start=${esc(s.link_code)}" target="_blank" rel="noopener">${icon('send', 18)} ${t('Telegramni ochish va ulash')}</a>
-          <p class="small muted">${t('Telegram ochilgach "Start" ni bosing. Ishlamasa, botga shu xabarni yozing')}: <b>/start ${esc(s.link_code)}</b></p>
-          <button class="btn sm" id="tg-check">${icon('refresh-cw', 16)} ${t('Ulandimi? Tekshirish')}</button>`
-        : `<button class="btn primary" id="tg-link">${icon('send', 18)} ${t('Telegramni ulash')}</button>`}</div>` };
+            <button class="btn" id="tg-test">${icon('send', 16)} ${t('Sinov xabari')}</button></div>`
+        : linkBlock || `<button class="btn primary" id="tg-link">${icon('send', 18)} ${t('Telegramni ulash')}</button>`}</div>` };
 }
 function bindTelegramSettings(root) {
   const a = (id, fn) => { const b = root.querySelector(id); if (b) b.onclick = async () => { try { await fn(); } catch (e) { toastError(e); } }; };
   a('#tg-link', async () => { await POST('/api/telegram/link'); refreshView(); });
   a('#tg-check', async () => { refreshView(); });
   a('#tg-test', async () => { await POST('/api/telegram/test'); toast(t('Yuborildi — Telegramni tekshiring'), 'ok'); });
-  a('#tg-off', async () => { await DEL('/api/telegram'); refreshView(); });
   a('#tg-report', async () => { await POST('/api/telegram/report'); toast(t('Yuborildi — Telegramni tekshiring'), 'ok'); });
+  root.querySelectorAll('[data-tg-del]').forEach((b) => b.onclick = async () => {
+    if (!(await confirmModal(t('Uzish'), t("Bu chatga endi hisobot kelmaydi. Davom etamizmi?"), t('Uzish')))) return;
+    try { await DEL(`/api/telegram?chat=${encodeURIComponent(b.dataset.tgDel)}`); refreshView(); } catch (e) { toastError(e); }
+  });
   const tm = root.querySelector('#tg-time');
   if (tm) tm.onchange = async () => { try { await PUT('/api/telegram/report', { time: tm.value }); toast(t('Saqlandi'), 'ok'); } catch (e) { toastError(e); } };
 }

@@ -1758,7 +1758,8 @@ Views.settings = {
     return `<div class="card plan-card">
         <div class="row" style="gap:12px;align-items:center"><span class="plan-badge plan-${esc(p.key)}">${icon('star', 26)}</span>
           <div class="grow"><div class="muted small">${t('Tarif')}</div><h2 style="margin:0">${esc(p.name)}${p.is_branch ? ` <span class="chip">${t('Filial')}</span>` : ''}</h2></div>
-          <div class="right"><div class="muted small">${t('Oylik narx')}</div><b style="font-size:20px">${money(p.fee)}</b></div></div>
+          <div class="right"><div class="muted small">${t('Oylik narx')}</div>${p.discount ? `<s class="muted small">${money(p.base_fee)}</s> ` : ''}<b style="font-size:20px">${money(p.fee)}</b>
+            ${p.discount ? `<div><span class="chip green">${t('Chegirma')} −${p.discount.type === 'percent' ? `${p.discount.value}%` : money(p.base_fee - p.fee)}${p.discount.until ? ` · ${t('{0} gacha', fmtDate(p.discount.until))}` : ''}</span></div>` : ''}</div></div>
         <div class="kpis" style="margin-top:16px">
           <div class="kpi"><div class="kpi-ic">${icon('calendar', 22)}</div><div><div class="label">${t("To'langan muddat")}</div>
             <div class="value">${p.paid_until ? fmtDate(p.paid_until) : '—'}</div>

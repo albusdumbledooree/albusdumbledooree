@@ -350,7 +350,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   function planInfo() {
     const p = plan();
     if (!p) return null;
-    return { key: p.key, name: p.name, fee: p.fee, max_staff: p.max_staff, devices_per_staff: p.devices_per_staff, staff_used: staffCount(), modules: p.modules,
+    return { key: p.key, name: p.name, fee: p.fee, base_fee: p.base_fee, discount: p.discount ? { type: p.discount.type, value: p.discount.value, until: p.discount.until } : null, max_staff: p.max_staff, devices_per_staff: p.devices_per_staff, staff_used: staffCount(), modules: p.modules,
       paid_until: p.paid_until, grace_until: p.grace_until, read_only: p.read_only, is_branch: p.is_branch };
   }
   const moduleOn = (m) => !disabledModules().includes(m);
@@ -437,10 +437,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return tasks.dueSoon().map((x) => `⏰ <b>${shop.fmtTime(x.due_at)}</b> — ${esc(x.title)}${x.note ? `\n${esc(x.note)}` : ''}`);
   }
   const esc = (v) => String(v ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-  const tgApi = (fn) => ({ user }) => {
+  const tgApi = (fn) => ({ user, query }) => {
     if (!telegram) throw new HttpError(404, 'Topilmadi');
     if (user.role !== 'owner') throw new HttpError(403, 'Faqat boshliq');
-    return telegram[fn]();
+    return fn === 'unlink' ? telegram.unlink(query && query.chat) : telegram[fn]();
   };
 
   function invoiceOf({ user, params }) {

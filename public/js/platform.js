@@ -85,9 +85,11 @@ function tenantCard(t) {
       <span>${icon('link', 15)}</span><span><span class="chip">${esc(t.code)}</span> <a href="${esc(siteUrl(t.code))}" target="_blank" rel="noopener">ochish ${icon('external-link', 13)}</a></span>
       <span>${icon('user-round', 15)}</span><span>${esc(t.contact_name || '—')} ${t.phone ? `· ${esc(t.phone)}` : ''}<br><span class="small muted">Login: ${(t.owners || []).map(esc).join(', ') || '—'}</span></span>
       <span>${icon('star', 15)}</span><span><span class="chip plan-${esc(t.plan_info.key)}">${esc(t.plan_info.name)}</span>${t.is_branch ? ' <span class="chip">Filial</span>' : ''}${branchNote(t)}
-        · <b>${money(t.plan_info.fee)}</b>/oy${t.monthly_fee ? ' <span class="small muted">(maxsus narx)</span>' : ''}
+        · ${feeHtml(t)}
         ${t.plan_info.max_staff > 0 && !t.error ? `<br><span class="small ${t.staff - (t.owners || []).length >= t.plan_info.max_staff ? 'warn' : 'muted'}">Xodimlar: ${t.staff - (t.owners || []).length}/${t.plan_info.max_staff}</span>` : ''}</span>
       ${t.shared && t.shared.length ? `<span>${icon('triangle-alert', 15)}</span><span class="small warn" title="Oxirgi 7 kunda bu hisoblar band paytida boshqa qurilmadan ochilgan">Hisob almashib ishlatilyapti: ${t.shared.map((x) => `${esc(x.name)} (${x.c} marta)`).join(', ')}</span>` : ''}
+      <span>${icon('send', 15)}</span><span class="small"><a href="#" data-tgopen="${t.id}">${t.telegram && t.telegram.chats.length
+        ? `Telegram: ${t.telegram.chats.map(esc).join(', ')}${t.telegram.report_time ? ` · ${esc(t.telegram.report_time)}` : ' · hisobot o\'chiq'}` : '<span class="muted">Telegram ulanmagan</span>'}</a></span>
       <span>${icon('calendar', 15)}</span><span>${due}${t.plan_info.read_only ? ' <span class="chip red">Faqat ko\'rish</span>' : ''}</span>
       <span>${icon('layers', 15)}</span><span class="small">Bo'limlar: ${t.plan_info.modules.filter((m) => !(t.disabled_modules || []).includes(m)).length}/${mods} · Oshxona: ${esc({ full: "to'liq", notify: 'xabar', off: "o'chiq" }[t.kitchen_mode] || t.kitchen_mode)}</span>
       ${t.support && t.support.text ? `<span>${icon('life-buoy', 15)}</span><span class="small">${esc(t.support.text)}</span>` : ''}
@@ -114,10 +116,34 @@ function mainHtml() {
       <button class="icon-btn" id="logout" title="Chiqish">${icon('log-out')}</button></header>
   <main class="pmain">
     <div class="seg ptabs"><button class="${P.tab === 'biz' ? 'active' : ''}" data-tab="biz">${icon('store', 16)} Bizneslar</button>
-      <button class="${P.tab === 'leads' ? 'active' : ''}" data-tab="leads">${icon('inbox', 16)} Arizalar${P.leads && P.leads.counts.new ? ` <span class="badge">${P.leads.counts.new}</span>` : ''}</button></div>
-    ${P.tab === 'leads' ? leadsHtml() : bizHtml()}
+      <button class="${P.tab === 'leads' ? 'active' : ''}" data-tab="leads">${icon('inbox', 16)} Arizalar${P.leads && P.leads.counts.new ? ` <span class="badge">${P.leads.counts.new}</span>` : ''}</button>
+      <button class="${P.tab === 'versions' ? 'active' : ''}" data-tab="versions">${icon('history', 16)} Versiyalar</button></div>
+    ${P.tab === 'leads' ? leadsHtml() : P.tab === 'versions' ? versionsHtml() : bizHtml()}
   </main>`;
 }
+// ---------- Versions: what changed in each update (from CHANGELOG.md) ----------
+function mdInline(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>'); }
+// The change list's own small Markdown: "- " points, indented sub-points and continuation lines, **bold**, `code`.
+function mdList(body) {
+  const items = [];
+  for (const line of body.split('\n')) {
+    if (!line.trim()) continue;
+    const m = /^(\s*)- (.*)$/.exec(line);
+    if (m) items.push({ deep: m[1].length >= 2, text: m[2] });
+    else if (items.length) items[items.length - 1].text += ` ${line.trim()}`;
+    else items.push({ deep: false, text: line.trim() });
+  }
+  return `<ul class="ver-list">${items.map((i) => `<li class="${i.deep ? 'sub' : ''}">${mdInline(i.text)}</li>`).join('')}</ul>`;
+}
+function versionsHtml() {
+  const list = (P.changelog || { versions: [] }).versions;
+  if (!list.length) return emptyState('history', "Versiyalar ro'yxati topilmadi");
+  return `<p class="muted" style="margin:0 0 12px">Hozir ishlayotgan versiya: <b>v${esc(P.release || '')}</b>. Sana — shu serverda birinchi marta ishga tushgan kun.</p>
+    ${list.map((v, i) => `<details class="card ver" ${i === 0 ? 'open' : ''}><summary><span class="chip ${v.version === P.release ? 'green' : ''}">v${esc(v.version)}</span>
+        <b class="grow">${mdInline(v.title || '')}</b>${v.installed_at ? `<span class="small muted">${fmtDate(v.installed_at)}</span>` : ''}</summary>
+      ${v.body ? mdList(v.body) : ''}</details>`).join('')}`;
+}
+
 function bizHtml() {
   const q = P.search.toLowerCase();
   const list = P.tenants.filter((t) => (P.filter === 'all' || t.business_type === P.filter || (P.filter === 'blocked' && t.status === 'blocked'))
@@ -316,7 +342,25 @@ function planFields(t = {}) {
   return `<label class="field">Tarif<select name="plan">${PLAN_KEYS.map((k) => `<option value="${k}" ${cur === k ? 'selected' : ''}>${esc(planName(k))} — ${money(P.plans[k].price)}/oy · xodim ${staffLimit(P.plans[k].max_staff)}</option>`).join('')}</select></label>
     <label class="field">Maxsus oylik narx (0 = tarif narxi)<input type="number" name="monthly_fee" min="0" value="${t.monthly_fee || 0}"></label>
     <label class="check" style="align-self:end"><input type="checkbox" name="is_branch" ${t.is_branch ? 'checked' : ''}> Qo'shimcha filial (${money(P.terms.branch_price)}/oy)</label>
-    ${t.id ? parentField(t) : ''}`;
+    ${t.id ? parentField(t) : ''}
+    ${discountFields(t)}`;
+}
+// A discount: a percent or a sum off the monthly price, until a date or for good; afterwards the price returns by itself.
+function discountFields(t = {}) {
+  const ty = t.discount_type || '';
+  return `<fieldset class="disc-box"><legend>${icon('percent', 16)} Chegirma</legend><div class="form-grid">
+    <label class="field">Turi<select name="discount_type"><option value="" ${ty ? '' : 'selected'}>Chegirma yo'q</option>
+      <option value="percent" ${ty === 'percent' ? 'selected' : ''}>Foiz (%)</option><option value="amount" ${ty === 'amount' ? 'selected' : ''}>Summa (so'm)</option></select></label>
+    <label class="field">Miqdori<input type="number" name="discount_value" min="0" value="${t.discount_value || ''}" placeholder="20"></label>
+    <label class="field">Qachongacha (bo'sh = doimiy)<input type="date" name="discount_until" value="${t.discount_until ? isoDate(t.discount_until) : ''}"></label>
+    <label class="field">Sababi<input name="discount_note" maxlength="120" value="${esc(t.discount_note || '')}" placeholder="Masalan: birinchi 10 mijoz"></label></div>
+    ${t.discount_until && t.discount_until < Date.now() ? '<p class="small muted" style="margin:6px 0 0">Muddati tugagan — hozir to\'liq narx olinadi.</p>' : ''}</fieldset>`;
+}
+// The monthly price with its discount, as one short line.
+function feeHtml(t) {
+  const pi = t.plan_info; const d = pi.discount;
+  if (!d) return `<b>${money(pi.fee)}</b>/oy${t.monthly_fee ? ' <span class="small muted">(maxsus narx)</span>' : ''}`;
+  return `<s class="muted">${money(pi.base_fee)}</s> <b>${money(pi.fee)}</b>/oy <span class="chip green" title="${esc(d.note)}">−${d.type === 'percent' ? `${d.value}%` : money(d.off)}${d.until ? ` · ${fmtDate(d.until)} gacha` : ''}</span>${d.note ? ` <span class="small muted">${esc(d.note)}</span>` : ''}`;
 }
 // A branch points at its main business; the main owner then sees all branches side by side (Pro).
 function parentField(t) {
@@ -369,6 +413,10 @@ function readForm(d, form) {
   delete d.support_text; delete d.support_link;
   d.paid_until = dateEndTs(d.paid_until);
   d.monthly_fee = Number(d.monthly_fee) || 0;
+  if ('discount_type' in d) {
+    d.discount = d.discount_type ? { type: d.discount_type, value: Number(d.discount_value) || 0, until: d.discount_until ? dateEndTs(d.discount_until) : null, note: d.discount_note || '' } : null;
+    for (const k of ['discount_type', 'discount_value', 'discount_until', 'discount_note']) delete d[k];
+  }
   d.is_branch = !!d.is_branch;
   if ('parent_id' in d) d.parent_id = Number(d.parent_id) || null;
   return d;
@@ -433,7 +481,12 @@ function bind(root) {
   root.querySelector('#psettings').onclick = platformSettings;
   root.querySelector('#pplans').onclick = plansDialog;
   root.querySelector('#ptg').onclick = telegramDialog;
-  root.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => { P.tab = b.dataset.tab; render(); });
+  root.querySelectorAll('[data-tab]').forEach((b) => b.onclick = async () => {
+    P.tab = b.dataset.tab;
+    if (P.tab === 'versions' && !P.changelog) { try { P.changelog = await GET('/api/platform/changelog'); } catch (e) { toastError(e); P.changelog = { versions: [] }; } }
+    render();
+  });
+  if (P.tab === 'versions') return;
   if (P.tab === 'leads') return bindLeads(root);
   const s = root.querySelector('#psearch');
   s.oninput = () => { P.search = s.value; render(); };
@@ -443,6 +496,7 @@ function bind(root) {
   root.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => editTenant(byId(b.dataset.edit)));
   root.querySelectorAll('[data-term]').forEach((b) => b.onclick = () => termDialog(byId(b.dataset.term)));
   root.querySelectorAll('[data-more]').forEach((b) => b.onclick = () => moreMenu(byId(b.dataset.more)));
+  root.querySelectorAll('[data-tgopen]').forEach((a) => a.onclick = (e) => { e.preventDefault(); tenantTelegram(byId(a.dataset.tgopen)); });
 }
 
 // Subscription term: add or take away days, a week (e.g. a bonus), months or a year, or pick the date.
@@ -454,7 +508,7 @@ function termDialog(t) {
     body: `<p class="lead" id="term-now"></p>
       <div class="term-steps">${TERM_STEPS.map(([k, n]) => `<button type="button" class="btn ${k[0] === '-' ? 'red-text' : ''}" data-step="${k}">${n}</button>`).join('')}</div>
       <label class="field" style="margin-top:12px">Yoki sanani tanlang<input type="date" name="date"></label>
-      <p style="margin-top:12px">Tarif: <b>${esc(t.plan_info.name)}</b> · <b>${money(t.plan_info.fee)}</b>/oy
+      <p style="margin-top:12px">Tarif: <b>${esc(t.plan_info.name)}</b> · ${feeHtml(t)}
         <span class="muted">· 1 yil = ${P.terms.yearly_months} oy narxi: <b>${money(t.plan_info.fee * P.terms.yearly_months)}</b></span></p>
       <p class="small muted" style="margin-top:8px">Qo'shish bugundan yoki joriy muddatdan (qaysi biri keyin bo'lsa) hisoblanadi. Masalan, bonus uchun "+1 hafta".
         Muddat tugagach ${P.terms.grace_days} kun ishlayveradi, keyin faqat ko'rish rejimiga o'tadi (ma'lumot o'chmaydi).</p>`,
@@ -488,6 +542,7 @@ function termDialog(t) {
 function moreMenu(t) {
   const acts = [
     ['copy', 'link', 'Kirish havolasini nusxalash'],
+    ['tg', 'send', 'Telegram hisobot'],
     ['reset', 'key-round', 'Boshliq parolini tiklash'],
     ['backups', 'database', 'Zaxiradan tiklash'],
     t.status === 'active' ? ['block', 'ban', 'Bloklash'] : ['unblock', 'circle-check', 'Faollashtirish'],
@@ -501,7 +556,8 @@ function moreMenu(t) {
     if (k === 'copy') {
       const url = siteUrl(t.code);
       try { await navigator.clipboard.writeText(url); toast(`Nusxa olindi: ${url}`, 'ok'); } catch { prompt('Havola:', url); }
-    } else if (k === 'reset') resetOwner(t);
+    } else if (k === 'tg') tenantTelegram(t);
+    else if (k === 'reset') resetOwner(t);
     else if (k === 'backups') backups(t);
     else if (k === 'block') {
       if (!(await confirmModal('Bloklash', `"${esc(t.name)}" bloklansinmi? Barcha xodimlari darhol tizimdan chiqariladi. Ma'lumotlar o'chmaydi.`, 'Bloklash'))) return;
@@ -511,6 +567,44 @@ function moreMenu(t) {
       try { await PUT(`/api/platform/tenants/${t.id}`, { status: 'active' }); reload(); } catch (e) { toastError(e); }
     }
   });
+}
+
+// A business's Telegram: who gets its daily report, a link to send to its owner, the report time. Backups never go here.
+async function tenantTelegram(t) {
+  let st;
+  try { st = await GET(`/api/platform/tenants/${t.id}/telegram`); } catch (e) { return toastError(e); }
+  const url = st.link_code && st.bot ? `https://t.me/${st.bot}?start=${st.link_code}` : '';
+  const again = () => { tenantTelegram(t); return false; };
+  const form = openModal({
+    title: `${icon('send')} ${esc(t.name)} — Telegram`,
+    body: !st.bot_ready ? `<div class="notice">${icon('info', 18)} Avval platforma botini ulang (yuqoridagi ${icon('send', 13)} tugma).</div>`
+      : `<p class="small muted" style="margin-top:0">Bu biznesning kunlik hisoboti shu chatlarga keladi. Zaxira nusxalar faqat sizga boradi.</p>
+      ${st.chats.length ? `<div class="tg-chats">${st.chats.map((c) => `<div class="tg-chat">${icon('circle-check', 18)} <b class="grow">${esc(c.title || 'Telegram')}</b>
+        <span class="small muted">${c.linked_at ? fmtDate(c.linked_at) : ''}</span>
+        <button type="button" class="icon-btn danger" data-tgdel="${esc(c.id)}" title="Uzish">${icon('x', 16)}</button></div>`).join('')}</div>`
+        : '<p class="muted">Hali hech kim ulanmagan.</p>'}
+      ${url ? `<div class="tg-link"><p class="small" style="margin:10px 0 4px">Shu havolani biznes egasiga (yoki hisobot oladigan odamga) yuboring — bitta bosishda ulanadi:</p>
+        <code class="tg-url">${esc(url)}</code>
+        <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button type="button" class="btn sm" id="tgcopy">${icon('copy', 16)} Nusxalash</button>
+          <a class="btn sm" target="_blank" rel="noopener" href="https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(`${t.name}: kunlik hisobotni Telegramda olish uchun bosing`)}">${icon('send', 16)} Telegramda yuborish</a>
+          <button type="button" class="btn sm" id="tgcheck">${icon('refresh-cw', 16)} Ulandimi?</button></div></div>`
+        : `<button type="button" class="btn sm" id="tglink" style="margin-top:10px">${icon('plus', 16)} ${st.chats.length ? "Yana bir kishini qo'shish (havola)" : 'Ulash havolasini olish'}</button>`}
+      <div class="form-grid" style="margin-top:14px"><label class="field">Kunlik hisobot vaqti<select name="time">
+        ${['', '20:00', '21:00', '22:00', '22:30', '23:00', '23:30'].map((x) => `<option value="${x}" ${(st.report_time ?? '23:00') === x ? 'selected' : ''}>${x || 'Yubormaslik'}</option>`).join('')}</select></label></div>`,
+    actions: st.bot_ready && st.chats.length ? [{ label: 'Yopish', onClick: () => {} },
+      { label: 'Hisobotni hozir yuborish', cls: 'primary', icon: 'send', onClick: async () => { await POST(`/api/platform/tenants/${t.id}/telegram/report`); toast('Yuborildi', 'ok'); return false; } }]
+      : [{ label: 'Yopish', onClick: () => {} }],
+  });
+  const on = (sel, fn) => { const b = form.querySelector(sel); if (b) b.onclick = async () => { try { await fn(); } catch (e) { toastError(e); } }; };
+  on('#tglink', async () => { await POST(`/api/platform/tenants/${t.id}/telegram/link`); closeModal(); again(); });
+  on('#tgcheck', async () => { closeModal(); again(); reload(); });
+  on('#tgcopy', async () => { try { await navigator.clipboard.writeText(url); toast('Nusxa olindi', 'ok'); } catch { prompt('Havola:', url); } });
+  form.querySelectorAll('[data-tgdel]').forEach((b) => b.onclick = async () => {
+    try { await DEL(`/api/platform/tenants/${t.id}/telegram?chat=${encodeURIComponent(b.dataset.tgdel)}`); closeModal(); again(); reload(); } catch (e) { toastError(e); }
+  });
+  if (form.time) form.time.onchange = async () => {
+    try { await PUT(`/api/platform/tenants/${t.id}/telegram`, { time: form.time.value }); toast('Saqlandi', 'ok'); reload(); } catch (e) { toastError(e); }
+  };
 }
 
 // Taking a business off the platform for good: its code typed by hand and the owner's password.

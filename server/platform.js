@@ -98,6 +98,13 @@ function createPlatform(dataDir) {
   if (!tcols.includes('is_branch')) pdb.exec('ALTER TABLE tenants ADD COLUMN is_branch INTEGER NOT NULL DEFAULT 0');
   // A branch points to its main business; the main business's owner sees all of them in one report.
   if (!tcols.includes('parent_id')) pdb.exec('ALTER TABLE tenants ADD COLUMN parent_id INTEGER');
+  // A discount on what the business pays: a percent or a sum off, for a while or for good, with a reason.
+  if (!tcols.includes('discount_type')) {
+    pdb.exec(`ALTER TABLE tenants ADD COLUMN discount_type TEXT NOT NULL DEFAULT '';
+      ALTER TABLE tenants ADD COLUMN discount_value INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE tenants ADD COLUMN discount_until INTEGER;
+      ALTER TABLE tenants ADD COLUMN discount_note TEXT NOT NULL DEFAULT '';`);
+  }
   const q = (sql) => pdb.prepare(sql);
   const now = () => Date.now();
 
@@ -180,6 +187,27 @@ function createPlatform(dataDir) {
 
   // Applications from the front page and the owner's Telegram bot.
   const leads = createLeads({ pdb, pget, pset, now });
+
+  // ---------- Versions: the change list (CHANGELOG.md) and the day each version first ran on this server ----------
+  const ROOT = path.join(__dirname, '..');
+  const versionDates = (() => { try { return JSON.parse(pget('version_dates', '{}')) || {}; } catch { return {}; } })();
+  try {
+    const cur = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
+    if (cur && !versionDates[cur]) { versionDates[cur] = now(); pset('version_dates', JSON.stringify(versionDates)); }
+  } catch { /* no package.json: nothing to note */ }
+  function changelog() {
+    let text = '';
+    try { text = fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8'); } catch { return { versions: [] }; }
+    const versions = [];
+    for (const block of text.split(/^## /m).slice(1)) {
+      const nl = block.indexOf('\n');
+      const head = (nl < 0 ? block : block.slice(0, nl)).trim();
+      const m = /^(\d+\.\d+\.\d+)\s*(?:[—–-]\s*(.*))?$/.exec(head);
+      if (!m) continue;
+      versions.push({ version: m[1], title: (m[2] || '').trim(), body: (nl < 0 ? '' : block.slice(nl + 1)).trim(), installed_at: versionDates[m[1]] || null });
+    }
+    return { versions };
+  }
   leads.start();
 
   // ---------- A business owner's Telegram: the morning list of tasks, a reminder an hour before a task ----------
@@ -191,39 +219,59 @@ function createPlatform(dataDir) {
   if (!ttCols.includes('report_time')) pdb.exec("ALTER TABLE tenant_telegram ADD COLUMN report_time TEXT NOT NULL DEFAULT '23:00'");
   if (!ttCols.includes('report_day')) pdb.exec("ALTER TABLE tenant_telegram ADD COLUMN report_day TEXT NOT NULL DEFAULT ''");
   const tgRow = (id) => q('SELECT * FROM tenant_telegram WHERE tenant_id = ?').get(id);
+  // Several people may get one business's reports: the owner, a partner, a manager, a group. One row per chat.
+  pdb.exec(`CREATE TABLE IF NOT EXISTS tenant_chats (
+    tenant_id INTEGER NOT NULL, chat_id TEXT NOT NULL, chat_title TEXT NOT NULL DEFAULT '', linked_at INTEGER,
+    PRIMARY KEY (tenant_id, chat_id)
+  )`);
+  // The single chat of earlier versions moves into the list once (the old column stays, unused, for a step back).
+  if (pget('tg_chats_moved') !== '1') {
+    q(`INSERT OR IGNORE INTO tenant_chats (tenant_id, chat_id, chat_title, linked_at)
+      SELECT tenant_id, chat_id, chat_title, linked_at FROM tenant_telegram WHERE chat_id IS NOT NULL`).run();
+    pset('tg_chats_moved', '1');
+  }
+  const chatsOf = (id) => q('SELECT chat_id, chat_title, linked_at FROM tenant_chats WHERE tenant_id = ? ORDER BY linked_at, chat_id').all(id);
+  const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+  // Sends to every chat of the business; one chat that fails (blocked the bot, left the group) does not stop the others.
+  async function sendAll(id, text) {
+    const chats = chatsOf(id);
+    if (!chats.length) throw new HttpError(400, 'Avval Telegramni ulang');
+    let sent = 0;
+    for (const c of chats) {
+      try { await leads.sendTo(c.chat_id, text); sent++; } catch (e) { console.error(`Telegram (${id} → ${c.chat_title || c.chat_id}): ${e.message}`); }
+    }
+    if (!sent) throw new HttpError(502, "Telegramga yuborib bo'lmadi");
+    return { ok: true, sent };
+  }
   function telegramFor(id) {
     return {
       status() {
         const r = tgRow(id) || {};
-        return { bot_ready: leads.ready(), bot: leads.botName(), linked: !!r.chat_id, chat_title: r.chat_title || '', link_code: r.chat_id ? '' : r.link_code || '',
-          report_time: r.report_time ?? '23:00' };
+        const chats = chatsOf(id).map((c) => ({ id: c.chat_id, title: c.chat_title || '', linked_at: c.linked_at }));
+        return { bot_ready: leads.ready(), bot: leads.botName(), linked: chats.length > 0, chats, chat_title: chats.length ? chats[0].title : '',
+          link_code: r.link_code || '', report_time: r.report_time ?? '23:00' };
       },
       setReport(time) {
         const t = String(time ?? '').trim();
-        if (t && !/^([01]\d|2[0-3]):[0-5]\d$/.test(t)) throw new HttpError(400, "Vaqt 23:00 ko'rinishida bo'lsin");
+        if (t && !TIME_RE.test(t)) throw new HttpError(400, "Vaqt 23:00 ko'rinishida bo'lsin");
         q(`INSERT INTO tenant_telegram (tenant_id, report_time) VALUES (?, ?) ON CONFLICT(tenant_id) DO UPDATE SET report_time = excluded.report_time`).run(id, t);
         return this.status();
       },
-      async report() {
-        const r = tgRow(id);
-        if (!r || !r.chat_id) throw new HttpError(400, 'Avval Telegramni ulang');
-        const ctx = context(id);
-        await leads.sendTo(r.chat_id, ctx.api.eveningText());
-        return { ok: true };
-      },
+      async report() { return sendAll(id, context(id).api.eveningText()); },
+      // A one-time code: whoever opens the bot with it is added to the list. Chats already linked stay.
       link() {
         if (!leads.ready()) throw new HttpError(409, "Platforma boti hali ulanmagan — FLOWI yordamiga yozing");
         const code = `b${String(require('node:crypto').randomInt(10000000, 100000000))}`;
-        q(`INSERT INTO tenant_telegram (tenant_id, link_code) VALUES (?, ?) ON CONFLICT(tenant_id) DO UPDATE SET link_code = excluded.link_code, chat_id = NULL, chat_title = ''`).run(id, code);
+        q(`INSERT INTO tenant_telegram (tenant_id, link_code) VALUES (?, ?) ON CONFLICT(tenant_id) DO UPDATE SET link_code = excluded.link_code`).run(id, code);
+        return { ...this.status(), url: leads.botName() ? `https://t.me/${leads.botName()}?start=${code}` : '' };
+      },
+      // One chat off the list, or (no chat given) all of them.
+      unlink(chatId) {
+        if (chatId) q('DELETE FROM tenant_chats WHERE tenant_id = ? AND chat_id = ?').run(id, String(chatId));
+        else { q('DELETE FROM tenant_chats WHERE tenant_id = ?').run(id); q('UPDATE tenant_telegram SET link_code = NULL WHERE tenant_id = ?').run(id); }
         return this.status();
       },
-      unlink() { q('DELETE FROM tenant_telegram WHERE tenant_id = ?').run(id); return this.status(); },
-      async test() {
-        const r = tgRow(id);
-        if (!r || !r.chat_id) throw new HttpError(400, 'Avval Telegramni ulang');
-        await leads.sendTo(r.chat_id, '✅ FLOWI: sinov xabari. Har kuni ertalab bugungi ishlaringiz shu yerga keladi.');
-        return { ok: true };
-      },
+      async test() { return sendAll(id, '✅ FLOWI: sinov xabari. Kunlik hisobot shu yerga keladi.'); },
     };
   }
   leads.onMessage((msg) => {
@@ -232,7 +280,9 @@ function createPlatform(dataDir) {
     const r = q('SELECT * FROM tenant_telegram WHERE link_code = ?').get(m[1]);
     if (!r) return "Bu kod eskirgan. Dasturda Sozlamalar → Telegram bo'limidan yangisini oling.";
     const title = msg.chat.title || [msg.chat.first_name, msg.chat.last_name].filter(Boolean).join(' ') || '';
-    q('UPDATE tenant_telegram SET chat_id = ?, chat_title = ?, link_code = NULL, linked_at = ? WHERE tenant_id = ?').run(String(msg.chat.id), title, now(), r.tenant_id);
+    q(`INSERT INTO tenant_chats (tenant_id, chat_id, chat_title, linked_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(tenant_id, chat_id) DO UPDATE SET chat_title = excluded.chat_title`).run(r.tenant_id, String(msg.chat.id), title, now());
+    q('UPDATE tenant_telegram SET link_code = NULL WHERE tenant_id = ?').run(r.tenant_id);
     const ctx = context(r.tenant_id);
     if (ctx) ctx.hub.publish('settings');
     return `✅ Ulandi: ${ctx ? ctx.api.settings().name : ''}. Har kuni kechqurun kunlik hisobot (savdo, xarajat, foyda) shu yerga keladi; to'lov kuni kelgan xarajatlar va ishlar haqida ertalab eslatma ham keladi.`;
@@ -244,23 +294,27 @@ function createPlatform(dataDir) {
     try {
       const day = (() => { const d = new Date(now()); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; })();
       const morning = forceMorning || new Date(now()).getHours() >= 8;
-      for (const r of q("SELECT t.* FROM tenant_telegram t JOIN tenants n ON n.id = t.tenant_id WHERE t.chat_id IS NOT NULL AND n.status = 'active'").all()) {
-        const ctx = context(r.tenant_id);
+      const ids = q("SELECT DISTINCT c.tenant_id AS id FROM tenant_chats c JOIN tenants n ON n.id = c.tenant_id WHERE n.status = 'active'").all().map((x) => x.id);
+      for (const id of ids) {
+        const ctx = context(id);
         if (!ctx) continue;
+        q('INSERT OR IGNORE INTO tenant_telegram (tenant_id) VALUES (?)').run(id);
+        const r = tgRow(id);
+        const send = (text) => sendAll(id, text).catch((e) => console.error(`Telegram eslatma (${ctx.row.code}): ${e.message}`));
         try {
           if (morning && r.digest_day !== day) {
-            q('UPDATE tenant_telegram SET digest_day = ? WHERE tenant_id = ?').run(day, r.tenant_id);
+            q('UPDATE tenant_telegram SET digest_day = ? WHERE tenant_id = ?').run(day, id);
             // A choyxona gets a morning message only when something is due (a door shop: its list of tasks every day).
             const text = ctx.api.morningText();
-            if (text) await leads.sendTo(r.chat_id, text);
+            if (text) await send(text);
           }
           const d = new Date(now());
           const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
           if (r.report_time && hm >= r.report_time && r.report_day !== day) {
-            q('UPDATE tenant_telegram SET report_day = ? WHERE tenant_id = ?').run(day, r.tenant_id);
-            await leads.sendTo(r.chat_id, ctx.api.eveningText());
+            q('UPDATE tenant_telegram SET report_day = ? WHERE tenant_id = ?').run(day, id);
+            await send(ctx.api.eveningText());
           }
-          for (const text of ctx.api.soonTexts()) await leads.sendTo(r.chat_id, text);
+          for (const text of ctx.api.soonTexts()) await send(text);
         } catch (e) { console.error(`Telegram eslatma (${ctx.row.code}): ${e.message}`); }
       }
     } finally { tgBusy = false; }
@@ -357,10 +411,32 @@ function createPlatform(dataDir) {
     const terms = getTerms();
     const key = plans[row.plan] ? row.plan : 'biznes';
     const p = plans[key];
-    const fee = row.monthly_fee > 0 ? row.monthly_fee : row.is_branch ? terms.branch_price : p.price;
+    const base = row.monthly_fee > 0 ? row.monthly_fee : row.is_branch ? terms.branch_price : p.price;
+    const discount = discountFor(row, base);
+    const fee = base - (discount ? discount.off : 0);
     const graceUntil = row.paid_until ? row.paid_until + terms.grace_days * DAY : null;
-    return { key, name: p.name, price: p.price, fee, max_staff: p.max_staff, devices_per_staff: p.devices_per_staff, modules: p.modules, is_branch: !!row.is_branch,
+    return { key, name: p.name, price: p.price, base_fee: base, fee, discount, max_staff: p.max_staff, devices_per_staff: p.devices_per_staff, modules: p.modules, is_branch: !!row.is_branch,
       paid_until: row.paid_until, grace_until: graceUntil, read_only: !!(graceUntil && now() > graceUntil) };
+  }
+
+  // The discount in force now (null when none, or when its term is over: the price goes back by itself).
+  function discountFor(row, base) {
+    if (!row.discount_type || !(row.discount_value > 0)) return null;
+    if (row.discount_until && now() > row.discount_until) return null;
+    const off = row.discount_type === 'percent' ? Math.round(base * Math.min(100, row.discount_value) / 100) : Math.min(base, row.discount_value);
+    return { type: row.discount_type, value: row.discount_value, until: row.discount_until || null, note: row.discount_note || '', off };
+  }
+  function discountInput(v) {
+    if (!v || !v.type) return { discount_type: '', discount_value: 0, discount_until: null, discount_note: '' };
+    if (!['percent', 'amount'].includes(v.type)) throw new HttpError(400, "Chegirma turi noto'g'ri");
+    const value = int(v.value, 'Chegirma', { required: true, min: 1, max: v.type === 'percent' ? 100 : 1e10 });
+    const until = v.until ? int(v.until, 'Chegirma muddati', { min: 1, max: 8.64e15 }) : null;
+    return { discount_type: v.type, discount_value: value, discount_until: until, discount_note: str(v.note, 'Chegirma sababi', { max: 120 }) };
+  }
+  function saveDiscount(id, v) {
+    const d = discountInput(v);
+    q('UPDATE tenants SET discount_type = ?, discount_value = ?, discount_until = ?, discount_note = ? WHERE id = ?')
+      .run(d.discount_type, d.discount_value, d.discount_until, d.discount_note, id);
   }
 
   function planInput(key, v) {
@@ -517,8 +593,20 @@ function createPlatform(dataDir) {
     return v;
   }
 
+  function tenantTg(id) {
+    const t = tenantRow(id);
+    if (!t) throw new HttpError(404, 'Choyxona topilmadi');
+    return telegramFor(t.id);
+  }
   function listTenants() {
-    return q('SELECT * FROM tenants ORDER BY id DESC').all().map((t) => ({ ...t, disabled_modules: parseModules(t), support: parseSupport(t), plan_info: planFor(t), ...stats(t) }));
+    const tg = new Map();
+    for (const c of q('SELECT tenant_id, chat_title FROM tenant_chats ORDER BY linked_at').all()) {
+      if (!tg.has(c.tenant_id)) tg.set(c.tenant_id, []);
+      tg.get(c.tenant_id).push(c.chat_title || 'Telegram');
+    }
+    const times = new Map(q('SELECT tenant_id, report_time FROM tenant_telegram').all().map((r) => [r.tenant_id, r.report_time]));
+    return q('SELECT * FROM tenants ORDER BY id DESC').all().map((t) => ({ ...t, disabled_modules: parseModules(t), support: parseSupport(t), plan_info: planFor(t),
+      telegram: { chats: tg.get(t.id) || [], report_time: times.has(t.id) ? times.get(t.id) : '23:00' }, ...stats(t) }));
   }
 
   function createTenant({ body }) {
@@ -526,6 +614,7 @@ function createPlatform(dataDir) {
     const code = str(body.code, 'Kod', { required: true, max: 31 }).toLowerCase();
     if (!CODE_RE.test(code)) throw new HttpError(400, "Kod faqat lotin harflari, raqam va '-' dan iborat bo'lsin (masalan: navruz)");
     if (q('SELECT 1 FROM tenants WHERE code = ?').get(code)) throw new HttpError(409, 'Bu kod band');
+    if (body.discount) discountInput(body.discount); // checked before anything is created
     const owner = {
       name: str(body.owner_name, 'Boshliq ismi', { required: true, max: 80 }),
       username: str(body.owner_username, 'Boshliq logini', { required: true, max: 40 }),
@@ -548,6 +637,7 @@ function createPlatform(dataDir) {
       int(body.monthly_fee, 'Oylik narx'), str(body.notes, 'Izoh', { max: 500 }), now(), disabled, kitchenMode, type, support,
       plan, body.is_branch ? 1 : 0
     ).lastInsertRowid;
+    if (body.discount) saveDiscount(id, body.discount);
     return tenantRow(id);
   }
 
@@ -575,6 +665,7 @@ function createPlatform(dataDir) {
       parentId !== undefined ? parentId : t.parent_id,
       t.id
     );
+    if (body.discount !== undefined) saveDiscount(t.id, body.discount);
     refresh(t.id);
     // Open screens re-read their menu of sections right away.
     if (contexts.has(t.id)) contexts.get(t.id).hub.publish('settings');
@@ -681,6 +772,7 @@ function createPlatform(dataDir) {
     if (ctx) { ctx.hub.disconnectUser(); ctx.db.close(); contexts.delete(t.id); }
     for (const ext of ['', '-wal', '-shm']) fs.rmSync(file + ext, { force: true });
     q('DELETE FROM tenant_telegram WHERE tenant_id = ?').run(t.id);
+    q('DELETE FROM tenant_chats WHERE tenant_id = ?').run(t.id);
     try { q('UPDATE leads SET tenant_id = NULL WHERE tenant_id = ?').run(t.id); } catch { /* no leads table yet */ }
     q('DELETE FROM tenants WHERE id = ?').run(t.id);
     console.log(`Biznes o'chirildi: ${t.code} (${t.name}) — nusxa: ${path.relative(dataDir, keep)}`);
@@ -721,6 +813,13 @@ function createPlatform(dataDir) {
     ['GET', '/api/platform/settings', true, getPlatformSettings],
     ['PUT', '/api/platform/settings', true, savePlatformSettings],
     ['GET', '/api/platform/types', true, () => BUSINESS_TYPES],
+    ['GET', '/api/platform/changelog', true, changelog],
+    // A business's Telegram from the platform: who gets its reports, a link to send to its owner, the report time.
+    ['GET', '/api/platform/tenants/:id/telegram', true, ({ params }) => tenantTg(params.id).status()],
+    ['POST', '/api/platform/tenants/:id/telegram/link', true, ({ params }) => tenantTg(params.id).link()],
+    ['PUT', '/api/platform/tenants/:id/telegram', true, ({ params, body }) => tenantTg(params.id).setReport(body.time)],
+    ['POST', '/api/platform/tenants/:id/telegram/report', true, ({ params }) => tenantTg(params.id).report()],
+    ['DELETE', '/api/platform/tenants/:id/telegram', true, ({ params, query }) => tenantTg(params.id).unlink(query.chat)],
     ['GET', '/api/platform/plans', true, () => ({ plans: getPlans(), terms: getTerms() })],
     ['PUT', '/api/platform/plans', true, savePlans],
     ['GET', '/api/platform/leads', true, leads.list],
