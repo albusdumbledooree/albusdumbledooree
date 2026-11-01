@@ -1132,7 +1132,7 @@ test('front page applications: saved first, sent to the Telegram bot, buttons ch
     updates.push({ update_id: nextId++, callback_query: { id: 'x1', from: { first_name: 'Begona' }, data: `lead:${id}:rejected`, message: { message_id: 1, chat: { id: 555 } } } });
     updates.push({ update_id: nextId++, callback_query: { id: 'x2', from: { first_name: 'Ega' }, data: `lead:${id}:called`, message: { message_id: sent.id, chat: { id: 777 } } } });
     await waitFor(async () => (await call('GET', '/api/platform/leads', admin)).data.rows[0].status === 'called', 'button');
-    assert.ok(calls.some((c) => c.method === 'editMessageText' && /Qo'ng'iroq qilindi/.test(c.body.text)));
+    await waitFor(() => calls.some((c) => c.method === 'editMessageText' && /Qo'ng'iroq qilindi/.test(c.body.text)), 'button edit');
 
     // The panel changes it too, and the Telegram message follows.
     const up = await call('PUT', `/api/platform/leads/${id}`, admin, { status: 'connected', admin_note: 'Pro, 2 filial' });
@@ -1155,6 +1155,7 @@ test('front page applications: saved first, sent to the Telegram bot, buttons ch
     assert.equal(last.status, 429);
     assert.equal((await call('DELETE', '/api/platform/telegram', admin)).data.configured, false);
   } finally {
+    await call('DELETE', '/api/platform/telegram', (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token);
     delete process.env.TELEGRAM_API;
     tg.close();
   }
@@ -1462,7 +1463,7 @@ test("a business owner's Telegram: linked with a code, the morning list of tasks
     assert.match(st.link_code, /^b\d{8}$/);
     updates.push({ update_id: 1, message: { message_id: 1, chat: { id: 4242, type: 'private', first_name: 'Aziz' }, text: `/start ${st.link_code}` } });
     await waitFor(async () => (await call('GET', '/api/telegram', boss)).data.linked, 'linked');
-    assert.ok(sent.some((m) => m.chat_id === 4242 && /Ulandi/.test(m.text)));
+    await waitFor(() => sent.some((m) => m.chat_id === 4242 && /Ulandi/.test(m.text)), 'linked reply');
     // A task for today with a time in the next hour.
     const soon = new Date(Date.now() + 30 * 60 * 1000);
     const pad = (n) => String(n).padStart(2, '0');
@@ -1504,6 +1505,7 @@ test("a business owner's Telegram: linked with a code, the morning list of tasks
     assert.equal((await call('GET', '/api/telegram', ali)).status, 403);
     assert.equal((await call('DELETE', '/api/telegram', boss)).data.linked, false);
   } finally {
+    await call('DELETE', '/api/platform/telegram', (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token);
     delete process.env.TELEGRAM_API;
     tg.close();
   }

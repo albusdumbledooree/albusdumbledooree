@@ -2,6 +2,11 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.21.1 — Yangilanish testlari tuzatildi
+- Ba'zi serverlarda yangilanish 3 ta Telegram testi tufayli to'xtab, eski versiyaga qaytardi. Sabab dasturda emas, testda edi:
+  test Telegram xabari tahrirlanishini kutmasdan tekshirardi (tez kompyuterda ulgurardi, sekinrog'ida yo'q),
+  yiqilganda esa botni o'chirmay qoldirib, keyingi testlarni ham yiqitardi. Endi kutadi va har doim tozalab chiqadi.
+
 ## 1.21.0 — Google va Yandex'da chiqish
 - Bosh sahifa ikki manzilda: **flowi.uz/** (o'zbekcha) va **flowi.uz/ru** (ruscha). Ruscha matn serverning o'zida
   qo'yiladi, shuning uchun Yandex va Google uni to'liq o'qiydi; UZ/RU tugmalari shu manzillarga o'tadi, tanlov eslab qolinadi.
