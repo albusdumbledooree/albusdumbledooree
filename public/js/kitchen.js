@@ -30,7 +30,6 @@ Views.kitchen = {
     const notify = App.kitchenMode === 'notify';
     return `<div class="page-head"><h1>${t('Oshxona')}</h1>
       <span class="chip new">${icon('bell', 14)} ${load.pending}</span><span class="chip cooking">${icon('flame', 14)} ${load.cooking}</span>
-      ${App.device ? `<label class="check small"><input type="checkbox" id="kprint" ${OrderPrinter.on() ? 'checked' : ''}> ${icon('printer', 18)} ${t('Avtomatik chop etish')}</label>` : ''}
       ${moduleOn('stoplist') ? `<a class="btn sm" href="#/stoplist">${icon('ban', 16)} ${t('Stop-list')}</a>` : ''}</div>
       <div class="kds">
         ${notify ? '' : `<div class="kds-col"><h2>${icon('bell')} ${t('Yangi')} <span class="badge">${col('new').length}</span></h2>${col('new').map(ticketHtml).join('') || emptyState('check', t("Yangi buyurtma yo'q"))}</div>`}
@@ -39,11 +38,6 @@ Views.kitchen = {
       </div>`;
   },
   bind(root, { items }) {
-    const kp = root.querySelector('#kprint');
-    if (kp) kp.onchange = (e) => {
-      OrderPrinter.set(e.target.checked);
-      toast(e.target.checked ? t('Yangi buyurtmalar shu qurilmada avtomatik chop etiladi') : t("Avtomatik chop etish o'chirildi"), 'ok');
-    };
     root.querySelectorAll('[data-kprint]').forEach((b) => b.onclick = () => {
       const i = items.find((x) => x.id === Number(b.dataset.kprint));
       printKitchenTicket({ order_id: i.order_id, room: i.room_name, waiter: i.waiter_name, at: i.created_at, items: [i] });

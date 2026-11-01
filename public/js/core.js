@@ -653,17 +653,6 @@ const OrderPrinter = {
     } catch { /* offline: keep the last known state */ }
     return this.cfg;
   },
-  async configure(c) {
-    this.cfg = await this.dev('PUT', '/api/device/printer', c);
-    store('cp_kprint', this.cfg.on ? true : null); store('cp_kprint_srv', 1);
-    this.sync();
-    if (App.user && typeof updateNav === 'function') updateNav();
-    return this.cfg;
-  },
-  // The plain on/off switch (kitchen screen, settings): keeps what it prints.
-  async set(v) {
-    try { const c = this.cfg || await this.dev('GET', '/api/device/printer'); await this.configure({ on: !!v, all: c.all, cats: c.cats }); } catch (e) { toastError(e); }
-  },
   sync() {
     if (!this.on()) { if (this.es) this.es.close(); this.es = null; clearInterval(this.timer); this.timer = null; return; }
     if (!this.es) {
@@ -688,38 +677,6 @@ const OrderPrinter = {
     this.busy = false;
   },
 };
-
-// The printer's settings on the device: on/off, kitchen dishes only or everything, which sections; recent tickets.
-async function printerDialog() {
-  let cfg; let recent = [];
-  try { [cfg, recent] = await Promise.all([OrderPrinter.load(), api('GET', '/api/device/print-recent', null, App.device.token).catch(() => [])]); } catch (e) { return toastError(e); }
-  if (!cfg) return;
-  const form = openModal({
-    title: `${icon('printer')} ${t('Buyurtma printeri')} — ${esc(App.device.name || '')}`, size: 'wide',
-    body: `<label class="check" style="margin-bottom:12px"><input type="checkbox" name="on" ${cfg.on ? 'checked' : ''}> <b>${t('Shu qurilmadan buyurtmalarni chop etish')}</b></label>
-      <div id="pr-opts">
-        <div class="seg" style="margin-bottom:10px"><label class="pill"><input type="radio" name="all" value="0" ${cfg.all ? '' : 'checked'}><span>${t('Faqat oshxona taomlari')}</span></label>
-          <label class="pill"><input type="radio" name="all" value="1" ${cfg.all ? 'checked' : ''}><span>${t('Hamma taomlar (choy, non, ichimlik ham)')}</span></label></div>
-        <p class="small muted" style="margin:0 0 6px">${t("Faqat shu bo'limlar (masalan, kabobxona printeriga — Kaboblar). Hech biri tanlanmasa — hammasi:")}</p>
-        <div class="cat-pick">${cfg.categories.map((c) => `<label class="pill"><input type="checkbox" data-cat value="${c.id}" ${cfg.cats.includes(c.id) ? 'checked' : ''}><span>${esc(c.name)}</span></label>`).join('')}</div>
-      </div>
-      <p class="small muted" style="margin-top:12px">${icon('info', 14)} ${t("Kompyuter o'chib qolsa, oxirgi 3 soatda chop etilmay qolgan buyurtmalar u yoqilganda o'zi chiqadi. Printer ulanmagan bo'lsa, xodimlar ekranida ogohlantirish chiqadi.")}</p>
-      ${recent.length ? `<h3 style="margin:14px 0 8px">${t("Oxirgi qog'ozlar")}</h3><div class="stack">${recent.map((j) => `<div class="row" style="gap:8px;flex-wrap:nowrap">
-          <span class="grow small"><b>${fmtTime(j.at)}</b> · ${esc(j.room)} · #${j.order_id}${j.cancel ? ` <span class="chip red">${t('bekor')}</span>` : ''}${j.reprint ? ` <span class="chip">${t('qayta')}</span>` : ''}
-          <br><span class="muted">${esc(j.items.map((i) => `${i.qty}× ${i.name}`).join(', '))}</span></span>
-          <button type="button" class="btn sm" data-re="${j.id}">${icon('printer', 14)} ${t('Qayta')}</button></div>`).join('')}</div>` : ''}`,
-    actions: [{ label: t('Sinov qog\'ozi'), onClick: () => { printKitchenTicket({ order_id: 0, room: t('SINOV'), waiter: App.device.name, at: Date.now(), items: [{ qty: 1, name: t('Printer ishlayapti') }] }); return false; } },
-      { label: t('Saqlash'), cls: 'primary', icon: 'check', onClick: async (f) => {
-        const cats = [...f.querySelectorAll('[data-cat]:checked')].map((x) => Number(x.value));
-        await OrderPrinter.configure({ on: f.on.checked, all: f.querySelector('[name=all]:checked').value === '1', cats });
-        toast(f.on.checked ? t('Yangi buyurtmalar shu qurilmada chop etiladi') : t("Avtomatik chop etish o'chirildi"), 'ok');
-        if (typeof render === 'function' && !App.user) render();
-      } }],
-  });
-  const sync = () => { form.querySelector('#pr-opts').style.opacity = form.on.checked ? 1 : 0.45; };
-  form.on.onchange = sync; sync();
-  form.querySelectorAll('[data-re]').forEach((b) => b.onclick = () => { const j = recent.find((x) => x.id === Number(b.dataset.re)); if (j) printKitchenTicket({ ...j, reprint: true }); });
-}
 
 /* Browsers always show a print window, except Chrome/Edge started with --kiosk-printing:
    then checks go straight to the default printer. This makes a Windows launcher that opens FLOWI that way

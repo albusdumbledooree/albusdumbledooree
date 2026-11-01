@@ -2,6 +2,18 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.18.0 — Printerlar boshliq sozlamalarida, bir kompyuterdan bir nechta printer
+- **Printer sozlamalari faqat boshliqda**: Sozlamalar → **Printerlar**. Ofitsant va oshpaz qurilmada printerni o'chira olmaydi;
+  qurilmaning ⚙ menyusida faqat holati ko'rinadi. Avval yoqilgan printerlar o'z-o'zidan yoqiq qoladi.
+- **FLOWI Printer dasturi** (ixtiyoriy, Sozlamalar → Printerlar → "FLOWI Printer dasturini ishlatish"):
+  - kassa kompyuteriga bir marta o'rnatiladi, Windows yoqilganda o'zi ishga tushadi;
+  - kompyuterdagi **USB printerlarni o'zi topadi**, **LAN printerlar IP orqali** qo'shiladi (port 9100);
+  - har bir printerga nom va bo'lim: sho'rva — oshxonaga, shashlik — shashlikchiga; 80/58 mm qog'oz;
+  - chop etish oynasisiz, to'g'ridan-to'g'ri; printer javob bermasa qog'oz kutib turadi va ekranda ogohlantirish chiqadi;
+  - "Sinov qog'ozi" faqat tanlangan printerga chiqadi; kompyuter o'chirilsa kaliti bekor bo'ladi.
+- **Davomat yashirildi**: "Ishga keldim" (Sozlamalar → Joylashuv) yoqilmagan bo'lsa Davomat bo'limi ko'rinmaydi.
+  Kunlik ishlovchilar uchun kelgan kunlar orqada belgilanaveradi.
+
 ## 1.17.0 — Oshxona printerlari va platformadan biznesni o'chirish
 - **Buyurtma printeri sozlamalari** (qurilmaning qulf ekrani → ⚙ → "Buyurtma printeri"):
   - **faqat oshxona taomlari** chop etiladi (choy, non, ichimlik oshxona qog'oziga tushmaydi) yoki hammasi;

@@ -250,7 +250,7 @@ Views.money = {
   render() {
     return `<div class="page-head"><h1>${t('Moliya')}</h1>${App.settings.finance_lock && App.financeKey ? `<button class="btn sm" id="fin-lock">${icon('lock', 16)} ${t('Qulflash')}</button>` : ''}</div>
       <div class="money-tiles">${MONEY_PAGES().filter(([k]) => viewOn(k)).map(([k, ic, n, d]) => `<a class="money-tile" href="#/${k}">${icon(ic, 32)}<b>${n}</b><span class="small muted">${d}</span></a>`).join('')}
-        ${can('owner') ? MONEY_PAGES().filter(([k]) => planLocked(Views[k].module)).map(([k, ic, n, d]) => `<button type="button" class="money-tile locked" data-upgrade="${esc(n)}">${icon(ic, 32)}<b>${n} ${icon('lock', 16)}</b><span class="small muted">${d}</span></button>`).join('') : ''}</div>
+        ${can('owner') ? MONEY_PAGES().filter(([k]) => planLocked(Views[k].module) && (!Views[k].on || Views[k].on())).map(([k, ic, n, d]) => `<button type="button" class="money-tile locked" data-upgrade="${esc(n)}">${icon(ic, 32)}<b>${n} ${icon('lock', 16)}</b><span class="small muted">${d}</span></button>`).join('') : ''}</div>
       <p class="small muted" style="margin-top:14px">${icon('eye-off', 14)} ${t("Bu bo'lim begona ko'zdan uzoqroq turishi uchun menyuning eng chetida.")}${can('owner') ? ` ${t('Kim ko\'rishi va parol: Sozlamalar → Ruxsatlar.')}` : ''}</p>`;
   },
   bind(root) {
@@ -388,7 +388,7 @@ Views.payroll = {
     const att = new Map(d.attendance.map((a) => [`${a.user_id}|${a.day}`, a.source]));
     const noAdvance = d.staff.filter((r) => r.advance_missing);
     return `<div class="page-head"><a class="btn sm" href="#/money">${icon('arrow-left', 16)}</a><h1>${t('Ish haqi')}</h1>
-      <a class="btn" href="#/attendance">${icon('calendar', 18)} ${t('Bugungi davomat')}</a>
+      ${viewOn('attendance') ? `<a class="btn" href="#/attendance">${icon('calendar', 18)} ${t('Bugungi davomat')}</a>` : ''}
       <button class="icon-btn" data-month="-1">${icon('chevron-left')}</button><b>${monthTitle(d.month)}</b><button class="icon-btn" data-month="1">${icon('chevron-right')}</button></div>
       ${noAdvance.length ? `<div class="notice">${icon('wallet', 18)} <span>${t("Avans kuni o'tdi — hali avans berilmagan")}: ${noAdvance.map((r) => `<a href="#" data-adv="${r.id}"><b>${esc(r.name)}</b></a>`).join(', ')}</span></div>` : ''}
       <div class="kpis">
@@ -414,7 +414,7 @@ Views.payroll = {
             <button class="icon-btn" data-rate="${r.id}" title="${esc(t('Maosh'))}">${icon('sliders-horizontal', 18)}</button>
             <button class="icon-btn" data-hist="${r.id}" title="${esc(t('Tarix'))}">${icon('history', 18)}</button></td></tr>`).join('')}
       </table></div>` : emptyState('users', t("Xodimlar yo'q"))}</div>
-      <div class="card"><div class="card-head"><h2>${t('Davomat')}</h2><span class="small muted">${t("Dasturga kirgan kun o'zi belgilanadi. Katakni bosing: ✓ keldi → ✕ kelmadi → D dam olish → K kasal → bo'sh.")}</span></div>
+      ${App.settings.att_clock || d.staff.some((r) => r.active && r.rate && r.rate.pay_type === 'daily') ? `<div class="card"><div class="card-head"><h2>${t('Davomat')}</h2><span class="small muted">${t("Dasturga kirgan kun o'zi belgilanadi. Katakni bosing: ✓ keldi → ✕ kelmadi → D dam olish → K kasal → bo'sh.")}</span></div>
         <div class="table-wrap"><table class="att">
           <tr><th>${t('Xodim')}</th>${d.days.map((day) => `<th class="c ${day === d.today ? 'today' : ''}">${Number(day.slice(8))}</th>`).join('')}<th class="right">${t('Jami')}</th></tr>
           ${d.staff.filter((r) => r.active).map((r) => `<tr><td><b>${esc(r.name)}</b></td>${d.days.map((day) => {
@@ -423,7 +423,7 @@ Views.payroll = {
             return `<td class="c ${day === d.today ? 'today' : ''}"><button class="att-cell ${a ? a[2] : ''}" ${day > d.today ? 'disabled' : ''}
               data-att="${r.id}" data-day="${day}" data-st="${st}" title="${day}${a ? ` · ${a[0]}` : ''}">${a ? a[1] : ''}</button></td>`;
           }).join('')}<td class="right"><b>${r.days_worked}</b></td></tr>`).join('')}
-        </table></div></div>`;
+        </table></div></div>` : ''}`;
   },
   bind(root, d) {
     const byId = (id) => d.staff.find((r) => r.id === Number(id));
@@ -540,6 +540,8 @@ function bindWorkLog(root) {
 UI.attDay = UI.attDay || localDay();
 Views.attendance = {
   title: () => t('Davomat'), icon: () => 'calendar', roles: ['owner', 'admin'], refreshOn: ['payroll', 'finance', 'work'], module: 'payroll',
+  // Shown only when the boss turned on "Ishga keldim" (Sozlamalar → Joylashuv); daily pay is still marked in the background.
+  on: () => !!(App.settings && App.settings.att_clock),
   async load() {
     const [d, wl] = await Promise.all([GET(`/api/attendance?day=${UI.attDay}`), GET(`/api/work/log?day=${UI.attDay}`).catch(() => null)]);
     d.work = wl;
@@ -1243,6 +1245,7 @@ const SETTINGS_TABS = () => [
   ['place', 'map-pin', t('Joylashuv'), ['owner', 'admin']],
   ['rights', 'shield-check', t('Ruxsatlar'), ['owner', 'admin']],
   ['devices', 'monitor-smartphone', t('Qurilmalar'), ['owner', 'admin']],
+  ...(isShop() && !isDoors() ? [] : [['printers', 'printer', t('Printerlar'), ['owner', 'admin']]]),
   ['audit', 'history', t('Amallar tarixi'), ['owner', 'admin'], 'audit'],
   ['backup', 'database', t('Zaxira'), ['owner', 'admin', 'cashier']],
   ['me', 'user', t('Mening sozlamalarim'), ['owner', 'admin', 'cashier', 'waiter', 'chef']],
@@ -1261,6 +1264,7 @@ Views.settings = {
     if (tab === 'general') data.groups = await GET('/api/expense-groups').catch(() => null);
     if (tab === 'rooms') [data.rooms, data.users] = await Promise.all([GET('/api/rooms?all=1'), GET('/api/users')]);
     if (tab === 'devices') data.devices = await GET('/api/devices');
+    if (tab === 'printers') data.pr = await GET('/api/printers/setup');
     if (tab === 'qr') data.qr = await GET('/api/qr');
     if (tab === 'telegram') data.tg = await telegramSettingsHtml();
     if (tab === 'audit') data.rows = await GET('/api/audit?limit=300');
@@ -1792,7 +1796,8 @@ Views.settings = {
           <button class="btn" id="full">${icon('maximize', 18)} ${t("To'liq ekran")}</button>
           ${keyboardSelect()}</div></div>
       ${App.device ? `<div class="card"><div class="card-head"><h2>${icon('printer')} ${t('Buyurtma printeri')}</h2></div>
-        <button class="btn" id="order-print">${icon('sliders-horizontal', 18)} ${t('Printer sozlamalari')}: <b>${OrderPrinter.on() ? t('yoqilgan') : t("o'chiq")}</b></button>
+        <p style="margin:0">${t('Buyurtma printeri')}: <b>${OrderPrinter.on() ? t('yoqilgan') : t("o'chiq")}</b></p>
+        ${can('owner', 'admin') ? `<a class="btn" href="#/settings" data-goto-tab="printers" style="margin-top:8px">${icon('sliders-horizontal', 18)} ${t('Printer sozlamalari')}</a>` : `<p class="small muted">${t("Printerni boshliq Sozlamalar → Printerlar bo'limida sozlaydi.")}</p>`}
         <p class="small muted" style="margin-top:8px">${t("Ofitsant yoki kassir yozgan har bir buyurtma (taomlar, soni, izoh) shu kompyuterga ulangan printerdan chiqadi. Xodimlar ro'yxati ochiq turganda ham ishlaydi.")}</p>
         <div class="notice blue" style="margin:10px 0 8px">${icon('info', 18)} <span>${t("Chek chiqqanda chop etish oynasi ochilmasligi uchun FLOWI'ni maxsus yorliq orqali oching: yuklab oling, ish stoliga qo'ying va shu bilan ishga tushiring. Chek darhol asosiy printerdan chiqadi.")}</span></div>
         <button class="btn primary" id="kiosk-bat">${icon('download', 18)} ${t('Kassa yorlig\'ini yuklab olish (Windows)')}</button></div>` : ''}
@@ -1825,8 +1830,7 @@ Views.settings = {
     root.querySelector('#kb-mode').onchange = (e) => { Keyboard.setMode(e.target.value); toast(t('Saqlandi'), 'ok'); };
     const kb = root.querySelector('#kiosk-bat');
     if (kb) kb.onclick = downloadKioskLauncher;
-    const op = root.querySelector('#order-print');
-    if (op) op.onclick = async () => { await printerDialog(); };
+    root.querySelectorAll('[data-goto-tab]').forEach((x) => x.onclick = (e) => { e.preventDefault(); UI.settingsTab = x.dataset.gotoTab; refreshView(); });
     const full = root.querySelector('#full');
     if (full) full.onclick = () => Screen.toggleFull();
     const vf = root.querySelector('#voice-form');

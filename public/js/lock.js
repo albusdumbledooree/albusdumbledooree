@@ -169,18 +169,18 @@ Views.lock = {
     root.querySelector('#lock-menu').onclick = () => openModal({
       title: `${icon('monitor-smartphone')} ${esc(App.device.name || t('Qurilma'))}`,
       body: `<p>${t('Kod')}: <b>${esc(App.device.code)}</b></p>
-        <button type="button" class="btn block" id="order-print" style="margin:12px 0">${icon('printer', 18)} ${t('Buyurtma printeri')}: <b>${OrderPrinter.on() ? t('yoqilgan') : t("o'chiq")}</b></button>
+        <p style="margin:12px 0">${icon('printer', 18)} ${t('Buyurtma printeri')}: <b>${OrderPrinter.on() ? t('yoqilgan') : t("o'chiq")}</b>
+          <br><span class="small muted">${t("Printerni boshliq Sozlamalar → Printerlar bo'limida sozlaydi.")}</span></p>
         ${keyboardSelect()}
         <button type="button" class="btn block" id="kiosk-bat" style="margin-top:12px">${icon('download', 18)} ${t('Kassa yorlig\'ini yuklab olish (Windows)')}</button>
         <p class="small muted" style="margin-top:6px">${t("Shu yorliq bilan ochilsa, chek chiqqanda chop etish oynasi ochilmaydi — darhol printerdan chiqadi.")}</p>
         <p class="small muted">${t("Qurilmani uzsangiz, uni qayta ulash uchun boshliq logini kerak bo'ladi.")}</p>`,
       onMount: (f) => {
-        f.querySelector('#order-print').onclick = () => { closeModal(); printerDialog(); };
         f.querySelector('#kb-mode').onchange = (e) => Keyboard.setMode(e.target.value);
         f.querySelector('#kiosk-bat').onclick = downloadKioskLauncher;
       },
       actions: [{ label: t('Yopish') }, { label: t('Qurilmani uzish'), cls: 'danger', icon: 'log-out', onClick: () => {
-        OrderPrinter.set(false); App.device = null; store('cp_device', null); location.hash = '#/setup';
+        store('cp_kprint', null); OrderPrinter.sync(); App.device = null; store('cp_device', null); location.hash = '#/setup';
       } }],
     });
     root.querySelectorAll('[data-staff]').forEach((b) => b.onclick = () => pinDialog(staff.find((u) => u.id === Number(b.dataset.staff))));

@@ -497,5 +497,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && Ap
   }
   if (App.user && (!location.hash || ['#/login', '#/setup', '#/lock'].includes(location.hash))) location.hash = homeRoute();
   if (App.device) { FolderBackup.run(); OrderPrinter.load().then(() => OrderPrinter.sync()); }
+  // The boss switches this computer's printer on or off from Settings: the device follows within half a minute.
+  setInterval(() => { if (App.device) OrderPrinter.load().then(() => OrderPrinter.sync()); }, 30000);
   render();
 })();

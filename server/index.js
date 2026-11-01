@@ -83,7 +83,7 @@ function businessManifest(code, name) {
 
 // Signing in and out still work when the term is over, so the boss can see and export the data.
 const READ_ONLY_OK = new Set(['/api/login', '/api/device/register', '/api/device/pin', '/api/logout', '/api/finance/unlock',
-  '/api/me/pin', '/api/me/password', '/api/devices/backup', '/api/device/printer', '/api/device/print-ack']);
+  '/api/me/pin', '/api/me/password', '/api/devices/backup', '/api/device/printer', '/api/device/print-ack', '/api/device/agent-report', '/api/device/agent-ack']);
 
 function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '..', 'data') } = {}) {
   const platform = createPlatform(dataDir);

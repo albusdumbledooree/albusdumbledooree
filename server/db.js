@@ -728,6 +728,31 @@ CREATE INDEX IF NOT EXISTS idx_work_day ON work_log(day, user_id);
     data TEXT NOT NULL,
     created_at INTEGER NOT NULL
   )`);
+  // A test ticket aimed at one printer of the FLOWI Printer program (null = every printer that takes it).
+  addCol('print_jobs', 'printer_id', 'INTEGER');
+  // The FLOWI Printer program on a business's computer is a device of its own; it reports its printers.
+  addCol('devices', 'agent', 'INTEGER NOT NULL DEFAULT 0');
+  addCol('devices', 'agent_version', "TEXT NOT NULL DEFAULT ''");
+  db.exec(`CREATE TABLE IF NOT EXISTS printers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('win','net')),
+    sys_name TEXT NOT NULL DEFAULT '',
+    port_name TEXT NOT NULL DEFAULT '',
+    ip TEXT NOT NULL DEFAULT '',
+    port INTEGER NOT NULL DEFAULT 9100,
+    label TEXT NOT NULL DEFAULT '',
+    on_ INTEGER NOT NULL DEFAULT 0,
+    print_all INTEGER NOT NULL DEFAULT 0,
+    cats TEXT NOT NULL DEFAULT '[]',
+    paper INTEGER NOT NULL DEFAULT 80,
+    upto INTEGER NOT NULL DEFAULT 0,
+    error TEXT NOT NULL DEFAULT '',
+    error_at INTEGER,
+    printed_at INTEGER,
+    seen_at INTEGER,
+    created_at INTEGER NOT NULL
+  )`);
   addCol('transactions', 'fixed_month', 'TEXT');
   const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
   if (!orderCols.includes('service_type')) db.exec("ALTER TABLE orders ADD COLUMN service_type TEXT NOT NULL DEFAULT 'percent'");

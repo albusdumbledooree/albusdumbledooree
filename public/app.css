@@ -974,3 +974,29 @@ details.upcoming summary { cursor: pointer; font-weight: 650; color: var(--muted
   .rep-tabs button { flex: 1 1 30%; justify-content: center; padding-left: 6px; padding-right: 6px; }
 }
 .sb-item.sb-warn { color: var(--red); font-weight: 700; }
+
+/* ---------- Settings → Printers ---------- */
+.pr-row { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin: 10px 0; background: var(--panel); }
+.pr-row.off { background: var(--panel-2); }
+.pr-row.off .pr-body { opacity: .75; }
+.pr-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.pr-head b { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.pr-head .grow { flex: 1 1 auto; }
+.pr-head .chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-body { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.pr-body > select { max-width: 320px; }
+.pr-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--red); flex: none; }
+.pr-dot.on { background: var(--green); }
+.pr-cats { gap: 6px; }
+.pr-agent .card-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pr-agent .card-head h2 { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.pr-net { border: 1px dashed var(--line); border-radius: var(--radius); padding: 12px; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.pr-net > b { display: inline-flex; align-items: center; gap: 6px; }
+.pr-net .btn { align-self: flex-start; }
+.pr-steps { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.pr-steps ol { margin: 6px 0 12px; padding-left: 20px; }
+.pr-steps li { margin: 4px 0; }
+@media (max-width: 600px) {
+  .pr-row { padding: 10px; }
+  .pr-body > select { max-width: none; }
+}

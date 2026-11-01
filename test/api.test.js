@@ -1826,11 +1826,14 @@ test('order printers: kitchen dishes only, chosen sections, catch-up after being
   const tea = menu.dishes.find((d) => !d.needs_kitchen);
   const kebabCat = menu.categories.find((c) => /kabob/i.test(c.name)) || menu.categories[1];
   const kebabDish = menu.dishes.find((d) => d.category_id === kebabCat.id);
-  // Kitchen printer: every kitchen dish, no tea. Kebab printer: only its section.
+  // Kitchen printer: every kitchen dish, no tea. Kebab printer: only its section. Set by the boss, not at the device.
   const cfg = (await call('GET', '/api/device/printer', kitchen)).data;
   assert.equal(cfg.on, false); assert.ok(cfg.categories.length > 0);
-  await call('PUT', '/api/device/printer', kitchen, { on: true, all: false, cats: [] });
-  await call('PUT', '/api/device/printer', kebab, { on: true, all: false, cats: [kebabCat.id] });
+  const devs = (await call('GET', '/api/devices', boss)).data;
+  const kid = devs.find((d) => d.name === 'Oshxona').id; const bid = devs.find((d) => d.name === 'Kabobxona').id;
+  assert.equal((await call('PUT', `/api/devices/${kid}/printer`, boss, { on: true, all: false, cats: [] })).status, 200);
+  await call('PUT', `/api/devices/${bid}/printer`, boss, { on: true, all: false, cats: [kebabCat.id] });
+  assert.equal((await call('PUT', '/api/device/printer', kitchen, { on: false })).status, 403, 'staff at the device cannot switch it off');
   let st = (await call('GET', '/api/printers', boss)).data;
   assert.equal(st.length, 2); assert.ok(st.every((p) => p.online));
 
@@ -1871,8 +1874,8 @@ test('order printers: kitchen dishes only, chosen sections, catch-up after being
   assert.equal(again.length, 1); assert.equal(again[0].reprint, true);
   assert.ok((await call('GET', '/api/device/print-recent', kitchen)).data.length >= 2);
 
-  // Switched off: no more tickets, and no longer listed.
-  await call('PUT', '/api/device/printer', kebab, { on: false });
+  // Switched off by the boss: no more tickets, and no longer listed.
+  await call('PUT', `/api/devices/${bid}/printer`, boss, { on: false });
   st = (await call('GET', '/api/printers', boss)).data;
   assert.deepEqual(st.map((p) => p.name), ['Oshxona']);
   assert.equal((await call('GET', '/api/device/print-jobs', kebab)).data.jobs.length, 0);
@@ -1897,4 +1900,82 @@ test('platform: a business is deleted only with its code and the owner password;
   assert.ok(!(await call('GET', '/api/platform/tenants', admin)).data.some((x) => x.code === 'ketadi'));
   // The code is free again.
   assert.equal((await call('POST', '/api/platform/tenants', admin, { name: 'Yangi', code: 'ketadi', owner_name: 'E', owner_username: 'ega', owner_password: 'ega12345' })).status, 200);
+});
+
+test('FLOWI Printer program: several printers on one computer (USB and LAN), named and routed by section', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  await call('POST', '/api/platform/tenants', admin, { name: 'Agent choyxona', code: 'agent', owner_name: 'Ega', owner_username: 'ega', owner_password: 'ega12345', plan: 'biznes', sample: true, kitchen_mode: 'off' });
+  const boss = await login('ega', 'ega12345', 'agent');
+  const waiterU = (await call('POST', '/api/users', boss, { name: 'Jasur', role: 'waiter', username: 'jasur', password: 'pass1234', pin: '1111' })).data;
+  const waiter = await login('jasur', 'pass1234', 'agent');
+  // Optional: off until the boss switches it on.
+  assert.equal((await call('GET', '/api/printers/setup', boss)).data.enabled, false);
+  assert.equal((await call('GET', '/api/printers/setup', waiter)).status, 403);
+  await call('PUT', '/api/settings', boss, { print_agent: true });
+  const dl = (await call('POST', '/api/printers/agent', boss, { name: 'Kassa', base: 'https://flowi.uz' })).data;
+  assert.equal(dl.filename, 'FLOWI-Printer.cmd');
+  assert.match(dl.script, /\$Base = 'https:\/\/flowi\.uz'/);
+  assert.ok(!/__TOKEN__|__BASE__/.test(dl.script));
+  const token = /\$Token = '([^']+)'/.exec(dl.script)[1];
+  assert.match(dl.script, /\r\n/, 'Windows line ends');
+  // The program reports the Windows printers (one as an object, as PowerShell sends a single item).
+  assert.equal((await call('POST', '/api/device/agent-report', token, { printers: { name: 'XP-80C', port: 'USB001' }, version: '1.0' })).status, 200);
+  await call('POST', '/api/device/agent-report', token, { printers: [{ name: 'XP-80C', port: 'USB001' }, { name: 'XP-58', port: 'USB002' }] });
+  let setup = (await call('GET', '/api/printers/setup', boss)).data;
+  const kassa = setup.agents.find((a) => a.name === 'Kassa');
+  assert.equal(kassa.online, true); assert.equal(kassa.printers.length, 2);
+  assert.ok(kassa.printers.every((p) => !p.on), 'new printers start switched off');
+  const menu = (await call('GET', '/api/menu', boss)).data;
+  const kebabCat = menu.categories.find((c) => /kabob/i.test(c.name));
+  const kebab = menu.dishes.find((d) => d.category_id === kebabCat.id);
+  const soup = menu.dishes.find((d) => d.needs_kitchen && d.category_id !== kebabCat.id);
+  const usb = kassa.printers.find((p) => p.sys_name === 'XP-80C');
+  // USB printer: the kitchen (everything but kebabs). A LAN printer by IP: the kebab stand.
+  const soupCats = menu.categories.filter((c) => c.id !== kebabCat.id).map((c) => c.id);
+  assert.equal((await call('PUT', `/api/printers/${usb.id}`, boss, { on: true, label: 'Oshxona', cats: soupCats })).status, 200);
+  assert.equal((await call('POST', '/api/printers/net', boss, { device_id: kassa.id, ip: '192.168.1.abc!', label: 'X' })).status, 400);
+  const net = (await call('POST', '/api/printers/net', boss, { device_id: kassa.id, ip: '192.168.1.120', port: 9100, label: 'Shashlikchi', cats: [kebabCat.id] })).data;
+  assert.ok(net.id);
+  // An order: soup and kebab — each to its own printer, as ESC/POS bytes.
+  const room = (await call('GET', '/api/rooms', boss)).data[0];
+  await call('PUT', `/api/rooms/${room.id}`, boss, { waiter_ids: [waiterU.id] });
+  const o = (await call('POST', '/api/orders', waiter, { room_id: room.id })).data;
+  await call('POST', `/api/orders/${o.id}/items`, waiter, { items: [{ dish_id: soup.id, qty: 2, note: 'achchiq' }, { dish_id: kebab.id, qty: 5 }] });
+  let jobs = (await call('GET', '/api/device/agent-jobs', token)).data.jobs;
+  assert.equal(jobs.length, 2);
+  const toUsb = jobs.find((j) => j.printer_id === usb.id); const toNet = jobs.find((j) => j.printer_id === net.id);
+  assert.equal(toUsb.kind, 'win'); assert.equal(toUsb.target, 'XP-80C');
+  assert.equal(toNet.kind, 'net'); assert.equal(toNet.target, '192.168.1.120'); assert.equal(toNet.port, 9100);
+  const usbText = Buffer.from(toUsb.data, 'base64').toString('latin1');
+  const netText = Buffer.from(toNet.data, 'base64').toString('latin1');
+  assert.ok(usbText.includes(soup.name.replace(/[ʻʼ‘’]/g, "'")) && !usbText.includes(kebab.name), usbText);
+  assert.ok(netText.includes(kebab.name) && !netText.includes(soup.name));
+  assert.ok(usbText.includes('achchiq') && usbText.includes('Oshxona'));
+  assert.ok(usbText.startsWith('\x1b@'), 'starts with ESC @');
+  assert.ok(usbText.includes('\x1dVB'), 'ends with a cut');
+  // Printed: acknowledged and gone. Not acknowledged (printer error): it waits and the staff are warned.
+  await call('POST', '/api/device/agent-ack', token, { printer_id: usb.id, upto: toUsb.upto });
+  await call('POST', '/api/device/agent-ack', token, { printer_id: net.id, error: "Printerga ulanib bo'lmadi: 192.168.1.120:9100" });
+  jobs = (await call('GET', '/api/device/agent-jobs', token)).data.jobs;
+  assert.deepEqual(jobs.map((j) => j.printer_id), [net.id], 'the kebab ticket waits for its printer');
+  let st = (await call('GET', '/api/printers', waiter)).data;
+  assert.equal(st.find((p) => p.name === 'Shashlikchi').online, false);
+  assert.equal(st.find((p) => p.name === 'Oshxona').online, true);
+  setup = (await call('GET', '/api/printers/setup', boss)).data;
+  assert.match(setup.agents[0].printers.find((p) => p.id === net.id).error, /ulanib/);
+  await call('POST', '/api/device/agent-ack', token, { printer_id: net.id, upto: jobs[0].upto });
+  assert.equal((await call('GET', '/api/printers', waiter)).data.find((p) => p.name === 'Shashlikchi').online, true);
+  // A test ticket goes only to the chosen printer.
+  await call('POST', `/api/printers/${usb.id}/test`, boss);
+  jobs = (await call('GET', '/api/device/agent-jobs', token)).data.jobs;
+  assert.deepEqual(jobs.map((j) => j.printer_id), [usb.id]);
+  assert.ok(Buffer.from(jobs[0].data, 'base64').toString('latin1').includes('SINOV'));
+  await call('POST', '/api/device/agent-ack', token, { printer_id: usb.id, upto: jobs[0].upto });
+  // Another business's computer cannot acknowledge this one's printer; a removed computer's key stops working.
+  assert.equal((await call('POST', '/api/device/agent-ack', token, { printer_id: 99999, upto: 1 })).status, 404);
+  await call('PUT', '/api/settings', boss, { print_agent: false });
+  assert.equal((await call('GET', '/api/device/agent-jobs', token)).data.enabled, false);
+  await call('PUT', '/api/settings', boss, { print_agent: true });
+  assert.equal((await call('DELETE', `/api/printers/agent/${kassa.id}`, boss)).status, 200);
+  assert.equal((await call('GET', '/api/device/agent-jobs', token)).status, 401);
 });

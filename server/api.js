@@ -47,7 +47,7 @@ const MODULES = {
   pnl: 'Sof foyda hisoboti (oylik)',
 };
 // On/off switches of the place features: staff only inside, "I came" with GPS / the desk's QR / a selfie, guest orders only inside.
-const GEO_FLAGS = ['geo_staff', 'att_clock', 'att_gps', 'att_qr', 'att_selfie', 'qr_geo', 'qr_busy'];
+const GEO_FLAGS = ['geo_staff', 'att_clock', 'att_gps', 'att_qr', 'att_selfie', 'qr_geo', 'qr_busy', 'print_agent'];
 function routeModule(pattern) {
   if (/^\/api\/(kitchen|items\/:id\/(accept|ready))$/.test(pattern)) return 'kitchen';
   if (pattern === '/api/dishes/:id/availability') return 'stoplist';
@@ -97,7 +97,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   // The detailed report: categories, each worker's day, a check's story, things worth a second look.
   const stats = createStats(db, { now });
   // Kitchen tickets for the order printers (with catch-up and reprint).
-  const print = createPrint(db, { now, events: hub, audit });
+  const print = createPrint(db, { now, events: hub, audit, settings: () => settings(), newToken, devicePrefix });
   // Work hours, GPS and the cash desk's attendance QR code (all optional, switched on in the settings).
   const work = createWork(db, { settings: () => settings(), audit, events: hub, now });
 
@@ -1221,6 +1221,16 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return orderDetails(it.order_id);
   }
 
+  // The FLOWI Printer program for one computer: the template with this business's address and the computer's key.
+  function agentDownload({ user, body }) {
+    const base = str(body.base, 'Manzil', { required: true, max: 200 }).replace(/\/+$/, '');
+    if (!/^https?:\/\/[a-z0-9.:-]+$/i.test(base)) throw new HttpError(400, "Manzil noto'g'ri");
+    const a = print.newAgent({ user, body });
+    const tpl = require('node:fs').readFileSync(require('node:path').join(__dirname, 'agent', 'flowi-printer.cmd'), 'utf8');
+    const script = tpl.replace(/__BASE__/g, base).replace(/__TOKEN__/g, a.token).replace(/__NAME__/g, a.name.replace(/['"`$]/g, ''));
+    return { id: a.id, name: a.name, filename: 'FLOWI-Printer.cmd', script: script.replace(/\r?\n/g, '\r\n') };
+  }
+
   // The kitchen ticket again (the paper ran out, the ticket got lost): every dish still on the check.
   function reprintOrder({ user, params }) {
     const o = getOrderRow(params.id);
@@ -1904,7 +1914,22 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['GET', '/api/device/staff', 'device', deviceStaff],
     ['GET', '/api/device/backup', 'device', deviceBackup],
     ['GET', '/api/device/printer', 'device', print.config],
-    ['PUT', '/api/device/printer', 'device', print.setConfig],
+    // The device itself may only switch on a printer set up before 1.17 (once); the rest is the boss's, in Settings.
+    ['PUT', '/api/device/printer', 'device', ({ device, body }) => {
+      if (!body.on || device.printer || device.print_seen) throw new HttpError(403, "Printerni boshliq Sozlamalar → Printerlar bo'limida sozlaydi");
+      return print.setConfig({ device, body: { on: true, all: false, cats: [] } });
+    }],
+    ['GET', '/api/device/agent-jobs', 'device', print.agentJobs],
+    ['POST', '/api/device/agent-report', 'device', print.agentReport],
+    ['POST', '/api/device/agent-ack', 'device', print.agentAck],
+    ['GET', '/api/printers/setup', MANAGERS, () => print.setup()],
+    ['POST', '/api/printers/net', MANAGERS, print.addNet],
+    ['POST', '/api/printers/agent', MANAGERS, (a) => agentDownload(a)],
+    ['DELETE', '/api/printers/agent/:id', MANAGERS, print.removeAgent],
+    ['PUT', '/api/devices/:id/printer', MANAGERS, print.setBrowser],
+    ['PUT', '/api/printers/:id', MANAGERS, print.savePrinter],
+    ['DELETE', '/api/printers/:id', MANAGERS, print.removePrinter],
+    ['POST', '/api/printers/:id/test', MANAGERS, print.testPrinter],
     ['GET', '/api/device/print-jobs', 'device', print.pending],
     ['POST', '/api/device/print-ack', 'device', print.ack],
     ['GET', '/api/device/print-recent', 'device', print.recent],
