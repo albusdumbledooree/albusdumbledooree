@@ -2089,3 +2089,44 @@ test('door shop: an advance now, the rest later — on the smallest plan, by nam
   const chMenu = (await call('GET', '/api/menu', chBoss)).data;
   assert.equal((await call('POST', '/api/sales', chBoss, { items: [{ dish_id: chMenu.dishes[0].id, qty: 1 }], advance: true, paid_cash: 1, customer_name: 'X', phone: '+998901234567' })).status, 400);
 });
+
+test('search engines: Uzbek and Russian front pages, the site map, robots, verification codes, a real "not found"', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  const get = (p, headers = {}) => fetch(base + p, { headers });
+  const uz = await (await get('/', { 'X-Forwarded-Host': 'flowi.uz', 'X-Forwarded-Proto': 'https' })).text();
+  assert.match(uz, /<html lang="uz">/);
+  assert.match(uz, /<link rel="canonical" href="https:\/\/flowi\.uz\/">/);
+  assert.match(uz, /hreflang="ru" href="https:\/\/flowi\.uz\/ru"/);
+  const ld = [...uz.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => JSON.parse(m[1]));
+  assert.deepEqual(ld.map((x) => x['@type']), ['SoftwareApplication', 'Organization', 'FAQPage']);
+  assert.ok(ld[0].offers.length === 3 && ld[0].offers.every((o) => o.priceCurrency === 'UZS'));
+  // Russian: the texts are on the page itself (a robot reads them without running scripts).
+  const ru = await get('/ru');
+  assert.equal(ru.status, 200);
+  const rh = await ru.text();
+  assert.match(rh, /<html lang="ru">/);
+  assert.match(rh, /<h1[^>]*>От заказа до прибыли/);
+  assert.ok(!/Buyurtmadan foydagacha/.test(rh));
+  assert.match(rh, /id="plans"><div class="plan">/);
+  // The map and the rules; the secret platform address is never named.
+  const sm = await (await get('/sitemap.xml', { 'X-Forwarded-Host': 'flowi.uz', 'X-Forwarded-Proto': 'https' })).text();
+  assert.match(sm, /<loc>https:\/\/flowi\.uz\/<\/loc>/); assert.match(sm, /<loc>https:\/\/flowi\.uz\/ru<\/loc>/);
+  const rb = await (await get('/robots.txt', { 'X-Forwarded-Host': 'flowi.uz' })).text();
+  assert.match(rb, /Sitemap: https:\/\/flowi\.uz\/sitemap\.xml/);
+  assert.match(rb, /User-agent: Yandex[\s\S]*Clean-param: lang&from/);
+  assert.ok(!/planeta/.test(rb + sm));
+  // Unknown addresses are a real 404 (not the front page again); the program's addresses still open.
+  const nf = await get('/no-such-page');
+  assert.equal(nf.status, 404); assert.match(await nf.text(), /noindex/);
+  assert.equal((await get('/c/demo')).status, 200);
+  assert.equal((await get('/landing/rooms.jpg')).status, 200);
+  // Verification codes: the whole <meta> tag or the code alone; nonsense refused.
+  assert.equal((await call('PUT', '/api/platform/settings', admin, { google_verify: 'not a code!' })).status, 400);
+  const st = (await call('PUT', '/api/platform/settings', admin, { google_verify: '<meta name="google-site-verification" content="Abc_123-xyzXYZ" />', yandex_verify: 'a1b2c3d4e5f6' })).data;
+  assert.equal(st.google_verify, 'Abc_123-xyzXYZ');
+  const withCodes = await (await get('/')).text();
+  assert.match(withCodes, /<meta name="google-site-verification" content="Abc_123-xyzXYZ">/);
+  assert.match(withCodes, /<meta name="yandex-verification" content="a1b2c3d4e5f6">/);
+  await call('PUT', '/api/platform/settings', admin, { google_verify: '', yandex_verify: '' });
+  assert.ok(!/google-site-verification/.test(await (await get('/')).text()));
+});

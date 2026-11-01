@@ -16,6 +16,7 @@ const { createApi, MODULES, BUSINESS_TYPES, SHOP_TYPES } = require('./api');
 const { createHub } = require('./events');
 const { snapshot, listTenantBackups, stampNow } = require('./backup');
 const { createLeads } = require('./leads');
+const { verifyInput } = require('./seo');
 const { hashPassword, verifyPassword, newToken, HttpError, str, int } = require('./util');
 
 const SCHEMA = `
@@ -494,9 +495,18 @@ function createPlatform(dataDir) {
   }
 
   function getPlatformSettings() {
-    return { support_text: pget('support_text'), support_link: pget('support_link') };
+    return { support_text: pget('support_text'), support_link: pget('support_link'), google_verify: pget('google_verify'), yandex_verify: pget('yandex_verify') };
   }
+  // The codes Google Search Console and Yandex Webmaster give to prove the site is ours.
+  function seoVerify() { return { google: pget('google_verify'), yandex: pget('yandex_verify') }; }
   function savePlatformSettings({ body }) {
+    const g = body.google_verify === undefined ? undefined : verifyInput(body.google_verify);
+    const y = body.yandex_verify === undefined ? undefined : verifyInput(body.yandex_verify);
+    if (g === null) throw new HttpError(400, "Google kodi noto'g'ri: Search Console bergan <meta …> qatorini yoki faqat kodni qo'ying");
+    if (y === null) throw new HttpError(400, "Yandex kodi noto'g'ri: Yandex Webmaster bergan <meta …> qatorini yoki faqat kodni qo'ying");
+    if (g !== undefined) pset('google_verify', g);
+    if (y !== undefined) pset('yandex_verify', y);
+    if (body.support_text === undefined && body.support_link === undefined) return getPlatformSettings();
     const s = supportInput({ text: body.support_text, link: body.support_link });
     pset('support_text', s.text);
     pset('support_link', s.link);
@@ -855,7 +865,7 @@ function createPlatform(dataDir) {
     pdb.close();
   }
 
-  return { handle, byCode, byToken, byGuestKey, remindTick, tgBackupTick, sendBackups, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, submitLead: leads.submit };
+  return { handle, byCode, byToken, byGuestKey, remindTick, tgBackupTick, sendBackups, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, seoVerify, submitLead: leads.submit };
 }
 
 module.exports = { createPlatform };

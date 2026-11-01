@@ -2,6 +2,16 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.21.0 — Google va Yandex'da chiqish
+- Bosh sahifa ikki manzilda: **flowi.uz/** (o'zbekcha) va **flowi.uz/ru** (ruscha). Ruscha matn serverning o'zida
+  qo'yiladi, shuning uchun Yandex va Google uni to'liq o'qiydi; UZ/RU tugmalari shu manzillarga o'tadi, tanlov eslab qolinadi.
+- Qidiruv tizimlari uchun: sarlavha va tavsif har tilda, canonical, hreflang, Open Graph, tuzilgan ma'lumot
+  (dastur va tarif narxlari, savol-javoblar), narxlar sahifaning o'zida.
+- **sitemap.xml** va **robots.txt** saytning o'z manzili bilan; Yandex uchun `?from=…` belgilari bir sahifa deb hisoblanadi.
+  Biznes sahifalari, dastur va platforma qidiruvga chiqmaydi.
+- Platformada **🔍 "Google va Yandex"** oynasi: Search Console va Yandex Webmaster tasdiqlash kodini qo'yish, qadamma-qadam yo'riqnoma.
+- Mavjud bo'lmagan manzil endi haqiqiy **404** sahifa beradi (oldin bosh sahifa ochilardi — qidiruv tizimlari buni yomon ko'radi).
+
 ## 1.20.0 — Eshik do'koni: avans (bosh to'lov) va qolganini keyin to'lash
 - **To'lov oynasida ikki tugma**: "To'liq to'lov" va **"Avans (bosh to'lov)"**. Avansda mijoz ismi va telefoni
   shu yerda yoziladi (oldindan ro'yxatda bo'lishi shart emas, keyingi safar telefonidan o'zi topiladi),

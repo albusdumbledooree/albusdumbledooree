@@ -45,8 +45,8 @@
     header.top nav a:hover { color: #fff; }
     .grow { flex: 1; }
     .lang { display: flex; border: 1px solid rgba(255,255,255,.22); border-radius: 10px; overflow: hidden; }
-    .lang button { background: transparent; color: rgba(255,255,255,.75); border: 0; padding: 7px 10px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
-    .lang button.on { background: #fff; color: var(--navy); }
+    .lang button, .lang a { text-decoration: none; background: transparent; color: rgba(255,255,255,.75); border: 0; padding: 7px 10px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+    .lang button.on, .lang a.on { background: #fff; color: var(--navy); }
     header.top .btn { padding: 10px 16px; font-size: 15px; }
 
     /* Hero */
@@ -243,7 +243,7 @@
       <a href="#savollar" data-t="nav_faq">Savollar</a>
     </nav>
     <span class="grow"></span>
-    <div class="lang"><button data-lang="uz">UZ</button><button data-lang="ru">RU</button></div>
+    <div class="lang"><a href="/" hreflang="uz" lang="uz" data-lang="uz">UZ</a><a href="/ru" hreflang="ru" lang="ru" data-lang="ru">RU</a></div>
     <a class="btn primary contact-link" href="#boglanish" data-t="cta_try">Bepul sinab ko'rish</a>
   </div>
 </header>
@@ -622,7 +622,11 @@
 
   var uzText = {};
   document.querySelectorAll('[data-t]').forEach(function (el) { uzText[el.dataset.t] = el.innerHTML; });
-  var lang = (function () { try { return JSON.parse(localStorage.getItem('cp_lang')) === 'ru' ? 'ru' : 'uz'; } catch (e) { return 'uz'; } }());
+  // The address says the language: "/" Uzbek, "/ru" Russian (each a full page for search engines).
+  // A visitor who chose Russian before is taken to "/ru" when they open "/".
+  var onRu = /^\/ru\/?$/.test(location.pathname);
+  var lang = onRu ? 'ru' : 'uz';
+  try { if (!onRu && JSON.parse(localStorage.getItem('cp_lang')) === 'ru' && !/[?&]lang=uz/.test(location.search)) { location.replace('/ru' + location.search + location.hash); return; } } catch (e) {}
   var info = FALLBACK;
 
   function d(k) { return lang === 'ru' ? RU[k] : UZ_DYN[k]; }
@@ -675,12 +679,17 @@
       var v = lang === 'ru' ? RU[el.dataset.t] : uzText[el.dataset.t];
       if (v !== undefined) el.innerHTML = v;
     });
-    document.querySelectorAll('.lang button').forEach(function (b) { b.classList.toggle('on', b.dataset.lang === lang); });
+    document.querySelectorAll('.lang [data-lang]').forEach(function (b) { b.classList.toggle('on', b.dataset.lang === lang); });
     renderPlans(); renderContact();
   }
 
-  document.querySelectorAll('.lang button').forEach(function (b) {
-    b.onclick = function () { lang = b.dataset.lang; try { localStorage.setItem('cp_lang', JSON.stringify(lang)); } catch (e) {} apply(); };
+  document.querySelectorAll('.lang [data-lang]').forEach(function (b) {
+    // The other language is its own address; the choice is remembered (and the place on the page kept).
+    b.onclick = function (e) {
+      e.preventDefault();
+      try { localStorage.setItem('cp_lang', JSON.stringify(b.dataset.lang)); } catch (x) {}
+      location.href = (b.dataset.lang === 'ru' ? '/ru' : '/?lang=uz') + location.hash;
+    };
   });
   document.querySelectorAll('.tabs button').forEach(function (b) {
     b.onclick = function () {

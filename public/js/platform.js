@@ -112,6 +112,7 @@ function mainHtml() {
       <button class="btn sm" id="pplans" title="Tariflar va narxlar">${icon('star', 16)} <span class="hide-xs">Tariflar</span></button>
       <button class="icon-btn ${P.tg.chat_id ? '' : 'warn-dot'}" id="ptg" title="Telegram bot (arizalar)">${icon('send')}</button>
       <button class="icon-btn" id="psettings" title="Yordam kontakti">${icon('life-buoy')}</button>
+      <button class="icon-btn" id="pseo" title="Google va Yandex">${icon('search')}</button>
       <button class="icon-btn" id="pw" title="Parol">${icon('key-round')}</button>
       <button class="icon-btn" id="logout" title="Chiqish">${icon('log-out')}</button></header>
   <main class="pmain">
@@ -479,6 +480,7 @@ function bind(root) {
   const pw2 = root.querySelector('#pw2');
   if (pw2) pw2.onclick = (e) => { e.preventDefault(); pw(); };
   root.querySelector('#psettings').onclick = platformSettings;
+  root.querySelector('#pseo').onclick = seoDialog;
   root.querySelector('#pplans').onclick = plansDialog;
   root.querySelector('#ptg').onclick = telegramDialog;
   root.querySelectorAll('[data-tab]').forEach((b) => b.onclick = async () => {
@@ -798,6 +800,34 @@ async function platformSettings() {
       toast('Saqlandi', 'ok');
     } }],
   });
+}
+
+// Google and Yandex: the site is proved to be ours with a code from each one's console; then the map of the site is sent.
+async function seoDialog() {
+  let s;
+  try { s = await GET('/api/platform/settings'); } catch (e) { return toastError(e); }
+  const site = location.origin;
+  const form = openModal({
+    title: `${icon('search')} Google va Yandex'da chiqish`, size: 'wide',
+    body: `<p class="small muted" style="margin-top:0">Bosh sahifa ikki tilda: <b>${esc(site)}/</b> (o'zbekcha) va <b>${esc(site)}/ru</b> (ruscha).
+        Sayt xaritasi: <a href="/sitemap.xml" target="_blank" rel="noopener">${esc(site)}/sitemap.xml</a></p>
+      <h3 class="ph3">${icon('search', 18)} Google</h3>
+      <ol class="small" style="margin:0 0 8px;padding-left:20px"><li><a href="https://search.google.com/search-console" target="_blank" rel="noopener">Google Search Console</a> → "Mulk qo'shish" → <b>URL prefiksi</b>: <code>${esc(site)}/</code></li>
+        <li>"HTML-teg" usulini tanlang, <code>&lt;meta name="google-site-verification" …&gt;</code> qatorini nusxalab, pastga qo'ying va saqlang.</li>
+        <li>Search Console'da "Tasdiqlash" ni bosing. Keyin "Sitemaps" bo'limiga <code>sitemap.xml</code> ni yuboring.</li></ol>
+      <label class="field">Google kodi${s.google_verify ? ' <span class="chip green">qo\'yilgan</span>' : ''}<input name="google_verify" value="${esc(s.google_verify || '')}" placeholder='<meta name="google-site-verification" content="…">'></label>
+      <h3 class="ph3">${icon('search', 18)} Yandex</h3>
+      <ol class="small" style="margin:0 0 8px;padding-left:20px"><li><a href="https://webmaster.yandex.ru/" target="_blank" rel="noopener">Yandex Webmaster</a> → "Sayt qo'shish": <code>${esc(site)}</code></li>
+        <li>"Meta-teg" usulini tanlang, <code>&lt;meta name="yandex-verification" …&gt;</code> qatorini nusxalab, pastga qo'ying va saqlang.</li>
+        <li>Webmaster'da "Tekshirish" ni bosing. Keyin "Indekslash → Sayt xaritasi fayllari" ga <code>${esc(site)}/sitemap.xml</code> ni qo'shing.</li></ol>
+      <label class="field">Yandex kodi${s.yandex_verify ? ' <span class="chip green">qo\'yilgan</span>' : ''}<input name="yandex_verify" value="${esc(s.yandex_verify || '')}" placeholder='<meta name="yandex-verification" content="…">'></label>
+      <p class="small muted">Qidiruvda paydo bo'lishi odatda bir necha kundan 2 haftagacha oladi.</p>`,
+    actions: [{ label: 'Yopish', onClick: () => {} }, { label: 'Saqlash', cls: 'primary', onClick: async (f) => {
+      await PUT('/api/platform/settings', { google_verify: f.google_verify.value, yandex_verify: f.yandex_verify.value });
+      toast("Saqlandi — endi Search Console va Webmaster'da \"Tasdiqlash\" ni bosing", 'ok', 8000);
+    } }],
+  });
+  return form;
 }
 
 (async function boot() {

@@ -8,6 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { createPlatform } = require('./platform');
+const { createSeo, originOf } = require('./seo');
 const { scheduleDaily } = require('./backup');
 const { HttpError, readJson, readRaw } = require('./util');
 
@@ -42,6 +43,13 @@ function send(res, status, data) {
   res.end(body);
 }
 
+// An address that does not exist: a real "not found", with the way back to the front page.
+const NOT_FOUND = `<!doctype html><html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>Sahifa topilmadi — FLOWI</title><link rel="icon" href="/icon.svg" type="image/svg+xml">
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:17px/1.5 system-ui,sans-serif;background:#f4f6f9;color:#0f172a}
+main{text-align:center;padding:24px}h1{font-size:64px;margin:0;color:#2156e8}a{display:inline-block;margin-top:16px;background:#2156e8;color:#fff;padding:12px 20px;border-radius:12px;text-decoration:none;font-weight:700}</style></head>
+<body><main><h1>404</h1><p>Sahifa topilmadi · Страница не найдена</p><a href="/">FLOWI — bosh sahifa</a></main></body></html>`;
+
 function serveStatic(req, res, pathname) {
   let file = path.normalize(path.join(PUBLIC, decodeURIComponent(pathname)));
   if (!file.startsWith(PUBLIC)) return send(res, 403, { error: 'Taqiqlangan' });
@@ -51,7 +59,10 @@ function serveStatic(req, res, pathname) {
   else if (/^\/c\/[a-z0-9-]+\/?$/i.test(pathname) || pathname === '/app') file = path.join(PUBLIC, 'index.html');
   // A room's QR code: the guest menu (no login).
   else if (/^\/q\/\d+-[A-Za-z0-9]{12}\/?$/.test(pathname)) file = path.join(PUBLIC, 'guest.html');
-  else if (['/platform.html', '/index.html', '/'].includes(pathname) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(PUBLIC, 'landing.html');
+  else if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+    res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+    return res.end(NOT_FOUND);
+  }
   // Code and styles are re-checked on every load (cheap 304), so an update reaches every device at once.
   const st = fs.statSync(file);
   const etag = `"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}-${VERSION}"`;
@@ -87,6 +98,7 @@ const READ_ONLY_OK = new Set(['/api/login', '/api/device/register', '/api/device
 
 function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '..', 'data') } = {}) {
   const platform = createPlatform(dataDir);
+  const seo = createSeo({ publicDir: PUBLIC, publicInfo: () => platform.publicInfo(), verify: () => platform.seoVerify() });
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
@@ -110,6 +122,15 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
             res.writeHead(200, { 'Content-Type': TYPES['.webmanifest'], 'Cache-Control': 'no-cache' });
             return res.end(JSON.stringify(businessManifest(code, ctx.api.settings().name)));
           }
+        }
+        // The front page for people and search engines: Uzbek at "/", Russian at "/ru"; the map and rules for robots.
+        const front = { '/': 'uz', '/index.html': 'uz', '/platform.html': 'uz', '/ru': 'ru', '/ru/': 'ru' }[pathname];
+        if (front || pathname === '/sitemap.xml' || pathname === '/robots.txt') {
+          const origin = originOf(req);
+          const [type, body] = front ? ['text/html; charset=utf-8', seo.page(front, origin)]
+            : pathname === '/sitemap.xml' ? ['application/xml; charset=utf-8', seo.sitemap(origin)] : ['text/plain; charset=utf-8', seo.robots(origin)];
+          res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-cache', 'Content-Language': front || 'uz' });
+          return res.end(req.method === 'HEAD' ? undefined : body);
         }
         return serveStatic(req, res, pathname);
       }
