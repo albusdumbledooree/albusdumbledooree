@@ -2,6 +2,17 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.22.0 — FLOWI Windows dasturi (kassa kompyuteri uchun)
+- **FLOWI-Setup.exe**: o'rnatiladi, ish stolida belgi chiqadi, kompyuter yoqilganda o'zi ochiladi; bitta nusxa ishlaydi.
+  Birinchi ochilishda biznes havolasi yoziladi (masalan `flowi.uz/c/navruz`) — keyin har safar to'g'ridan-to'g'ri ochiladi.
+- **Chop etish oynasisiz**: chek — "Chek printeri"ga, oshxona qog'ozi — "Oshxona printeri"ga (Windows'dagi USB printerlar).
+  Printer javob bermasa — ogohlantirish va oddiy chop etish oynasi (chek yo'qolmaydi). "Sinov cheki" tugmasi.
+- **Kassa rejimi** (ixtiyoriy): doim to'liq ekran, xodim tasodifan chiqib keta olmaydi.
+- **Internet uzilsa**: "Internet yo'q" sahifasi, aloqa tiklanishi bilan o'zi qayta ochiladi.
+- Tugmalar: Ctrl+Shift+S — sozlamalar, F11 — to'liq ekran, F5 — yangilash.
+- Dastur saytning o'zini ochadi: FLOWI'dagi har bir yangilanish dasturda ham darrov bo'ladi.
+- .exe GitHub'da avtomatik yasaladi (Actions → "FLOWI Windows dasturi", tayyor fayl — Releases sahifasida).
+
 ## 1.21.1 — Yangilanish testlari tuzatildi
 - Ba'zi serverlarda yangilanish 3 ta Telegram testi tufayli to'xtab, eski versiyaga qaytardi. Sabab dasturda emas, testda edi:
   test Telegram xabari tahrirlanishini kutmasdan tekshirardi (tez kompyuterda ulgurardi, sekinrog'ida yo'q),

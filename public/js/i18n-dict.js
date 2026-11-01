@@ -1242,6 +1242,7 @@
     "Shtrix-kodni ramka ichiga tuting": ["Наведите штрихкод в рамку", "Hold the barcode inside the frame"],
     "Kameraga ruxsat berilmadi. Brauzer sozlamalarida ruxsat bering": ["Нет доступа к камере. Разрешите его в настройках браузера", "No camera access. Allow it in the browser settings"],
     "Kamera topilmadi": ["Камера не найдена", "No camera found"],
+    "Chop etilmadi": ["Не напечатано", "Not printed"],
     "Avans (bosh to'lov)": ["Аванс (предоплата)","Advance (down payment)"],
     "QOLDI": ["ОСТАТОК","BALANCE DUE"],
     "To'lash sanasi": ["Дата оплаты","Due date"],

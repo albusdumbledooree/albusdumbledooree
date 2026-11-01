@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
+<title>FLOWI — sozlamalar</title>
+<style>
+  :root { --navy: #071726; --blue: #2156e8; --line: #d8dbe1; --muted: #6b7280; --green: #16a34a; --red: #dc2626; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--navy); font: 16px/1.5 "Segoe UI", system-ui, sans-serif; color: #111827; padding: 24px; }
+  main { width: min(640px, 100%); background: #fff; border-radius: 18px; padding: 28px; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+  h1 { margin: 0 0 4px; font-size: 26px; } h1 b { color: var(--blue); }
+  p.muted, .muted { color: var(--muted); font-size: 14px; margin: 0 0 18px; }
+  label.field { display: block; font-weight: 600; font-size: 14px; margin: 14px 0 0; }
+  input[type=text], select { display: block; width: 100%; margin-top: 6px; padding: 11px 12px; font: inherit; border: 1px solid var(--line); border-radius: 10px; }
+  input[type=text]:focus, select:focus { outline: 2px solid var(--blue); border-color: transparent; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .check { display: flex; gap: 10px; align-items: flex-start; margin: 12px 0 0; font-size: 15px; cursor: pointer; }
+  .check input { width: 20px; height: 20px; margin-top: 2px; flex: none; }
+  .check small { display: block; color: var(--muted); font-size: 13px; }
+  .actions { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+  button { font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 12px 18px; cursor: pointer; }
+  .primary { background: var(--blue); color: #fff; flex: 1; } .light { background: #eef1f6; color: #111827; }
+  .msg { margin-top: 14px; font-size: 14px; min-height: 20px; } .msg.err { color: var(--red); } .msg.ok { color: var(--green); }
+  .hint { background: #f4f6f9; border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--muted); margin-top: 18px; }
+  kbd { background: #fff; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; font: 12px/1.6 Consolas, monospace; color: #111827; }
+  @media (max-width: 560px) { .row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1><b>FLOWI</b> <span id="title">— ulash</span></h1>
+  <p class="muted" id="lead">Biznesingiz havolasini yozing — FLOWI shu kompyuterda alohida dastur bo'lib ochiladi.</p>
+  <form id="f">
+    <label class="field">Biznes havolasi<input type="text" name="url" placeholder="flowi.uz/c/navruz" autocomplete="off" spellcheck="false" required></label>
+    <div class="row">
+      <label class="field">Chek printeri<select name="receiptPrinter"></select></label>
+      <label class="field">Oshxona qog'ozi printeri<select name="kitchenPrinter"></select></label>
+    </div>
+    <label class="check"><input type="checkbox" name="silent"><span>Chop etish oynasisiz chiqarish<small>Chek to'g'ridan-to'g'ri tanlangan printerga ketadi.</small></span></label>
+    <label class="check"><input type="checkbox" name="autostart"><span>Kompyuter yoqilganda o'zi ochilsin</span></label>
+    <label class="check"><input type="checkbox" name="kiosk"><span>Kassa rejimi (doim to'liq ekran)<small>Xodim dasturdan tasodifan chiqib keta olmaydi. Sozlamalarga qaytish: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></small></span></label>
+    <div class="actions">
+      <button type="button" class="light" id="test">Sinov cheki</button>
+      <button type="button" class="light" id="back" hidden>Bekor</button>
+      <button class="primary" id="save">Saqlash va ochish</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </form>
+  <div class="hint">Tugmalar: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> — shu sozlamalar · <kbd>F11</kbd> — to'liq ekran · <kbd>F5</kbd> — yangilash · <span id="ver"></span></div>
+</main>
+<script>
+(async function () {
+  var D = window.flowiDesktop;
+  var f = document.getElementById('f');
+  var msg = function (t, cls) { var m = document.getElementById('msg'); m.textContent = t || ''; m.className = 'msg ' + (cls || ''); };
+  var s = await D.settings();
+  var again = new URLSearchParams(location.search).get('settings') === '1' && s.url;
+  if (again) {
+    document.getElementById('title').textContent = '— sozlamalar';
+    document.getElementById('lead').textContent = 'Shu kompyuterdagi FLOWI dasturi sozlamalari.';
+    document.getElementById('back').hidden = false;
+  }
+  document.getElementById('ver').textContent = 'versiya ' + s.version;
+  f.url.value = (s.url || '').replace(/^https:\/\//, '');
+  f.silent.checked = s.silent; f.autostart.checked = s.autostart; f.kiosk.checked = s.kiosk;
+  var printers = [];
+  try { printers = await D.printers(); } catch (e) { /* no printers */ }
+  var opts = function (cur) {
+    var def = printers.find(function (p) { return p.isDefault; });
+    return '<option value="">Asosiy printer' + (def ? ' (' + def.label + ')' : '') + '</option>' +
+      printers.map(function (p) { return '<option value="' + p.name.replace(/"/g, '&quot;') + '"' + (p.name === cur ? ' selected' : '') + '>' + p.label.replace(/</g, '&lt;') + '</option>'; }).join('');
+  };
+  f.receiptPrinter.innerHTML = opts(s.receiptPrinter);
+  f.kitchenPrinter.innerHTML = opts(s.kitchenPrinter);
+  if (!printers.length) msg("Bu kompyuterda printer topilmadi. Printerni Windows'ga o'rnatib, dasturni qayta oching.", 'err');
+
+  var data = function () { return { url: f.url.value, receiptPrinter: f.receiptPrinter.value, kitchenPrinter: f.kitchenPrinter.value, silent: f.silent.checked, autostart: f.autostart.checked, kiosk: f.kiosk.checked }; };
+  f.onsubmit = async function (e) {
+    e.preventDefault();
+    msg('Saqlanmoqda…');
+    var r = await D.save(data());
+    if (!r.ok) msg(r.error || 'Saqlanmadi', 'err');
+  };
+  document.getElementById('back').onclick = function () { D.open(); };
+  document.getElementById('test').onclick = async function () {
+    msg('Chop etilmoqda…');
+    var now = new Date();
+    var html = '<!doctype html><html><head><meta charset="utf-8"><style>body{font:700 14px Arial,sans-serif;width:72mm;margin:0 auto;padding:3mm 0}h1{font-size:20px;text-align:center;margin:0}.c{text-align:center}hr{border:0;border-top:2px dashed #000}@page{size:80mm auto;margin:0}</style></head><body>' +
+      '<h1>FLOWI</h1><div class="c">SINOV CHEKI</div><hr><div>Printer ishlayapti ✓</div><div>' + now.toLocaleString('ru-RU') + '</div><hr><div class="c">O\'zbekcha: o\'g\'ri — Русский: проверка</div></body></html>';
+    var r = await D.print(html, { kind: 'receipt' });
+    msg(r.ok ? "Yuborildi — printerni tekshiring." : 'Chop etilmadi: ' + (r.error || ''), r.ok ? 'ok' : 'err');
+  };
+  if (!f.url.value) f.url.focus();
+}());
+</script>
+</body>
+</html>

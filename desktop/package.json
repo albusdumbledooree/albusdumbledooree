@@ -1,0 +1,34 @@
+{
+  "name": "flowi-desktop",
+  "productName": "FLOWI",
+  "version": "1.0.0",
+  "description": "FLOWI — kassa kompyuteri uchun dastur",
+  "main": "main.js",
+  "author": "FLOWI",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --publish never"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "uz.flowi.desktop",
+    "productName": "FLOWI",
+    "copyright": "FLOWI",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["main.js", "preload.js", "pages/**", "build/icon.png", "package.json"],
+    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }], "icon": "build/icon.png" },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "FLOWI",
+      "artifactName": "FLOWI-Setup-${version}.exe"
+    }
+  }
+}

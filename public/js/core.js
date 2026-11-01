@@ -544,10 +544,11 @@ function bindKeypad(root, { maxLen, masked = true, onChange, onFull }) {
 // ---------- Printing ----------
 // Thermal printers (58/80 mm) work through the normal system printer driver.
 // With Chrome started as "chrome --kiosk-printing" receipts print without the dialog.
-function printDoc(title, body) {
+// kind: 'receipt' or 'kitchen' — inside the FLOWI program for Windows each goes to its own printer, with no dialog.
+function printDoc(title, body, kind = 'receipt') {
   const narrow = String(App.settings.receipt_width) === '58';
   // Thermal printers fade thin letters: a bold sans font in pure black prints clearly.
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+  const html = `<!doctype html><html><head><meta charset="utf-8"><base href="${esc(location.origin)}/"><title>${esc(title)}</title><style>
     *{color:#000 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     body{font:700 ${narrow ? 12 : 13.5}px/1.35 Arial,"Segoe UI",Tahoma,sans-serif;width:${narrow ? 48 : 72}mm;margin:0 auto;padding:3mm 0;color:#000;-webkit-font-smoothing:none}
     h1{font-size:${narrow ? 16 : 19}px;font-weight:900;text-align:center;margin:0}.c{text-align:center}.r{text-align:right;white-space:nowrap}
@@ -558,6 +559,14 @@ function printDoc(title, body) {
     .inv{background:#000;color:#fff !important;padding:3px 0}
     @page{size:${narrow ? 58 : 80}mm auto;margin:0}
   </style></head><body>${body}</body></html>`;
+  if (window.flowiDesktop) {
+    window.flowiDesktop.print(html, { kind }).then((r) => { if (!r || !r.ok) { toast(`${t('Chop etilmadi')}: ${(r && r.error) || ''}`, 'warn'); printInFrame(html); } })
+      .catch(() => printInFrame(html));
+    return;
+  }
+  printInFrame(html);
+}
+function printInFrame(html) {
   // A fresh frame per print, so two receipts in a row never overwrite each other.
   const frame = document.createElement('iframe');
   frame.style.cssText = 'position:absolute;width:0;height:0;border:0;visibility:hidden';
@@ -617,7 +626,7 @@ function printReceipt(o) {
 function printKitchenTicket(tk) {
   printDoc(`${t('Buyurtma')} #${tk.order_id}`, `${tk.cancel ? `<div class="c huge inv">${t('BEKOR QILINDI')}</div>` : ''}${tk.reprint ? `<div class="c big inv">${t('QAYTA CHOP ETILDI')}</div>` : ''}${tk.late ? `<div class="c big">${t('KECHIKIB CHIQDI')} (${fmtTime(tk.at)})</div>` : ''}<div class="c huge">${esc(tk.room)}</div>
     <div class="c">${t('Chek')} #${tk.order_id} · ${esc(tk.waiter || '')}${tk.by && tk.by !== tk.waiter ? ` (${esc(tk.by)})` : ''} · ${fmtTime(tk.at || Date.now())}</div><hr>
-    <table>${tk.items.map((i) => `<tr class="big"><td>${i.qty} ×</td><td>${esc(i.name)}${i.note ? `<br><small>* ${esc(i.note)}</small>` : ''}</td></tr>`).join('')}</table><hr>`);
+    <table>${tk.items.map((i) => `<tr class="big"><td>${i.qty} ×</td><td>${esc(i.name)}${i.note ? `<br><small>* ${esc(i.note)}</small>` : ''}</td></tr>`).join('')}</table><hr>`, 'kitchen');
 }
 
 // Shrinks a picture before upload (a phone photo can be 8 MB; the desktop needs ~300 KB).

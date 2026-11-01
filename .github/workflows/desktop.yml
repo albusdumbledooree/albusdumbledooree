@@ -1,0 +1,50 @@
+# FLOWI for Windows: builds FLOWI-Setup-<version>.exe on a Windows machine of GitHub
+# and puts it on the "Releases" page of this repository (and as a downloadable artifact of the run).
+# Runs when the desktop program changes, or by hand (Actions → "FLOWI Windows dasturi" → Run workflow).
+name: FLOWI Windows dasturi
+
+on:
+  push:
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Versiya
+        id: v
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: O'rnatish
+        run: npm install --no-audit --no-fund
+      - name: .exe yasash
+        run: npx electron-builder --win nsis --publish never
+      - name: Fayl (Actions sahifasida)
+        uses: actions/upload-artifact@v4
+        with:
+          name: FLOWI-Setup-${{ steps.v.outputs.version }}
+          path: desktop/dist/*.exe
+          if-no-files-found: error
+      - name: Releases sahifasiga
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-v${{ steps.v.outputs.version }}
+          name: FLOWI Windows ${{ steps.v.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          body: |
+            FLOWI — kassa kompyuteri uchun dastur (Windows 10/11, 64-bit).
+            FLOWI-Setup-${{ steps.v.outputs.version }}.exe ni yuklab oling va ikki marta bosing.
+          files: desktop/dist/*.exe
