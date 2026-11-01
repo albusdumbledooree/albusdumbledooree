@@ -2,6 +2,10 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.22.1 — Windows dasturi Windows 7 va 32-bit kompyuterlarda ham
+- FLOWI-Setup endi **Windows 7/8/10/11** va **32-bit hamda 64-bit** kompyuterlarda ishlaydi (o'rnatuvchi mosini o'zi tanlaydi).
+  Oldingi fayl Windows 7 / 32-bit'da "не является приложением Win32" xatosini berardi.
+
 ## 1.22.0 — FLOWI Windows dasturi (kassa kompyuteri uchun)
 - **FLOWI-Setup.exe**: o'rnatiladi, ish stolida belgi chiqadi, kompyuter yoqilganda o'zi ochiladi; bitta nusxa ishlaydi.
   Birinchi ochilishda biznes havolasi yoziladi (masalan `flowi.uz/c/navruz`) — keyin har safar to'g'ridan-to'g'ri ochiladi.

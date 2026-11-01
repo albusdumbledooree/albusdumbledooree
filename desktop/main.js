@@ -1,6 +1,7 @@
 'use strict';
 /*
  * FLOWI for the cash-desk computer (Windows).
+ * Electron 22: the last one that runs on Windows 7/8 (many cash-desk computers); the installer holds 32- and 64-bit.
  * The program itself is the FLOWI site of the business (https://flowi.uz/c/<code>), opened in its own window:
  * nothing of FLOWI is re-written here, and every update of the site reaches this window at once.
  * What the window adds:
