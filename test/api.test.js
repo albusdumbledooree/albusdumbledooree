@@ -1381,12 +1381,15 @@ test('door shop: goods in with freight, sale with installation and credit, damag
   assert.equal(r.net, 1850000 - 1028000 - 270000 - 1144000 - 4000000);
   assert.equal(r.top_qty[0].id, door.id);
   assert.ok(r.stock_value > 0);
-  assert.equal(r.debts.owed_to_us, 1030000);
+  // The lock came back from a check not yet paid: the customer simply owes less; no money went out of the till.
+  assert.equal(r.debts.owed_to_us, 1030000 - 180000);
+  assert.ok(!txs.some((x) => x.category === 'Qaytarish'));
   assert.equal(r.debts.we_owe, 2000000);
 
   // Paying debts closes their tasks.
   await call('POST', `/api/suppliers/${sup.id}/pay`, boss, { amount: 2000000 });
-  await call('POST', `/api/customers/${cust.id}/pay`, boss, { amount: 1030000, method: 'cash' });
+  assert.equal((await call('POST', `/api/customers/${cust.id}/pay`, boss, { amount: 850000, method: 'cash' })).status, 200);
+  assert.equal((await call('GET', `/api/orders/${sale.data.id}`, boss)).data.balance, 0, 'paying the customer pays off the check too');
   tk = (await call('GET', '/api/tasks', boss)).data;
   assert.ok(![...tk.overdue, ...tk.today, ...tk.upcoming].some((x) => /^(debt|supplier):/.test(x.ref)));
 
@@ -2036,4 +2039,53 @@ test('platform: a discount on what a business pays, back to full price when it e
   assert.ok(cl.versions[0].installed_at > 0);
   assert.ok(cl.versions.length > 10 && cl.versions.every((v) => /^\d+\.\d+\.\d+$/.test(v.version)));
   assert.equal((await call('GET', '/api/platform/changelog', boss)).status, 401);
+});
+
+test('door shop: an advance now, the rest later — on the smallest plan, by name and phone, check by check', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  await call('POST', '/api/platform/tenants', admin, { name: 'Eshiklar', code: 'avans', owner_name: 'Sardor', owner_username: 'sardor', owner_password: 'sardor123', plan: 'start', business_type: 'doors', sample: true });
+  const boss = await login('sardor', 'sardor123', 'avans');
+  const menu = (await call('GET', '/api/menu', boss)).data;
+  const door = menu.dishes.find((d) => d.size && d.price > 0);
+  const total = door.price * 2;
+  const due = localDay(10);
+  // Name and phone are needed for an advance.
+  assert.equal((await call('POST', '/api/sales', boss, { items: [{ dish_id: door.id, qty: 2 }], advance: true, paid_cash: 500000, customer_name: 'Bahrom' })).status, 400);
+  const s = (await call('POST', '/api/sales', boss, { items: [{ dish_id: door.id, qty: 2 }], advance: true, paid_cash: 500000,
+    customer_name: 'Bahrom aka', phone: '+998 90 111-22-33', debt_due: due })).data;
+  assert.equal(s.total, total);
+  assert.equal(s.advance, 500000);
+  assert.equal(s.balance, total - 500000);
+  assert.equal(s.customer.name, 'Bahrom aka'); assert.equal(s.customer.phone, '+998901112233');
+  assert.ok(s.due_at > Date.now());
+  // A reminder for this very check; the list of unpaid checks.
+  let tk = (await call('GET', '/api/tasks?days=20', boss)).data;
+  assert.ok(tk.upcoming.some((x) => x.ref === `order:${s.id}` && /Bahrom aka/.test(x.title)));
+  let unpaid = (await call('GET', '/api/orders?status=closed&unpaid=1', boss)).data;
+  assert.deepEqual(unpaid.map((o) => o.id), [s.id]); assert.equal(unpaid[0].customer_name, 'Bahrom aka');
+  // A second sale to the same phone finds the same customer; a full payment is not an advance.
+  const s2 = (await call('POST', '/api/sales', boss, { items: [{ dish_id: door.id, qty: 1 }], advance: true, paid_cash: door.price, customer_name: 'B', phone: '+998901112233' })).data;
+  assert.equal(s2.balance, 0); assert.equal(s2.customer, null);
+  // The rest in two parts: money enters the till on the day it is paid.
+  assert.equal((await call('POST', `/api/orders/${s.id}/pay-rest`, boss, { amount: total, method: 'cash' })).status, 400, 'not more than is left');
+  let p = (await call('POST', `/api/orders/${s.id}/pay-rest`, boss, { amount: 300000, method: 'card' })).data;
+  assert.equal(p.balance, total - 800000); assert.equal(p.payments.length, 1); assert.equal(p.payments[0].method, 'card');
+  tk = (await call('GET', '/api/tasks?days=20', boss)).data;
+  assert.ok(tk.upcoming.some((x) => x.ref === `order:${s.id}` && x.amount === total - 800000));
+  p = (await call('POST', `/api/orders/${s.id}/pay-rest`, boss, { amount: total - 800000, method: 'cash' })).data;
+  assert.equal(p.balance, 0); assert.equal(p.payments.length, 2);
+  assert.equal((await call('POST', `/api/orders/${s.id}/pay-rest`, boss, { amount: 1, method: 'cash' })).status, 400);
+  tk = (await call('GET', '/api/tasks?days=20', boss)).data;
+  assert.ok(!tk.upcoming.some((x) => x.ref === `order:${s.id}`), 'the reminder closes itself');
+  assert.equal((await call('GET', '/api/orders?status=closed&unpaid=1', boss)).data.length, 0);
+  const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+  const txs = (await call('GET', `/api/transactions?from=${d0.getTime()}`, boss)).data;
+  assert.equal(txs.filter((x) => x.category === "Qarz to'lovi").reduce((a, x) => a + x.amount, 0), total - 500000);
+  // The day's sales count the whole check once; the cash book holds the money as it came.
+  const td = (await call('GET', '/api/today', boss)).data;
+  assert.equal(td.money.revenue, total + door.price);
+  // Not a door shop: there is no advance, the payment must be whole.
+  const chBoss = await login('ega', 'ega123', 'demo');
+  const chMenu = (await call('GET', '/api/menu', chBoss)).data;
+  assert.equal((await call('POST', '/api/sales', chBoss, { items: [{ dish_id: chMenu.dishes[0].id, qty: 1 }], advance: true, paid_cash: 1, customer_name: 'X', phone: '+998901234567' })).status, 400);
 });

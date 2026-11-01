@@ -430,9 +430,13 @@ function saleDoneDialog(r) {
         <div class="big ${r.profit >= 0 ? 'green-text' : 'red'}">${money(r.profit)}</div>
         <div class="sum-rows num"><span>${t('Chek')}</span><span class="right">${money(r.total)}</span>
           ${r.change ? `<span>${t('Qaytim')}</span><span class="right">${money(r.change)}</span>` : ''}
-          ${r.paid_debt ? `<span class="red">${t('Qarzga')}</span><span class="right red">${money(r.paid_debt)}</span>` : ''}</div>
+          ${r.advance ? `<span>${t("Avans (bosh to'lov)")}</span><span class="right">${money(r.advance)}</span>
+            <span class="orange-text"><b>${t('Qoldi')}</b>${r.due_at ? ` · ${fmtDate(r.due_at)}` : ''}</span><span class="right orange-text"><b>${money(r.balance)}</b></span>`
+          : r.paid_debt ? `<span class="red">${t('Qarzga')}</span><span class="right red">${money(r.paid_debt)}</span>` : ''}</div>
+        ${r.advance && r.customer ? `<p class="small muted" style="margin:8px 0 0">${icon('user-round', 14)} ${esc(r.customer.name)} ${esc(r.customer.phone || '')} — ${t("qolganini Cheklar → \"To'lanmagan\" dan qabul qilasiz; to'lash kuni eslatiladi.")}</p>` : ''}
         ${r.jobs && r.jobs.length ? `<div class="small muted" style="margin-top:8px">${r.jobs.map((j) => `${icon(JOB_ICONS[j.kind], 14)} ${JOB_NAMES()[j.kind]}${j.scheduled_at ? `: ${fmtDate(j.scheduled_at)} ${fmtTime(j.scheduled_at)}` : ''}`).join('<br>')}<br>${t("\"Bugun\" sahifasidagi ishlarga qo'shildi.")}</div>` : ''}</div>`,
-    actions: [{ label: t('Nakladnoy'), icon: 'printer', onClick: () => { printInvoice(r.id); return false; } }, { label: t('Yangi sotuv'), cls: 'primary', icon: 'plus' }],
+    actions: [...((App.user.perms || {}).print ? [{ label: t('Chek'), icon: 'receipt', onClick: () => { printReceipt(r); return false; } }] : []),
+      { label: t('Nakladnoy'), icon: 'printer', onClick: () => { printInvoice(r.id); return false; } }, { label: t('Yangi sotuv'), cls: 'primary', icon: 'plus' }],
   });
   bindTips(document.getElementById('modal-root'));
 }
@@ -458,8 +462,11 @@ async function printInvoice(orderId) {
     <table><tr><th>№</th><th>Nomi</th><th>Belgilari</th><th class="r">Soni</th><th class="r">Narxi</th><th class="r">Summa</th></tr>
       ${v.items.map((i, k) => `<tr><td>${k + 1}</td><td>${esc(i.name)}</td><td>${esc(i.variant || (i.service ? i.note || '' : ''))}</td><td class="r">${i.qty} ${esc(i.unit)}</td><td class="r">${m(i.price)}</td><td class="r">${m(i.price * i.qty)}</td></tr>`).join('')}</table>
     <table class="sum" style="width:auto;margin-left:auto">${v.discount ? `<tr><td>Chegirma:</td><td class="r">−${m(v.discount)}</td></tr>` : ''}
-      <tr><td><b>Jami:</b></td><td class="r"><b>${m(v.total)} so'm</b></td></tr><tr><td>To'landi:</td><td class="r">${m(v.paid)}</td></tr>
-      ${v.debt ? `<tr><td><b>Qoldiq (qarz):</b></td><td class="r"><b>${m(v.debt)}</b></td></tr>` : ''}</table>
+      <tr><td><b>Jami:</b></td><td class="r"><b>${m(v.total)} so'm</b></td></tr>
+      ${v.advance ? `<tr><td>Avans (bosh to'lov):</td><td class="r">${m(v.advance)}</td></tr>` : ''}
+      <tr><td>To'landi${v.advance ? ' (jami)' : ''}:</td><td class="r">${m(v.paid)}</td></tr>
+      ${v.debt ? `<tr><td><b>Qoldiq:</b></td><td class="r"><b>${m(v.debt)}</b></td></tr>${v.due_at ? `<tr><td>To'lash muddati:</td><td class="r">${new Date(v.due_at).toLocaleDateString('ru-RU')}</td></tr>` : ''}`
+        : v.advance ? `<tr><td colspan="2"><b>To'liq to'landi</b></td></tr>` : ''}</table>
     ${v.jobs.length ? `<p class="muted">${v.jobs.map((j) => `${{ install: "O'rnatish", delivery: 'Yetkazib berish', measure: "O'lchov" }[j.kind]}${j.scheduled_at ? `: ${new Date(j.scheduled_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}`).join(' · ')}</p>` : ''}
     <div class="sign"><div>Sotuvchi</div><div>Xaridor: mol to'liq va butun holda qabul qilindi</div></div>
     <script>window.onload = () => setTimeout(() => window.print(), 300);<\/script></body></html>`);

@@ -150,6 +150,10 @@ async function posPayment() {
     body: `<div class="pay">
         <div class="receipt">${PosCart.lines.map((c) => `<div class="line"><span class="q">${c.qty}×</span><span class="n">${esc(c.name)}${c.variant ? ` <span class="small muted">${esc(c.variant)}</span>` : ''}</span><span class="p">${money(c.price * c.qty)}</span></div>`).join('')}</div>
         <div class="stack">
+          ${isDoors() ? `<div class="seg pay-mode"><button type="button" class="active" data-pmode="full">${icon('circle-check', 16)} ${t("To'liq to'lov")}</button>
+            <button type="button" data-pmode="adv">${icon('hand-coins', 16)} ${t("Avans (bosh to'lov)")}</button></div>
+            <div class="adv-box form-grid" hidden><label class="field">${t('Mijoz ismi')}<input name="adv_name" maxlength="80" value="${esc(PosCart.label || '')}"></label>
+              <label class="field">${t('Telefon')}<input name="adv_phone" type="tel" placeholder="+998"></label></div>` : ''}
           <div class="sum-rows num" id="pay-sums"></div>
           ${canDiscount ? `<label class="field">${t('Chegirma')} (${esc(App.settings.currency)})<input type="number" name="discount" min="0" placeholder="0"></label>` : ''}
           ${isDoors() ? saleServicesHtml(masters) : ''}
@@ -164,12 +168,19 @@ async function posPayment() {
     actions: [{ label: t('Bekor') }, { label: t("To'lovni yakunlash"), cls: 'ok', icon: 'circle-check', onClick: async (f) => {
       const x = formData(f);
       if (staffPay.on && !x.staff_id) { toast(t('Xodimni tanlang'), 'warn'); return false; }
+      const adv = advMode && sums().paid < sums().total;
+      if (adv) {
+        if (!String(x.adv_name || '').trim()) { toast(t('Mijoz ismini yozing'), 'warn'); f.adv_name.focus(); return false; }
+        if (String(x.adv_phone || '').replace(/\D/g, '').length < 7) { toast(t('Mijoz telefonini yozing'), 'warn'); f.adv_phone.focus(); return false; }
+        if (!sums().paid) { toast(t('Avans summasini yozing'), 'warn'); f.paid_cash.focus(); return false; }
+      }
       const services = getServices();
       if (services.some((s) => !s.date)) { toast(t('Xizmat sanasini tanlang'), 'warn'); return false; }
       const r = await POST('/api/sales', {
         items: PosCart.lines.map(({ dish_id, qty }) => ({ dish_id, qty })), label: PosCart.label,
-        services, phone: x.svc_phone || '', debt_due: x.debt_due || '',
-        ...(staffPay.on ? { staff_id: Number(x.staff_id) } : {
+        services, phone: (adv ? x.adv_phone : x.svc_phone) || '', debt_due: x.debt_due || '',
+        ...(adv ? { advance: true, customer_name: x.adv_name.trim(), discount: Number(x.discount) || 0,
+          paid_cash: Number(x.paid_cash) || 0, paid_card: Number(x.paid_card) || 0, paid_transfer: Number(x.paid_transfer) || 0 } : staffPay.on ? { staff_id: Number(x.staff_id) } : {
           discount: Number(x.discount) || 0, paid_cash: Number(x.paid_cash) || 0, paid_card: Number(x.paid_card) || 0, paid_transfer: Number(x.paid_transfer) || 0,
           ...(cust.customer ? { customer_id: cust.customer.id, bonus: sums().bonus, paid_debt: sums().debt } : {}) }),
       });
@@ -195,7 +206,7 @@ async function posPayment() {
     const bonus = cust.customer ? Math.min(cust.bonus, subtotal - discount) : 0;
     const total = subtotal - discount - bonus;
     const paid = (Number(x.paid_cash) || 0) + (Number(x.paid_card) || 0) + (Number(x.paid_transfer) || 0);
-    const debt = cust.customer && cust.debt ? Math.max(0, total - paid) : 0;
+    const debt = advMode || (cust.customer && cust.debt) ? Math.max(0, total - paid) : 0;
     return { discount, bonus, total, paid, debt };
   };
   const calc = () => {
@@ -215,7 +226,12 @@ async function posPayment() {
       ${discount ? `<span>${t('Chegirma')}</span><span class="right">−${money(discount)}</span>` : ''}
       ${bonus ? `<span>${t('Bonusdan')}</span><span class="right">−${money(bonus)}</span>` : ''}
       <span style="grid-column:1/-1" class="big-total">${money(total)}</span>
-      ${debt ? `<span class="red">${t('Qarzga')}</span><span class="right red">${money(debt)}</span>` : ''}`;
+      ${debt ? `<span class="red">${advMode ? t('Qoldi') : t('Qarzga')}</span><span class="right red">${money(debt)}</span>` : ''}`;
+    if (advMode) {
+      form.querySelector('#pay-change').innerHTML = !debt ? `<span style="color:var(--green)">${icon('circle-check', 20)} ${t("To'liq to'landi")}${paid > total ? ` · ${t('Qaytim')}: ${money(paid - total)}` : ''}</span>`
+        : `<span class="orange-text">${icon('hand-coins', 20)} ${t('Avans')}: <b>${money(paid)}</b> · ${t('Qoldi')}: <b>${money(debt)}</b></span>`;
+      return total;
+    }
     if (debt) { form.querySelector('#pay-change').innerHTML = `<span class="red">${icon('notebook-pen', 20)} ${t('{0} qarzga yoziladi', esc(cust.customer.name))}</span>`; return total; }
     form.querySelector('#pay-change').innerHTML = !paid ? '' : paid >= total
       ? `<span style="color:var(--green)">${icon('circle-check', 20)} ${t('Qaytim')}: ${money(paid - total)}</span>`
@@ -225,11 +241,33 @@ async function posPayment() {
   form.addEventListener('input', calc);
   form.addEventListener('change', calc);
   let getServices = () => [];
+  // Door shop: a whole payment, or an advance (bosh to'lov) now and the rest by a date — the customer's name and phone.
+  let advMode = false;
+  form.querySelectorAll('[data-pmode]').forEach((b) => b.onclick = () => {
+    advMode = b.dataset.pmode === 'adv';
+    form.querySelectorAll('[data-pmode]').forEach((y) => y.classList.toggle('active', y === b));
+    form.querySelector('.adv-box').hidden = !advMode;
+    const cb = form.querySelector('.cust-pay'); if (cb) cb.hidden = advMode;
+    if (advMode) {
+      if (!form.adv_phone.value && form.svc_phone && form.svc_phone.value) form.adv_phone.value = form.svc_phone.value;
+      for (const m of ['cash', 'card', 'transfer']) form[`paid_${m}`].value = '';
+      form.querySelectorAll('[data-m]').forEach((y) => y.classList.remove('active'));
+      calc(); (form.adv_name.value ? form.paid_cash : form.adv_name).focus();
+    } else form.querySelector('[data-m="cash"]').click();
+  });
   const staffPay = bindStaffPay(form, calc);
   const cust = bindCustomerPay(form, calc);
   getServices = bindSaleServices(form, () => { calc(); const b = form.querySelector('.method.active'); if (b) b.click(); });
   form.querySelectorAll('[data-m]').forEach((b) => b.onclick = () => {
     staffPay.on = false;
+    if (advMode) {
+      // The advance is typed in by hand; the button only says which way it is paid.
+      const sum = (Number(form.paid_cash.value) || 0) + (Number(form.paid_card.value) || 0) + (Number(form.paid_transfer.value) || 0);
+      form.querySelectorAll('[data-m]').forEach((y) => y.classList.toggle('active', y === b));
+      for (const m of ['cash', 'card', 'transfer']) form[`paid_${m}`].value = m === b.dataset.m && sum ? sum : '';
+      calc(); form[`paid_${b.dataset.m}`].focus();
+      return;
+    }
     const total = calc();
     form.querySelectorAll('[data-m]').forEach((y) => y.classList.toggle('active', y === b));
     for (const m of ['cash', 'card', 'transfer']) form[`paid_${m}`].value = m === b.dataset.m ? total : '';

@@ -492,7 +492,12 @@ table.list tr.selected td .ic { color: #fff; }
 .list-foot { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; padding: 10px 14px; border-top: 1px solid var(--line); background: var(--panel-2); font-size: 14px; }
 .list-foot span { display: inline-flex; align-items: center; gap: 4px; }
 .list-foot .big { font-size: 18px; font-weight: 800; }
-@media (max-width: 1000px) { .split { grid-template-columns: minmax(0, 1fr); } .hist-pane { position: static; height: auto; min-height: 0; } }
+@media (max-width: 1000px) {
+  .split { grid-template-columns: minmax(0, 1fr); }
+  /* On a phone the chosen check sits above the list (not the sliding drawer of the order screen). */
+  .hist-pane { position: static; height: auto; min-height: 0; width: auto; transform: none; transition: none; z-index: auto; border-radius: 10px; }
+  .hist-pane.empty { display: none; }
+}
 
 /* ---------- Payment ---------- */
 .pay { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
@@ -796,6 +801,7 @@ details.upcoming summary { cursor: pointer; font-weight: 650; color: var(--muted
 .job-line > svg { color: var(--primary); flex: none; }
 .tip { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--panel-2); color: var(--muted); font-size: 12px; font-weight: 700; cursor: help; vertical-align: middle; }
 .green-text { color: var(--green); }
+.orange-text { color: var(--orange); }
 .cat-pick { display: flex; flex-wrap: wrap; gap: 8px; }
 .pill input { display: none; }
 .pill span { display: inline-block; padding: 9px 14px; border-radius: 999px; border: 1px solid var(--line); cursor: pointer; font-weight: 600; }
@@ -1019,3 +1025,9 @@ details.ver summary .grow { flex: 1 1 200px; min-width: 0; }
 .tg-chat > svg { color: var(--green); flex: none; }
 .tg-link { margin-top: 8px; }
 .tg-url { display: inline-block; max-width: 100%; overflow-wrap: anywhere; user-select: all; }
+
+/* ---------- Door shop: advance (bosh to'lov) ---------- */
+.pay-mode { display: flex; width: 100%; }
+.pay-mode button { flex: 1 1 0; justify-content: center; gap: 6px; }
+.adv-box { padding: 10px; border: 1px dashed var(--orange); border-radius: var(--radius); background: var(--orange-soft); }
+.adv-sep { border-top: 1px dashed var(--line); margin: 6px 0 2px; }

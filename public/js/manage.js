@@ -116,9 +116,50 @@ function histQuery(extra = {}) {
   return p.toString();
 }
 
+// An advance sale on the check: the advance, each later payment, what is left and by when — or "paid in full".
+function advanceRows(o) {
+  if (!o.advance && !(o.balance > 0) && !(o.payments || []).length) return '';
+  const rows = [];
+  if (o.customer) rows.push(`<span>${icon('user-round', 14)} ${esc(o.customer.name)}</span><span class="right small">${esc(o.customer.phone || '')}</span>`);
+  if (o.advance) rows.push(`<span>${t("Avans (bosh to'lov)")}</span><span class="right">${money(o.advance)}</span>`);
+  for (const p of o.payments || []) rows.push(`<span class="small">${fmtDate(p.created_at)} · ${methodName(p.method)}${p.user_name ? ` · ${esc(p.user_name)}` : ''}</span><span class="right small">+${money(p.amount)}</span>`);
+  rows.push(o.balance > 0
+    ? `<span class="${o.due_at && o.due_at < Date.now() ? 'red' : 'orange-text'}"><b>${t('Qoldi')}</b>${o.due_at ? ` · ${fmtDate(o.due_at)}` : ''}</span><span class="right ${o.due_at && o.due_at < Date.now() ? 'red' : 'orange-text'}"><b>${money(o.balance)}</b></span>`
+    : `<span class="green-text" style="grid-column:1/-1">${icon('circle-check', 16)} <b>${t("To'liq to'landi")}</b></span>`);
+  return `<span class="adv-sep" style="grid-column:1/-1"></span>${rows.join('')}`;
+}
+// The rest of an advance sale, all of it or a part; afterwards the check can be printed as paid.
+function payRestDialog(o, done) {
+  const form = openModal({
+    title: `${icon('hand-coins')} ${t("Qolganini to'lash")} — #${o.id}`,
+    body: `${o.customer ? `<p style="margin-top:0"><b>${esc(o.customer.name)}</b> <span class="muted">${esc(o.customer.phone || '')}</span></p>` : ''}
+      <div class="sum-rows num"><span>${t('Jami')}</span><span class="right">${money(o.total)}</span>
+        <span>${t("To'langan")}</span><span class="right">${money(o.total - o.balance - (o.refund_off || 0))}</span>
+        <span class="orange-text"><b>${t('Qoldi')}</b></span><span class="right orange-text"><b>${money(o.balance)}</b></span></div>
+      <div class="methods" style="margin-top:12px">${['cash', 'card', 'transfer'].map((m) => `<button type="button" class="method ${m === 'cash' ? 'active' : ''}" data-m="${m}">${icon(METHOD_ICONS[m], 26)}${methodName(m)}</button>`).join('')}</div>
+      <label class="field">${t('Summa')}<input type="number" name="amount" min="1" max="${o.balance}" value="${o.balance}" required></label>
+      <input type="hidden" name="method" value="cash">
+      ${(App.user.perms || {}).print ? `<label class="check" style="margin-top:8px"><input type="checkbox" name="print"> ${icon('printer', 18)} ${t('Chekni chop etish')}</label>` : ''}`,
+    actions: [{ label: t('Bekor') }, { label: t("To'lovni qabul qilish"), cls: 'ok', icon: 'circle-check', onClick: async (f) => {
+      const amount = Number(f.amount.value) || 0;
+      if (amount < 1 || amount > o.balance) { toast(t('Summa {0} dan oshmasin', money(o.balance)), 'warn'); return false; }
+      const r = await POST(`/api/orders/${o.id}/pay-rest`, { amount, method: f.method.value });
+      LocalBackup.save(r);
+      toast(r.balance > 0 ? `${t('Qabul qilindi')}: ${moneyText(amount)} · ${t('Qoldi')}: ${moneyText(r.balance)}` : `${t("To'liq to'landi")} ✓`, 'ok', 6000);
+      if (f.print && f.print.checked) printReceipt(r);
+      if (done) done(r); else refreshView();
+    } }],
+  });
+  form.querySelectorAll('[data-m]').forEach((b) => b.onclick = () => {
+    form.querySelectorAll('[data-m]').forEach((y) => y.classList.toggle('active', y === b));
+    form.method.value = b.dataset.m;
+  });
+  form.amount.select();
+}
+
 // The selected check on the left (like the order screen), the list of checks on the right.
 function checkDetailHtml(o) {
-  if (!o) return `<aside class="checkpane hist-pane">${emptyState('receipt', t('Chekni tanlang'))}</aside>`;
+  if (!o) return `<aside class="checkpane hist-pane empty">${emptyState('receipt', t('Chekni tanlang'))}</aside>`;
   const share = perPerson(o);
   const permsOf = App.user.perms || {};
   return `<aside class="checkpane hist-pane">
@@ -138,7 +179,9 @@ function checkDetailHtml(o) {
       ${o.refunded ? `<span style="color:var(--red)">${t('Qaytarildi')}</span><span class="right" style="color:var(--red)">−${money(o.refunded)}</span>` : ''}
       <span class="total">${t('Jami')}</span><span class="total right">${money(o.total)}</span>
       ${share ? `<span class="share">${t('{0} kishi — har biriga', o.guests)}</span><span class="share right">${money(share)}</span>` : ''}
-      ${['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => `<span class="small muted">${methodName(m)}</span><span class="right small muted">${money(o[`paid_${m}`])}</span>`).join('')}</div>
+      ${['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => `<span class="small muted">${methodName(m)}</span><span class="right small muted">${money(o[`paid_${m}`])}</span>`).join('')}
+      ${advanceRows(o)}</div>
+      ${o.status === 'closed' && o.balance > 0 && (permsOf.close) ? `<button class="btn ok block" id="h-payrest" style="margin-top:8px">${icon('hand-coins', 18)} ${t("Qolganini to'lash")} — ${money(o.balance)}</button>` : ''}
       ${o.status === 'closed' ? `<div class="order-actions">
         ${can('owner', 'admin', 'cashier') && o.refunded < o.total ? `<button class="btn" id="h-refund">${icon('undo-2', 18)} ${t('Qaytarish')}</button>` : ''}
         ${isShop() ? `<button class="btn" id="h-invoice">${icon('file-text', 18)} ${t('Nakladnoy')}</button>` : ''}
@@ -160,14 +203,17 @@ Views.history = {
     const r = histRange();
     const s = d.sums;
     const cancelled = h.status === 'cancelled';
-    const label = h.period === 'all' ? (s.first_at ? t('{0} dan beri', fmtDate(s.first_at)) : '') : `${fmtDate(r.from)}${r.to - r.from > 24 * 60 * MIN ? ` — ${fmtDate(r.to - 1)}` : ''}`;
+    const unpaid = h.status === 'unpaid';
+    const label = unpaid ? t("Barcha to'lanmagan cheklar") : h.period === 'all' ? (s.first_at ? t('{0} dan beri', fmtDate(s.first_at)) : '') : `${fmtDate(r.from)}${r.to - r.from > 24 * 60 * MIN ? ` — ${fmtDate(r.to - 1)}` : ''}`;
     return `<div class="split">
       ${checkDetailHtml(d.order)}
       <section class="split-main">
         <div class="toolbar">
-          <div class="seg">${HIST_PERIODS().map(([k, n]) => `<button class="${h.period === k ? 'active' : ''}" data-hp="${k}">${n}</button>`).join('')}</div>
-          ${h.period === 'custom' ? `<input type="date" id="h-from" value="${h.from || localDay()}" style="width:auto"> — <input type="date" id="h-to" value="${h.to || localDay()}" style="width:auto">` : ''}
-          <div class="seg"><button class="${!cancelled ? 'active' : ''}" data-hs="closed">${t('Yopilgan')}</button><button class="${cancelled ? 'active' : ''}" data-hs="cancelled">${t('Bekor qilingan')}</button></div>
+          ${unpaid ? '' : `<div class="seg">${HIST_PERIODS().map(([k, n]) => `<button class="${h.period === k ? 'active' : ''}" data-hp="${k}">${n}</button>`).join('')}</div>`}
+          ${h.period === 'custom' && !unpaid ? `<input type="date" id="h-from" value="${h.from || localDay()}" style="width:auto"> — <input type="date" id="h-to" value="${h.to || localDay()}" style="width:auto">` : ''}
+          <div class="seg"><button class="${h.status === 'closed' ? 'active' : ''}" data-hs="closed">${t('Yopilgan')}</button>
+            ${isDoors() ? `<button class="${unpaid ? 'active' : ''}" data-hs="unpaid">${icon('hand-coins', 15)} ${t("To'lanmagan")}</button>` : ''}
+            <button class="${cancelled ? 'active' : ''}" data-hs="cancelled">${t('Bekor qilingan')}</button></div>
           <div class="scan" style="max-width:280px">${icon('search', 18)}<input type="search" id="h-q" placeholder="${esc(t('Chek raqami, xona yoki ofitsant'))}" value="${esc(h.q)}"></div>
           <span class="grow"></span><span class="muted small">${label}</span>
           ${moduleOn('export') ? `<button class="btn" id="hist-export" ${s.count ? '' : 'disabled'}>${icon('file-spreadsheet', 18)} Excel</button>` : ''}</div>
@@ -175,14 +221,16 @@ Views.history = {
           <tr><th>#</th><th>${t('Ochildi')} / ${t('Yopildi')}</th><th>${t('Joy')}</th><th>${roleName('waiter')}</th><th class="right">${icon('users', 15)}</th><th>${cancelled ? t('Sabab') : t("To'lov")}</th><th class="right">${t('Jami')}</th></tr>
           ${d.rows.map((o) => `<tr class="clickable ${d.order && d.order.id === o.id ? 'selected' : ''}" data-view="${o.id}"><td><b>${o.id}</b></td>
             <td class="small">${fmtTime(o.opened_at)} → ${fmtDateTime(o.closed_at)}</td>
-            <td>${o.takeaway ? `${icon(isShop() ? 'shopping-cart' : 'shopping-bag', 15)} ${esc(o.label || (isShop() ? t('Sotuv') : t('Olib ketish')))}` : `${esc(o.room_number)} · ${esc(o.room_name)}`}</td>
+            <td>${o.takeaway ? `${icon(isShop() ? 'shopping-cart' : 'shopping-bag', 15)} ${esc(o.customer_name || o.label || (isShop() ? t('Sotuv') : t('Olib ketish')))}` : `${esc(o.room_number)} · ${esc(o.room_name)}`}</td>
             <td>${esc(o.waiter_name)}</td><td class="right">${o.guests}</td>
-            <td class="small">${cancelled ? esc(o.cancel_reason || '—') : ['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => icon(METHOD_ICONS[m], 16)).join(' ')}</td>
+            <td class="small">${cancelled ? esc(o.cancel_reason || '—') : ['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => icon(METHOD_ICONS[m], 16)).join(' ')}
+              ${o.balance > 0 ? `<span class="chip ${o.due_at && o.due_at < Date.now() ? 'red' : 'orange'}" title="${o.due_at ? esc(t("To'lash sanasi")) + ': ' + fmtDate(o.due_at) : ''}">${t('Qoldi')} ${num(o.balance)}${o.due_at ? ` · ${fmtDate(o.due_at)}` : ''}</span>` : ''}</td>
             <td class="right num"><b>${num(o.total)}</b></td></tr>`).join('')}
         </table></div>
         ${d.rows.length < s.count ? `<div class="row" style="justify-content:center;margin:10px 0"><button class="btn" id="h-more">${t("Yana ko'rsatish")} (${d.rows.length} / ${s.count})</button></div>` : ''}`
         : emptyState('receipt', h.period === 'today' ? t('Bugun hali chek yopilmagan') : t("Bu davrda chek yo'q"))}
         <div class="list-foot"><span>${t('Cheklar')}: <b>${s.count}</b> · ${t('{0} mehmon', s.guests)}</span><span class="grow"></span>
+          ${unpaid ? `<span class="big orange-text">${t('Qolgan')}: ${money(s.balance)}</span>` : ''}
           ${cancelled ? '' : `<span>${icon('banknote', 15)} ${num(s.cash)}</span><span>${icon('credit-card', 15)} ${num(s.card)}</span><span>${icon('smartphone', 15)} ${num(s.transfer)}</span>`}
           <span class="big">${t('Jami')}: ${money(s.total)}</span></div></div>
       </section></div>`;
@@ -218,6 +266,8 @@ Views.history = {
     if (rf) rf.onclick = () => refundDialog(d.order);
     const inv = root.querySelector('#h-invoice');
     if (inv) inv.onclick = () => printInvoice(d.order.id);
+    const prb = root.querySelector('#h-payrest');
+    if (prb) prb.onclick = () => payRestDialog(d.order, (o) => renderView({ ...d, order: o }));
     (root.querySelector('#hist-export') || {}).onclick = async () => {
       try {
         const res = await fetch(`/api/checks/export?${histQuery()}`, { headers: { Authorization: `Bearer ${App.token}` } });

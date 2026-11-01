@@ -145,7 +145,8 @@ function createMoney(db, { settings, audit, events, now, payroll, payrollOn, isS
     const txs = q('SELECT * FROM transactions WHERE created_at >= ? AND created_at < ?').all(b.from, end);
     const payrollTx = new Set(q('SELECT transaction_id FROM payroll WHERE transaction_id IS NOT NULL').all().map((r) => r.transaction_id));
     const orders = q("SELECT total FROM orders WHERE status = 'closed' AND closed_at >= ? AND closed_at < ?").all(b.from, end);
-    const refunds = sum(txs.filter((t) => t.type === 'expense' && t.category === 'Qaytarish'), (t) => t.amount);
+    // Goods brought back: money paid back, or (an advance sale) the unpaid part no longer owed.
+    const refunds = sum(txs.filter((t) => t.type === 'expense' && t.category === 'Qaytarish'), (t) => t.amount) + q("SELECT COALESCE(SUM(amount), 0) s FROM customer_moves WHERE kind = 'debt_off' AND created_at >= ? AND created_at < ?").get(b.from, end).s;
     const revenue = sum(orders, (o) => o.total) - refunds;
     const otherIncome = sum(txs.filter((t) => t.type === 'income' && !t.order_id && t.category !== "Qarz to'lovi"), (t) => t.amount);
     const by = Object.fromEntries(GROUP_KEYS.map((k) => [k, { paid: 0, unpaid: 0, items: new Map() }]));
@@ -202,7 +203,7 @@ function createMoney(db, { settings, audit, events, now, payroll, payrollOn, isS
     const txs = q('SELECT * FROM transactions WHERE created_at >= ? AND created_at < ?').all(from, to);
     const orders = q("SELECT id, total, guests FROM orders WHERE status = 'closed' AND closed_at >= ? AND closed_at < ?").all(from, to);
     const shopLike = isShop();
-    const refunds = txs.filter((t) => t.type === 'expense' && t.category === 'Qaytarish').reduce((s, t) => s + t.amount, 0);
+    const refunds = txs.filter((t) => t.type === 'expense' && t.category === 'Qaytarish').reduce((s, t) => s + t.amount, 0) + q("SELECT COALESCE(SUM(amount), 0) s FROM customer_moves WHERE kind = 'debt_off' AND created_at >= ? AND created_at < ?").get(from, to).s;
     const expense = txs.filter((t) => t.type === 'expense' && t.category !== 'Qaytarish' && !(shopLike && SYSTEM_CATS.includes(t.category))).reduce((s, t) => s + t.amount, 0);
     const methods = {};
     for (const t of txs.filter((x) => x.type === 'income' && x.order_id)) methods[t.method] = (methods[t.method] || 0) + t.amount;

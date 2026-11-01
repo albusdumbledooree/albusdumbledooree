@@ -462,8 +462,18 @@ function createShop(db, { audit, events, now, tasks, moduleOn, settings }) {
       jobTask(j);
       jobs.push(j);
     }
-    if (order.paid_debt > 0 && cust) {
+    if (order.paid_debt > 0 && cust && order.advance > 0) {
+      // An advance sale: the rest of this check, with its own due date and reminder.
+      const picked = dateTime(body.debt_due);
+      // A day without a time is that day's midday, so it reads as the same date in any time zone.
+      const due = picked ? { at: picked.at + (picked.has_time ? 0 : 12 * 3600 * 1000) }
+        : jobs.find((j) => j.scheduled_at) ? { at: jobs.find((j) => j.scheduled_at).scheduled_at } : { at: now() + 7 * DAY };
+      q('UPDATE orders SET due_at = ? WHERE id = ?').run(due.at, order.id);
+      tasks.upsertAuto({ ref: `order:${order.id}`, due_at: due.at, title: `Qolgan to'lov: ${cust.name} — ${money(order.balance)} so'm (chek #${order.id})`,
+        note: cust.phone ? `Tel: ${cust.phone}` : '', amount: order.balance });
+    } else if (order.paid_debt > 0 && cust) {
       const due = dateTime(body.debt_due) || (jobs.find((j) => j.scheduled_at) ? { at: jobs.find((j) => j.scheduled_at).scheduled_at } : { at: now() + 7 * DAY });
+      q('UPDATE orders SET due_at = ? WHERE id = ?').run(due.at, order.id);
       const total = q('SELECT debt FROM customers WHERE id = ?').get(cust.id).debt;
       tasks.upsertAuto({ ref: `debt:${cust.id}`, due_at: due.at, title: `Qarzni olish: ${cust.name} — ${money(total)} so'm`, note: cust.phone ? `Tel: ${cust.phone}` : '' });
     }
@@ -488,7 +498,7 @@ function createShop(db, { audit, events, now, tasks, moduleOn, settings }) {
     const txs = q('SELECT * FROM transactions WHERE created_at >= ? AND created_at < ?').all(from, to);
     const moves = q('SELECT * FROM stock_moves WHERE created_at >= ? AND created_at < ?').all(from, to);
     const sum = (a, f) => a.reduce((s, x) => s + f(x), 0);
-    const refunds = sum(txs.filter((t) => t.type === 'expense' && t.category === 'Qaytarish'), (t) => t.amount);
+    const refunds = sum(txs.filter((t) => t.type === 'expense' && t.category === 'Qaytarish'), (t) => t.amount) + q("SELECT COALESCE(SUM(amount), 0) s FROM customer_moves WHERE kind = 'debt_off' AND created_at >= ? AND created_at < ?").get(from, to).s;
     const goodsCost = sum(items.filter((i) => !i.service), (i) => i.cost * i.qty) - sum(moves.filter((m) => m.kind === 'refund'), (m) => m.amount);
     const serviceCost = sum(items.filter((i) => i.service), (i) => i.cost * i.qty);
     const serviceIncome = sum(items.filter((i) => i.service), (i) => i.price * i.qty);
@@ -566,7 +576,10 @@ function createShop(db, { audit, events, now, tasks, moduleOn, settings }) {
     return { id: order.id, date: order.closed_at || order.opened_at, seller: { name: s.name, address: s.address, phone: s.phone },
       customer: cust || (order.label ? { name: order.label, phone: '' } : null), address: (jobs.find((j) => j.address) || {}).address || '',
       items, jobs, subtotal: order.subtotal, discount: order.discount, total: order.total,
-      paid: order.paid_cash + order.paid_card + order.paid_transfer, debt: order.paid_debt || 0 };
+      // At the sale, then later (the rest of an advance sale); what is still owed and by when.
+      paid: order.paid_cash + order.paid_card + order.paid_transfer
+        + q("SELECT COALESCE(SUM(amount), 0) s FROM customer_moves WHERE order_id = ? AND kind = 'debt_pay'").get(order.id).s,
+      debt: order.balance || 0, advance: order.advance || 0, due_at: order.balance > 0 ? order.due_at : null };
   }
 
   // A worker who brings no profit by being paid twice: these entries are managed from their own screens.

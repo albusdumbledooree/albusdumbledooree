@@ -2,6 +2,18 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.20.0 — Eshik do'koni: avans (bosh to'lov) va qolganini keyin to'lash
+- **To'lov oynasida ikki tugma**: "To'liq to'lov" va **"Avans (bosh to'lov)"**. Avansda mijoz ismi va telefoni
+  shu yerda yoziladi (oldindan ro'yxatda bo'lishi shart emas, keyingi safar telefonidan o'zi topiladi),
+  avans summasi va **qolganini qachon to'lashi**. Hamma tariflarda ishlaydi, faqat eshik do'konida.
+- Sotuvdan keyin va **chekda**: jami, avans, qoldi, to'lash sanasi. **Nakladnoy**da ham.
+- **Cheklar → "To'lanmagan"**: qarzi qolgan hamma cheklar, to'lash sanasi bo'yicha; muddati o'tgani qizil; jami qoldiq.
+- **"Qolganini to'lash"**: bir yo'la yoki bo'lib, naqd/karta/o'tkazma; har bir to'lov sanasi va kim olgani bilan yoziladi.
+  Oxirgisidan keyin chekda **"To'liq to'landi"** chiqadi. Pul kassaga **to'langan kuni** tushadi.
+- To'lash kuni **"Bugun"** ro'yxatida va ertalabki Telegram xabarida eslatiladi; to'langach eslatma o'zi yopiladi.
+- To'lanmagan chekdagi mol qaytarilsa: avval qarz kamayadi, kassadan faqat to'langan pul qaytadi.
+- Tuzatildi: telefonda Cheklar bo'limida tanlangan chek ko'rinmay qolardi (hamma biznes turlarida).
+
 ## 1.19.0 — Chegirmalar, har bir biznesga Telegram hisobot, versiyalar ro'yxati
 - **Chegirma** (platforma → biznesni tahrirlash → "Chegirma"): foiz yoki summa, muddati bilan yoki doimiy, sababi bilan.
   - Kartada eski narx o'chirilgan holda va yangi narx ko'rinadi; "Oylik tushum" chegirma bilan hisoblanadi.

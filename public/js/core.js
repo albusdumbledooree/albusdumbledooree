@@ -604,6 +604,12 @@ function printReceipt(o) {
     <tr class="big"><td>${t('JAMI')}</td><td class="r">${money(o.total)}</td></tr>
     ${share ? `<tr><td>${t('{0} kishi — har biriga', o.guests)}</td><td class="r">${money(share)}</td></tr>` : ''}
     ${o.status === 'closed' ? ['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => `<tr><td>${methodName(m)}</td><td class="r">${money(o[`paid_${m}`])}</td></tr>`).join('') : ''}
+    ${o.advance || o.balance > 0 || (o.payments || []).length ? `</table><hr><table>
+      ${o.customer ? `<tr><td colspan="2">${t('Mijoz')}: ${esc(o.customer.name)} ${esc(o.customer.phone || '')}</td></tr>` : ''}
+      ${o.advance ? `<tr><td>${t("Avans (bosh to'lov)")}</td><td class="r">${money(o.advance)}</td></tr>` : ''}
+      ${(o.payments || []).map((p) => `<tr><td>${fmtDate(p.created_at)} ${methodName(p.method)}</td><td class="r">${money(p.amount)}</td></tr>`).join('')}
+      ${o.balance > 0 ? `<tr class="big"><td>${t('QOLDI')}</td><td class="r">${money(o.balance)}</td></tr>${o.due_at ? `<tr><td>${t("To'lash sanasi")}</td><td class="r">${fmtDate(o.due_at)}</td></tr>` : ''}`
+        : `<tr class="big"><td colspan="2" class="c">${t("TO'LIQ TO'LANDI")}</td></tr>`}` : ''}
     </table><hr>${o.cashier ? `<div>${t('Kassir')}: ${esc(o.cashier.name)}</div>` : ''}<div class="c">${esc(s.receipt_footer || '')}</div>`);
 }
 

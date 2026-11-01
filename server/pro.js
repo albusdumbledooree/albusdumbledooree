@@ -97,6 +97,7 @@ function createPro(db, { audit, events, now, moduleOn, settings }) {
         .run(DEBT_PAYMENT, amount, method, c.name, user.id, now()).lastInsertRowid;
       q('UPDATE customers SET debt = debt - ? WHERE id = ?').run(amount, c.id);
       move(c.id, 'debt_pay', amount, { method, transaction_id: txId, user_id: user.id, note: str(body.note, 'Izoh', { max: 200 }) });
+      payChecks(c.id, amount);
       db.exec('COMMIT');
     } catch (e) { db.exec('ROLLBACK'); throw e; }
     audit(user, 'debt_pay', `${c.name}: ${amount}`);
@@ -104,17 +105,38 @@ function createPro(db, { audit, events, now, moduleOn, settings }) {
     return customerRow(c.id);
   }
 
+  // Money paid against a customer's whole debt also pays off their checks, the earliest due first.
+  function payChecks(customerId, amount) {
+    let left = amount;
+    for (const o of q('SELECT id, balance FROM orders WHERE customer_id = ? AND balance > 0 ORDER BY COALESCE(due_at, closed_at), id').all(customerId)) {
+      if (left <= 0) break;
+      const cut = Math.min(left, o.balance);
+      q('UPDATE orders SET balance = balance - ? WHERE id = ?').run(cut, o.id);
+      left -= cut;
+    }
+  }
+  // A door shop's advance sale: the customer is found by phone or written down there and then.
+  function ensureCustomer(name, phone) {
+    const n = str(name, 'Mijoz ismi', { required: true, max: 80 });
+    const p = phoneInput(phone);
+    if (p.replace(/\D/g, '').length < 7) throw new HttpError(400, 'Mijoz telefonini yozing');
+    const c = q('SELECT * FROM customers WHERE phone = ? AND active = 1').get(p);
+    if (c) return c;
+    const id = q('INSERT INTO customers (name, phone, note, created_at) VALUES (?, ?, ?, ?)').run(n, p, '', now()).lastInsertRowid;
+    return customerRow(id);
+  }
+
   /*
    * Called inside the check-closing transaction, before the order row is written:
    * checks the customer, the bonus spent and the part left on credit. Returns the extra discount (bonus).
    */
-  function preparePayment(body, subtotalWithService) {
+  function preparePayment(body, subtotalWithService, { advance = false } = {}) {
     const out = { customer: null, bonus: 0, debt: 0 };
     if (!body.customer_id) {
       if (body.bonus || body.paid_debt) throw new HttpError(400, 'Mijozni tanlang');
       return out;
     }
-    if (!usesCustomers()) throw new HttpError(403, "\"Mijozlar\" bo'limi sizning tarifingizda yo'q");
+    if (!advance && !usesCustomers()) throw new HttpError(403, "\"Mijozlar\" bo'limi sizning tarifingizda yo'q");
     out.customer = customerRow(int(body.customer_id, 'Mijoz', { min: 1 }));
     out.bonus = int(body.bonus, 'Bonus');
     if (out.bonus) {
@@ -123,7 +145,7 @@ function createPro(db, { audit, events, now, moduleOn, settings }) {
       out.bonus = Math.min(out.bonus, subtotalWithService);
     }
     out.debt = int(body.paid_debt, 'Qarzga');
-    if (out.debt) need('debts', 'Qarz daftari');
+    if (out.debt && !advance) need('debts', 'Qarz daftari');
     return out;
   }
   // After the order row is closed: bonus spent, debt written, cashback earned, visit counted.
@@ -311,7 +333,7 @@ function createPro(db, { audit, events, now, moduleOn, settings }) {
   }
 
   return {
-    listCustomers, saveCustomer, customerDetail, payDebt, preparePayment, afterPayment,
+    listCustomers, saveCustomer, customerDetail, payDebt, preparePayment, afterPayment, ensureCustomer, payChecks, move,
     listIngredients, saveIngredient, deleteIngredient, receive, adjust, listMoves, getRecipe, setRecipe, consume, DEBT_PAYMENT,
   };
 }

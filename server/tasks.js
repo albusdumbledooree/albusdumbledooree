@@ -77,6 +77,7 @@ function createTasks(db, { audit, events, now, settings }) {
       if (kind === 'debt') settled = !(q('SELECT debt FROM customers WHERE id = ?').get(Number(id)) || { debt: 0 }).debt;
       else if (kind === 'job') settled = (q('SELECT status FROM jobs WHERE id = ?').get(Number(id)) || { status: 'done' }).status !== 'planned';
       else if (kind === 'supplier') settled = supplierDebt(Number(id)) <= 0;
+      else if (kind === 'order') settled = !((q('SELECT balance FROM orders WHERE id = ?').get(Number(id)) || { balance: 0 }).balance > 0);
       if (settled) close.run(now(), t.id);
     }
   }

@@ -754,6 +754,23 @@ CREATE INDEX IF NOT EXISTS idx_work_day ON work_log(day, user_id);
     created_at INTEGER NOT NULL
   )`);
   addCol('transactions', 'fixed_month', 'TEXT');
+  // Door shop: a sale with an advance (bosh to'lov). balance = what is still owed on this very check, due_at = when.
+  if (!colsOf('orders').includes('balance')) {
+    db.exec(`ALTER TABLE orders ADD COLUMN balance INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE orders ADD COLUMN due_at INTEGER;
+      ALTER TABLE orders ADD COLUMN advance INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE orders ADD COLUMN refund_off INTEGER NOT NULL DEFAULT 0;`);
+    // Checks closed on credit earlier: what each customer still owes is spread over their latest such checks.
+    for (const c of db.prepare('SELECT id, debt FROM customers WHERE debt > 0').all()) {
+      let left = c.debt;
+      for (const o of db.prepare("SELECT id, paid_debt FROM orders WHERE customer_id = ? AND status = 'closed' AND paid_debt > 0 ORDER BY closed_at DESC, id DESC").all(c.id)) {
+        if (left <= 0) break;
+        const b = Math.min(left, o.paid_debt);
+        db.prepare('UPDATE orders SET balance = ? WHERE id = ?').run(b, o.id);
+        left -= b;
+      }
+    }
+  }
   const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
   if (!orderCols.includes('service_type')) db.exec("ALTER TABLE orders ADD COLUMN service_type TEXT NOT NULL DEFAULT 'percent'");
   if (!orderCols.includes('takeaway')) db.exec('ALTER TABLE orders ADD COLUMN takeaway INTEGER NOT NULL DEFAULT 0');

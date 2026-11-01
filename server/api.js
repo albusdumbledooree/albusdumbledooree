@@ -972,8 +972,12 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const waiter = q('SELECT id, name FROM users WHERE id = ?').get(order.waiter_id);
     const cashier = order.cashier_id ? q('SELECT id, name FROM users WHERE id = ?').get(order.cashier_id) : null;
     const t = order.status === 'open' ? totals(order, items) : order;
-    const refunded = order.status === 'closed' ? q("SELECT COALESCE(SUM(amount), 0) s FROM transactions WHERE category = 'Qaytarish' AND order_id = ?").get(id).s : 0;
-    return { ...order, refunded, ...{ subtotal: t.subtotal, service_type: t.service_type || 'percent', service_pct: t.service_pct,
+    const refunded = order.status === 'closed' ? q("SELECT COALESCE(SUM(amount), 0) s FROM transactions WHERE category = 'Qaytarish' AND order_id = ?").get(id).s + (order.refund_off || 0) : 0;
+    const customer = order.customer_id ? q('SELECT id, name, phone FROM customers WHERE id = ?').get(order.customer_id) : null;
+    // Payments after the sale (the rest of an advance sale), each with when, how and who took it.
+    const payments = order.customer_id ? q(`SELECT m.amount, m.method, m.created_at, u.name user_name FROM customer_moves m LEFT JOIN users u ON u.id = m.user_id
+      WHERE m.order_id = ? AND m.kind = 'debt_pay' ORDER BY m.id`).all(id) : [];
+    return { ...order, refunded, customer, payments, ...{ subtotal: t.subtotal, service_type: t.service_type || 'percent', service_pct: t.service_pct,
       service_amount: t.service_amount, discount: t.discount, total: t.total },
       items, room, waiter, cashier };
   }
@@ -982,14 +986,18 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const status = query.status || 'open';
     const params = [status];
     let where = 'o.status = ?';
-    if (query.from) { where += ' AND COALESCE(o.closed_at, o.opened_at) >= ?'; params.push(Number(query.from)); }
-    if (query.to) { where += ' AND COALESCE(o.closed_at, o.opened_at) < ?'; params.push(Number(query.to)); }
+    if (query.unpaid === '1') where += ' AND o.balance > 0';
+    else {
+      if (query.from) { where += ' AND COALESCE(o.closed_at, o.opened_at) >= ?'; params.push(Number(query.from)); }
+      if (query.to) { where += ' AND COALESCE(o.closed_at, o.opened_at) < ?'; params.push(Number(query.to)); }
+    }
     if (user.role === 'waiter') {
       where += ' AND (o.waiter_id = ? OR o.room_id IN (SELECT room_id FROM room_waiters WHERE user_id = ?))';
       params.push(user.id, user.id);
     }
-    const rows = q(`SELECT o.*, r.name room_name, r.number room_number, w.name waiter_name, c.name cashier_name
+    const rows = q(`SELECT o.*, r.name room_name, r.number room_number, w.name waiter_name, c.name cashier_name, cu.name customer_name, cu.phone customer_phone
       FROM orders o JOIN rooms r ON r.id = o.room_id JOIN users w ON w.id = o.waiter_id LEFT JOIN users c ON c.id = o.cashier_id
+      LEFT JOIN customers cu ON cu.id = o.customer_id
       WHERE ${where} ORDER BY o.bill_requested DESC, COALESCE(o.closed_at, o.opened_at) DESC LIMIT 500`).all(...params);
     if (status !== 'open') return rows;
     const items = q("SELECT i.* FROM order_items i JOIN orders o ON o.id = i.order_id WHERE o.status = 'open'").all();
@@ -1281,8 +1289,18 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const discount = int(body.discount, 'Chegirma');
     if (discount && !['owner', 'admin', 'cashier'].includes(user.role)) throw new HttpError(403, "Chegirma berish huquqi yo'q");
     const base = totals(o, items, { discount });
+    // Door shop: an advance (bosh to'lov) now, the rest later — the customer by name and phone, on every plan.
+    const advance = !!body.advance && businessType() === 'doors';
+    if (advance) {
+      const now_ = int(body.paid_cash, 'Naqd') + int(body.paid_card, 'Karta') + int(body.paid_transfer, "O'tkazma");
+      if (now_ >= base.total) body = { ...body, advance: false };
+      else {
+        const c = body.customer_id ? null : pro.ensureCustomer(body.customer_name, body.phone);
+        body = { ...body, customer_id: body.customer_id || c.id, bonus: 0, paid_debt: base.total - now_ };
+      }
+    }
     // Pro: a customer's bonus works as a discount; part of the check may stay on credit (no money now).
-    const cp = pro.preparePayment(body, base.total);
+    const cp = pro.preparePayment(body, base.total, { advance: advance && !!body.advance });
     const t = cp.bonus ? totals(o, items, { discount: discount + cp.bonus }) : base;
     if (cp.debt > t.total) throw new HttpError(400, "Qarzga yoziladigan summa chekdan ko'p");
     const paid = { cash: int(body.paid_cash, 'Naqd'), card: int(body.paid_card, 'Karta'), transfer: int(body.paid_transfer, "O'tkazma") };
@@ -1299,6 +1317,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       ts, user.id, t.subtotal, t.service_type, t.service_pct, t.service_amount, t.discount, t.total, paid.cash, paid.card, paid.transfer,
       cp.customer ? cp.customer.id : null, cp.debt, cp.bonus, o.id
     );
+    // What is still owed on this very check (paid off later, in parts if need be).
+    if (cp.debt) q('UPDATE orders SET balance = ?, advance = ? WHERE id = ?').run(cp.debt, body.advance ? t.total - cp.debt : 0, o.id);
     const ins = q("INSERT INTO transactions (type, category, amount, method, note, order_id, user_id, created_at) VALUES ('income', 'Savdo', ?, ?, ?, ?, ?, ?)");
     for (const m of METHODS) if (paid[m] > 0) ins.run(paid[m], m, `Chek #${o.id}`, o.id, user.id, ts);
     const extra = pro.afterPayment(user, { id: o.id, total: t.total }, cp, paid.cash + paid.card + paid.transfer);
@@ -1396,15 +1416,54 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
         shop.refunded(it, qty, user.id, o.id);
       }
       const already = q("SELECT COALESCE(SUM(amount), 0) s FROM transactions WHERE category = 'Qaytarish' AND order_id = ?").get(o.id).s;
-      amount = Math.min(amount, o.total - already);
+      amount = Math.min(amount, o.total - already - (o.refund_off || 0));
       if (amount <= 0) throw new HttpError(400, "Bu chek bo'yicha pul to'liq qaytarilgan");
-      q("INSERT INTO transactions (type, category, amount, method, note, order_id, user_id, created_at) VALUES ('expense', 'Qaytarish', ?, ?, ?, ?, ?, ?)")
-        .run(amount, method, `Chek #${o.id}: ${lines.join(', ')}${reason ? ` (${reason})` : ''}`, o.id, user.id, now());
+      // Goods of an advance sale not fully paid: the unpaid part is simply no longer owed; only paid money goes back.
+      const off = Math.min(amount, o.balance);
+      if (off > 0) {
+        q('UPDATE orders SET balance = balance - ?, refund_off = refund_off + ? WHERE id = ?').run(off, off, o.id);
+        if (o.customer_id) {
+          q('UPDATE customers SET debt = MAX(0, debt - ?) WHERE id = ?').run(off, o.customer_id);
+          pro.move(o.customer_id, 'debt_off', off, { order_id: o.id, user_id: user.id, note: 'Qaytarilgan mol' });
+        }
+      }
+      if (amount - off > 0) {
+        q("INSERT INTO transactions (type, category, amount, method, note, order_id, user_id, created_at) VALUES ('expense', 'Qaytarish', ?, ?, ?, ?, ?, ?)")
+          .run(amount - off, method, `Chek #${o.id}: ${lines.join(', ')}${reason ? ` (${reason})` : ''}`, o.id, user.id, now());
+      }
+      amount -= off;
     });
     audit(user, 'refund', `#${o.id} ${amount}: ${lines.join(', ')}`);
     events.publish('menu');
     events.publish('finance');
     return { ...orderDetails(o.id), refunded: amount };
+  }
+
+  // The rest of an advance sale (or a check left on credit): paid now, all or a part. Money enters the till today.
+  function payRest({ user, params, body }) {
+    const o = getOrderRow(params.id);
+    if (!perms(user).close) throw new HttpError(403, "To'lov qabul qilish huquqingiz yo'q");
+    if (o.status !== 'closed' || !(o.balance > 0)) throw new HttpError(400, "Bu chek to'liq to'langan");
+    const amount = int(body.amount, 'Summa', { min: 1, required: true });
+    if (amount > o.balance) throw new HttpError(400, `Qolgan summa ${o.balance} so'm, undan ko'p qabul qilib bo'lmaydi`);
+    const method = METHODS.includes(body.method) ? body.method : 'cash';
+    const cust = o.customer_id ? q('SELECT * FROM customers WHERE id = ?').get(o.customer_id) : null;
+    tx(() => {
+      const txId = q("INSERT INTO transactions (type, category, amount, method, note, user_id, created_at) VALUES ('income', ?, ?, ?, ?, ?, ?)")
+        .run(pro.DEBT_PAYMENT, amount, method, `Chek #${o.id}${cust ? `: ${cust.name}` : ''}`, user.id, now()).lastInsertRowid;
+      q('UPDATE orders SET balance = balance - ? WHERE id = ?').run(amount, o.id);
+      if (cust) {
+        q('UPDATE customers SET debt = MAX(0, debt - ?) WHERE id = ?').run(amount, cust.id);
+        pro.move(cust.id, 'debt_pay', amount, { method, order_id: o.id, transaction_id: txId, user_id: user.id });
+      }
+    });
+    const left = o.balance - amount;
+    if (left <= 0) tasks.closeAuto(`order:${o.id}`, user.id);
+    else if (cust) tasks.upsertAuto({ ref: `order:${o.id}`, due_at: o.due_at || now(), title: `Qolgan to'lov: ${cust.name} — ${shop.money(left)} so'm (chek #${o.id})`, note: cust.phone ? `Tel: ${cust.phone}` : '', amount: left });
+    if (cust && !q('SELECT debt FROM customers WHERE id = ?').get(cust.id).debt) tasks.closeAuto(`debt:${cust.id}`, user.id);
+    audit(user, 'debt_pay', `#${o.id} ${cust ? cust.name : ''}: ${amount}${left > 0 ? `, qoldi ${left}` : " — to'liq to'landi"}`);
+    events.publish('finance');
+    return { ...orderDetails(o.id), paid_now: amount };
   }
 
   // Printing a bill is recorded, so the boss sees how many times each check was printed.
@@ -1454,31 +1513,34 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   // ---------- Checks history ----------
   function checksWhere(query) {
+    // "unpaid": every closed check with money still owed on it (an advance sale), whatever the period.
+    const unpaid = query.status === 'unpaid';
     const status = ['closed', 'cancelled'].includes(query.status) ? query.status : 'closed';
-    let where = 'o.status = ?';
+    let where = unpaid ? "o.status = ? AND o.balance > 0" : 'o.status = ?';
     const params = [status];
-    if (query.from) { where += ' AND o.closed_at >= ?'; params.push(Number(query.from)); }
-    if (query.to) { where += ' AND o.closed_at < ?'; params.push(Number(query.to)); }
+    if (query.from && !unpaid) { where += ' AND o.closed_at >= ?'; params.push(Number(query.from)); }
+    if (query.to && !unpaid) { where += ' AND o.closed_at < ?'; params.push(Number(query.to)); }
     const search = str(query.q, 'Qidiruv', { max: 60 });
     if (search) {
-      where += ' AND (CAST(o.id AS TEXT) = ? OR r.name LIKE ? OR r.number = ? OR w.name LIKE ? OR o.label LIKE ?)';
-      params.push(search.replace(/^#/, ''), `%${search}%`, search, `%${search}%`, `%${search}%`);
+      where += ' AND (CAST(o.id AS TEXT) = ? OR r.name LIKE ? OR r.number = ? OR w.name LIKE ? OR o.label LIKE ? OR cu.name LIKE ? OR cu.phone LIKE ?)';
+      params.push(search.replace(/^#/, ''), `%${search}%`, search, `%${search}%`, `%${search}%`, `%${search}%`, `%${search.replace(/\D/g, '') || search}%`);
     }
     return { where, params };
   }
-  const CHECK_FROM = `FROM orders o JOIN rooms r ON r.id = o.room_id JOIN users w ON w.id = o.waiter_id LEFT JOIN users c ON c.id = o.cashier_id`;
+  const CHECK_FROM = `FROM orders o JOIN rooms r ON r.id = o.room_id JOIN users w ON w.id = o.waiter_id LEFT JOIN users c ON c.id = o.cashier_id
+    LEFT JOIN customers cu ON cu.id = o.customer_id`;
 
   function listChecks({ query }) {
     const { where, params } = checksWhere(query);
     const limit = Math.min(Number(query.limit) || 100, 500);
     const offset = Math.max(Number(query.offset) || 0, 0);
-    const rows = q(`SELECT o.*, r.name room_name, r.number room_number, w.name waiter_name, c.name cashier_name,
+    const rows = q(`SELECT o.*, r.name room_name, r.number room_number, w.name waiter_name, c.name cashier_name, cu.name customer_name, cu.phone customer_phone,
       (SELECT COALESCE(SUM(qty), 0) FROM order_items i WHERE i.order_id = o.id AND i.status != 'cancelled') items_count
-      ${CHECK_FROM} WHERE ${where} ORDER BY o.closed_at DESC, o.id DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
+      ${CHECK_FROM} WHERE ${where} ORDER BY ${query.status === 'unpaid' ? 'COALESCE(o.due_at, o.closed_at), o.id' : 'o.closed_at DESC, o.id DESC'} LIMIT ? OFFSET ?`).all(...params, limit, offset);
     const sums = q(`SELECT COUNT(*) count, COALESCE(SUM(o.total), 0) total, COALESCE(SUM(o.subtotal), 0) subtotal,
       COALESCE(SUM(o.service_amount), 0) service, COALESCE(SUM(o.discount), 0) discount, COALESCE(SUM(o.guests), 0) guests,
       COALESCE(SUM(o.paid_cash), 0) cash, COALESCE(SUM(o.paid_card), 0) card, COALESCE(SUM(o.paid_transfer), 0) transfer,
-      COALESCE(SUM(o.paid_staff), 0) staff, MIN(o.closed_at) first_at ${CHECK_FROM} WHERE ${where}`).get(...params);
+      COALESCE(SUM(o.paid_staff), 0) staff, COALESCE(SUM(o.balance), 0) balance, MIN(o.closed_at) first_at ${CHECK_FROM} WHERE ${where}`).get(...params);
     return { rows, sums, offset, limit };
   }
 
@@ -1489,7 +1551,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       ${CHECK_FROM} WHERE ${where} ORDER BY o.closed_at, o.id`).all(...params);
     const items = new Map();
     for (const i of q(`SELECT i.order_id, i.name, i.qty, i.price FROM order_items i JOIN orders o ON o.id = i.order_id JOIN rooms r ON r.id = o.room_id
-      JOIN users w ON w.id = o.waiter_id LEFT JOIN users c ON c.id = o.cashier_id WHERE ${where} AND i.status != 'cancelled' ORDER BY i.id`).all(...params)) {
+      JOIN users w ON w.id = o.waiter_id LEFT JOIN users c ON c.id = o.cashier_id LEFT JOIN customers cu ON cu.id = o.customer_id WHERE ${where} AND i.status != 'cancelled' ORDER BY i.id`).all(...params)) {
       if (!items.has(i.order_id)) items.set(i.order_id, []);
       items.get(i.order_id).push(`${i.name} x${i.qty}`);
     }
@@ -1941,6 +2003,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['POST', '/api/finance/unlock', MONEY, financeUnlock],
     ['POST', '/api/sales', ['owner', 'admin', 'cashier', 'waiter'], createSale],
     ['POST', '/api/orders/:id/refund', MONEY, refundItems],
+    ['POST', '/api/orders/:id/pay-rest', MONEY, payRest],
     ['POST', '/api/dishes/:id/receive', MANAGERS, receiveStock],
     ['POST', '/api/device/pin', 'device', pinLogin],
     ['GET', '/api/devices', MANAGERS, listDevices],
