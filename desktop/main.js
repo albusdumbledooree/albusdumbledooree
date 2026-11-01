@@ -11,7 +11,8 @@
  * - when the internet drops: a clear page that reconnects by itself.
  * Settings: Ctrl+Shift+S (or the tray-less menu key F10).
  */
-const { app, BrowserWindow, ipcMain, shell, Menu, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Menu, globalShortcut, session } = require('electron');
+const { loadRoots, verifyChain, pemsOf } = require('./certs');
 const path = require('node:path');
 const fs = require('node:fs');
 
@@ -135,6 +136,21 @@ ipcMain.handle('flowi:save', (e, next) => {
 });
 ipcMain.handle('flowi:open', (e) => { if (fromLocal(e)) openSite(); });
 
+// ---------- Windows 7/8 without the Let's Encrypt root ----------
+// Only for the business's own address, and only when Windows did not know the root: the program checks the chain itself.
+function trustLetsEncrypt() {
+  let roots = [];
+  try { roots = loadRoots(); } catch { return; }
+  session.defaultSession.setCertificateVerifyProc((req, callback) => {
+    if (req.errorCode === 0) return callback(-3);
+    let host = '';
+    try { host = new URL(cfg.url).hostname; } catch { /* not set yet */ }
+    const unknownRoot = /AUTHORITY_INVALID/.test(String(req.verificationResult || ''));
+    if (host && req.hostname === host && unknownRoot && verifyChain(pemsOf(req.certificate), host, roots)) return callback(0);
+    return callback(-3);
+  });
+}
+
 // ---------- Start ----------
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -143,6 +159,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     loadConfig();
     if (!fs.existsSync(cfgFile())) saveConfig({}); // first start: starts with Windows from now on
+    trustLetsEncrypt();
     createWindow();
   });
   app.on('window-all-closed', () => app.quit());

@@ -2,6 +2,11 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.22.2 — Windows dasturi: Windows 7'da "ERR_CERT_AUTHORITY_INVALID" tuzatildi
+- Yangilanmagan Windows 7/8 saytning Let's Encrypt sertifikatini tanimasdi. Dastur endi Let's Encrypt'ning ildiz
+  sertifikatlarini (ISRG Root X1, X2) o'zi bilan olib yuradi va zanjirni o'zi tekshiradi: faqat biznesingiz manzili uchun,
+  faqat Windows ildizni tanimagan holda; sayt nomi, muddatlar va har bir imzo tekshiriladi.
+
 ## 1.22.1 — Windows dasturi Windows 7 va 32-bit kompyuterlarda ham
 - FLOWI-Setup endi **Windows 7/8/10/11** va **32-bit hamda 64-bit** kompyuterlarda ishlaydi (o'rnatuvchi mosini o'zi tanlaydi).
   Oldingi fayl Windows 7 / 32-bit'da "не является приложением Win32" xatosini berardi.

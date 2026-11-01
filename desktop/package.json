@@ -1,7 +1,7 @@
 {
   "name": "flowi-desktop",
   "productName": "FLOWI",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "FLOWI — kassa kompyuteri uchun dastur (Windows 7/8/10/11, 32 va 64-bit)",
   "main": "main.js",
   "author": "FLOWI",
@@ -26,6 +26,8 @@
     "files": [
       "main.js",
       "preload.js",
+      "certs.js",
+      "certs/**",
       "pages/**",
       "build/icon.png",
       "package.json"
