@@ -60,8 +60,8 @@ function roomSections(rooms) {
 
 UI.roomsMode = store('cp_rooms_mode') || '';
 Views.rooms = {
-  title: () => (App.user.delivery ? t('Yetkazib berish') : App.biz === 'fastfood' ? t('Buyurtmalar') : App.user.role === 'cashier' ? t('Kassa') : t('Xonalar')),
-  icon: () => (App.user.delivery ? 'truck' : App.biz === 'fastfood' ? 'receipt' : App.user.role === 'cashier' ? 'wallet' : 'house'),
+  title: () => (App.biz === 'fastfood' ? t('Buyurtmalar') : App.user.role === 'cashier' ? t('Kassa') : t('Xonalar')),
+  icon: () => (App.biz === 'fastfood' ? 'receipt' : App.user.role === 'cashier' ? 'wallet' : 'house'),
   roles: ['owner', 'admin', 'cashier', 'waiter'], refreshOn: ['rooms', 'finance'], badge: 'bills', on: () => !isShop(),
   async load() {
     const money = can('owner', 'admin', 'cashier') && moduleOn('finance');
@@ -75,12 +75,10 @@ Views.rooms = {
     const sections = roomSections(rooms);
     const sec = sections.includes(UI.section) ? UI.section : '';
     const fast = App.biz === 'fastfood';
-    // A courier: only deliveries (their own); the hall is not theirs.
-    const courier = !!App.user.delivery;
-    const mode = courier || UI.roomsMode === 'takeaway' || (!UI.roomsMode && (fast || !rooms.length)) ? 'takeaway' : 'hall';
+    const mode = UI.roomsMode === 'takeaway' || (!UI.roomsMode && (fast || !rooms.length)) ? 'takeaway' : 'hall';
     const modes = `<div class="modes">
-      ${rooms.length && !courier ? `<button class="mode ${mode === 'hall' ? 'active' : ''}" data-mode="hall">${icon(fast ? 'utensils' : 'house', 20)} ${fast ? t('Stollar') : t('Zal')}<span class="cnt">${busy}/${rooms.length}</span></button>` : ''}
-      <button class="mode ${mode === 'takeaway' ? 'active' : ''}" data-mode="takeaway">${icon(courier ? 'truck' : 'shopping-bag', 20)} ${courier ? t('Mening yetkazishlarim') : fast ? t('Ochiq buyurtmalar') : t('Olib ketish')}<span class="cnt">${takeaway.orders.length}</span></button>
+      ${rooms.length ? `<button class="mode ${mode === 'hall' ? 'active' : ''}" data-mode="hall">${icon(fast ? 'utensils' : 'house', 20)} ${fast ? t('Stollar') : t('Zal')}<span class="cnt">${busy}/${rooms.length}</span></button>` : ''}
+      <button class="mode ${mode === 'takeaway' ? 'active' : ''}" data-mode="takeaway">${icon('shopping-bag', 20)} ${fast ? t('Ochiq buyurtmalar') : t('Olib ketish')}<span class="cnt">${takeaway.orders.length}</span></button>
       ${moduleOn('reservations') && can('owner', 'admin', 'cashier') ? `<a class="mode" href="#/reservations">${icon('calendar', 20)} ${t('Bronlar')}<span class="cnt">${rooms.reduce((n, r) => n + r.reservations.length, 0)}</span></a>` : ''}
       <span class="grow"></span>
       ${quickMoneyHtml()}
@@ -89,8 +87,7 @@ Views.rooms = {
 
     if (mode === 'takeaway') {
       return `${modes}<div class="floor">
-        ${courier ? '' : `<button class="tile add" data-new-takeaway>${icon('circle-plus', 34)}<span>${t('Yangi chek')}</span></button>`}
-        ${!fast ? `<button class="tile add delivery" data-new-delivery>${icon('truck', 34)}<span>${t('Yetkazib berish')}</span></button>` : ''}
+        <button class="tile add" data-new-takeaway>${icon('circle-plus', 34)}<span>${t('Yangi chek')}</span></button>
         ${takeaway.orders.map(takeawayTile).join('')}</div>`;
     }
     const group = (title, list) => `${title ? `<div class="group-head"><b># ${esc(title)}</b><span>${list.filter((r) => r.order).length}/${list.length} ${t('band')}</span></div>` : ''}
@@ -117,30 +114,10 @@ Views.rooms = {
     root.querySelectorAll('[data-order]').forEach((b) => b.onclick = () => { location.hash = `#/order/${b.dataset.order}`; });
     const nt = root.querySelector('[data-new-takeaway]');
     if (nt) nt.onclick = () => { delete Carts.soboy; location.hash = '#/soboy'; };
-    const nd = root.querySelector('[data-new-delivery]');
-    if (nd) nd.onclick = () => deliveryDialog();
     const sh = root.querySelector('#shift');
     if (sh) sh.onclick = () => (data.shift ? closeShiftDialog(data.shift) : openShiftDialog());
   },
 };
-
-// A delivery: the customer's name, phone, address and the delivery charge; then the dishes, as for takeaway.
-function deliveryDialog() {
-  openModal({
-    title: `${icon('truck')} ${t('Yetkazib berish')}`,
-    body: `<div class="form-grid"><label class="field">${t('Mijoz ismi')}<input name="name" maxlength="60" autocomplete="off"></label>
-        <label class="field">${t('Telefon')}<input name="phone" type="tel" placeholder="+998" required></label></div>
-      <label class="field" style="margin-top:10px">${t('Manzil')}<input name="address" maxlength="200" placeholder="${esc(t("Tuman, ko'cha, uy, mo'ljal"))}" required></label>
-      <label class="field" style="margin-top:10px">${t('Yetkazish haqi')} (${esc(App.settings.currency)})<input name="fee" type="number" min="0" step="1000" placeholder="0"></label>`,
-    actions: [{ label: t('Bekor') }, { label: t('Taom tanlash'), cls: 'primary', icon: 'arrow-right', onClick: (f) => {
-      const d = formData(f);
-      if (String(d.phone || '').replace(/\D/g, '').length < 7) { toast(t('Mijoz telefonini yozing'), 'warn'); f.phone.focus(); return false; }
-      if (!String(d.address || '').trim()) { toast(t('Manzilni yozing'), 'warn'); f.address.focus(); return false; }
-      Carts.soboy = { lines: [], guests: 1, label: d.name.trim(), delivery: { name: d.name.trim(), phone: d.phone.trim(), address: d.address.trim(), fee: Number(d.fee) || 0 } };
-      location.hash = '#/soboy';
-    } }],
-  });
-}
 
 function openShiftDialog() {
   openModal({ title: `${icon('wallet')} ${t('Smenani ochish')}`,

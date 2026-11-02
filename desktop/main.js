@@ -9,8 +9,9 @@
  * - receipts and kitchen tickets print with no print dialog, to the printer chosen for each (USB / Windows printers);
  * - an optional full-screen "cash desk" mode the staff cannot leave by accident;
  * - when the internet drops: a clear page that reconnects by itself.
- * - updates of the program itself: checked on GitHub, downloaded in the background, installed on the next start
- *   (or at once with the button in the settings); "Avtomatik yangilansin" can be switched off.
+ * - updates of the program itself: checked on GitHub and shown in the settings; downloaded and installed only when the
+ *   person presses the buttons (an update in the middle of a busy evening could get in the way). "Avtomatik yangilansin"
+ *   is off unless someone switches it on.
  * Settings: Ctrl+Shift+S.
  */
 const { app, BrowserWindow, ipcMain, shell, Menu, globalShortcut, session } = require('electron');
@@ -18,7 +19,7 @@ const { loadRoots, verifyChain, pemsOf } = require('./certs');
 const path = require('node:path');
 const fs = require('node:fs');
 
-const DEFAULTS = { url: '', kiosk: false, autostart: true, silent: true, receiptPrinter: '', kitchenPrinter: '', paper: 80, autoUpdate: true };
+const DEFAULTS = { url: '', kiosk: false, autostart: true, silent: true, receiptPrinter: '', kitchenPrinter: '', paper: 80, autoUpdate: false, autoUpdateChosen: false };
 // New versions of this program: the latest release of the FLOWI repository (only programs are released there).
 const UPDATE_FEED = 'https://github.com/albusdumbledooree/albusdumbledooree/releases/latest/download';
 const cfgFile = () => path.join(app.getPath('userData'), 'config.json');
@@ -27,6 +28,8 @@ let win = null;
 
 function loadConfig() {
   try { cfg = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(cfgFile(), 'utf8')) }; } catch { cfg = { ...DEFAULTS }; }
+  // 1.1.0 saved "auto" on by itself; nobody chose it, so it is off until someone switches it on in the settings.
+  if (!cfg.autoUpdateChosen) cfg.autoUpdate = false;
 }
 function saveConfig(next) {
   cfg = { ...cfg, ...next };
@@ -134,8 +137,9 @@ ipcMain.handle('flowi:save', (e, next) => {
     url, kiosk: !!next.kiosk, autostart: !!next.autostart, silent: !!next.silent,
     receiptPrinter: String(next.receiptPrinter || ''), kitchenPrinter: String(next.kitchenPrinter || ''),
     autoUpdate: next.autoUpdate === undefined ? cfg.autoUpdate : !!next.autoUpdate,
+    autoUpdateChosen: next.autoUpdate === undefined ? cfg.autoUpdateChosen : true,
   });
-  if (updater) updater.autoDownload = !!cfg.autoUpdate;
+  if (updater) { updater.autoDownload = !!cfg.autoUpdate; updater.autoInstallOnAppQuit = !!cfg.autoUpdate; }
   applyKiosk();
   openSite();
   return { ok: true };
@@ -150,8 +154,9 @@ function setupUpdates() {
   if (!app.isPackaged) return; // a copy started from the source folder does not update itself
   try { ({ autoUpdater: updater } = require('electron-updater')); } catch { return; }
   updater.setFeedURL({ provider: 'generic', url: UPDATE_FEED });
+  // Only when the person asked for it: by default nothing is downloaded or installed on its own.
   updater.autoDownload = !!cfg.autoUpdate;
-  updater.autoInstallOnAppQuit = true; // a downloaded version goes in when the program is closed or the computer restarts
+  updater.autoInstallOnAppQuit = !!cfg.autoUpdate;
   updater.on('checking-for-update', () => Object.assign(upd, { state: 'checking', error: '' }));
   updater.on('update-not-available', () => Object.assign(upd, { state: 'none', checkedAt: Date.now() }));
   updater.on('update-available', (i) => Object.assign(upd, { state: cfg.autoUpdate ? 'downloading' : 'available', version: i.version, checkedAt: Date.now() }));

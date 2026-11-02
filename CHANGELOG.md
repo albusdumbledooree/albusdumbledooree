@@ -2,6 +2,12 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.23.1 — Yangilanish faqat xohlaganda; dostavchik "Olib ketish" orqali
+- **FLOWI Windows dasturi 1.1.1**: endi o'zi yangilanmaydi. Yangi versiya chiqsa, dastur sozlamalarida (Ctrl+Shift+S) ko'rinadi —
+  qulay paytda "Yuklab olish" va "Hozir yangilash" bosiladi. "Avtomatik yangilansin" belgisi o'chiq (xohlagan yoqadi).
+- Alohida "Yetkazib berish" bo'limi olib tashlandi: dostavchik ham **"Olib ketish"** (soboy) orqali avvalgidek chek uradi.
+  Lavozimi "Dostavchik" bo'lib qoladi; uning cheklari, summasi va sotgan taomlari hisobotda alohida ko'rinadi.
+
 ## 1.23.0 — Chekni o'chirish, dostavchik, xodim turlari, Windows dasturi o'zi yangilanadi
 - **Chekni o'chirish** (mijoz chiqib ketdi): Sozlamalar → Ruxsatlar → **"Chek o'chirish paroli"** (faqat boshliq qo'yadi).
   Parolni bilgan xodim taomli chekni sabab bilan o'chiradi; parol o'rnatilsa admin ham uni so'raydi.

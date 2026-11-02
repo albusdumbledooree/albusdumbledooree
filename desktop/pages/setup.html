@@ -43,7 +43,7 @@
     </div>
     <label class="check"><input type="checkbox" name="silent"><span>Chop etish oynasisiz chiqarish<small>Chek to'g'ridan-to'g'ri tanlangan printerga ketadi.</small></span></label>
     <label class="check"><input type="checkbox" name="autostart"><span>Kompyuter yoqilganda o'zi ochilsin</span></label>
-    <label class="check"><input type="checkbox" name="autoUpdate"><span>Dastur avtomatik yangilansin<small>Yangi versiya orqada yuklanadi va dastur keyingi ochilganda o'rnatiladi.</small></span></label>
+    <label class="check"><input type="checkbox" name="autoUpdate"><span>Dastur avtomatik yangilansin<small>O'chiq bo'lsa (tavsiya): yangi versiya chiqqanini shu yerda ko'rasiz va o'zingiz qulay paytda yangilaysiz.</small></span></label>
     <label class="check"><input type="checkbox" name="kiosk"><span>Kassa rejimi (doim to'liq ekran)<small>Xodim dasturdan tasodifan chiqib keta olmaydi. Sozlamalarga qaytish: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></small></span></label>
     <div class="actions">
       <button type="button" class="light" id="test">Sinov cheki</button>
@@ -69,7 +69,7 @@
   }
   document.getElementById('ver').textContent = 'versiya ' + s.version;
   f.url.value = (s.url || '').replace(/^https:\/\//, '');
-  f.silent.checked = s.silent; f.autostart.checked = s.autostart; f.kiosk.checked = s.kiosk; f.autoUpdate.checked = s.autoUpdate !== false;
+  f.silent.checked = s.silent; f.autostart.checked = s.autostart; f.kiosk.checked = s.kiosk; f.autoUpdate.checked = !!s.autoUpdate;
   var printers = [];
   try { printers = await D.printers(); } catch (e) { /* no printers */ }
   var opts = function (cur) {
@@ -110,7 +110,7 @@
     if (u.state === 'checking') text = 'Yangi versiya tekshirilmoqda…';
     else if (u.state === 'downloading') { text = 'Yangi versiya ' + u.version + ' yuklanmoqda — ' + u.percent + '%'; bar = '<div class="bar"><i style="width:' + u.percent + '%"></i></div>'; }
     else if (u.state === 'available') { text = 'Yangi versiya bor: ' + u.version; btn = '<button type="button" class="primary" data-u="download">Yuklab olish</button>'; }
-    else if (u.state === 'ready') { text = 'Yangi versiya ' + u.version + ' tayyor. Dastur keyingi ochilganda o\'rnatiladi.'; btn = '<button type="button" class="primary" data-u="install">Hozir yangilash</button>'; }
+    else if (u.state === 'ready') { text = 'Yangi versiya ' + u.version + ' yuklandi.' + (u.auto ? ' Dastur keyingi ochilganda o\'rnatiladi.' : ' Qulay paytda "Hozir yangilash" ni bosing.'); btn = '<button type="button" class="primary" data-u="install">Hozir yangilash</button>'; }
     else if (u.state === 'error') { text = "Yangilanishni tekshirib bo'lmadi: " + u.error; btn = '<button type="button" class="light" data-u="check">Qayta tekshirish</button>'; }
     else { text = u.state === 'none' ? 'Eng yangi versiya o\'rnatilgan' : 'Yangilanish'; btn = '<button type="button" class="light" data-u="check">Tekshirish</button>'; }
     box.className = 'upd' + (u.state === 'ready' ? ' ready' : '');
