@@ -258,7 +258,7 @@ function createWork(db, { settings, audit, events, now }) {
     const day = /^\d{4}-\d{2}-\d{2}$/.test(query.day || '') && query.day <= today() ? query.day : today();
     const s = settings();
     const start = hm(s.work_from);
-    const rows = q(`SELECT w.*, u.name, u.role FROM work_log w JOIN users u ON u.id = w.user_id WHERE w.day = ? ORDER BY w.in_at`).all(day);
+    const rows = q(`SELECT w.*, u.name, u.role, u.position FROM work_log w JOIN users u ON u.id = w.user_id WHERE w.day = ? ORDER BY w.in_at`).all(day);
     const seen = new Set();
     const entries = rows.map((e) => {
       let late = 0;
@@ -268,7 +268,7 @@ function createWork(db, { settings, audit, events, now }) {
       }
       if (e.status === 'ok') seen.add(e.user_id);
       const end = e.out_at || (day === today() && e.status === 'ok' ? now() : null);
-      return { id: e.id, user_id: e.user_id, name: e.name, role: e.role, in_at: e.in_at, out_at: e.out_at, in_how: e.in_how, out_how: e.out_how,
+      return { id: e.id, user_id: e.user_id, name: e.name, role: e.role, position: e.position || '', in_at: e.in_at, out_at: e.out_at, in_how: e.in_how, out_how: e.out_how,
         in_dist: e.in_dist, out_dist: e.out_dist, status: e.status, reason: e.reason, photo: !!e.photo_id, late,
         minutes: e.status === 'ok' && end ? Math.round((end - e.in_at) / MIN) : 0 };
     });

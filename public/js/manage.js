@@ -564,7 +564,7 @@ function workLogHtml(w) {
   const outName = { self: '', device: '', smena: t('smena yopildi'), auto: t('avtomatik'), manager: t('boshliq yopdi') };
   const row = (e) => `<div class="wl-row ${e.status}">
       ${e.photo ? `<button class="wl-photo" data-wphoto="${e.id}" title="${esc(t('Selfi'))}">${icon('camera', 18)}</button>` : `<span class="avatar ${e.role}">${esc(initials(e.name))}</span>`}
-      <div class="grow"><b>${esc(e.name)}</b> <span class="small muted">${roleName(e.role)}</span>
+      <div class="grow"><b>${esc(e.name)}</b> <span class="small muted">${esc(jobName(e))}</span>
         <div class="small">${e.in_how.split('+').filter(Boolean).map((h) => `<span class="chip">${esc(HOW_NAMES()[h] || h)}${h === 'gps' && e.in_dist != null ? ` ${e.in_dist} m` : ''}</span>`).join(' ')}
           ${e.status === 'pending' ? `<span class="chip orange">${t('tasdiq kutilmoqda')}</span>` : ''}${e.status === 'rejected' ? `<span class="chip red">${t('rad etildi')}</span>` : ''}
           ${e.reason ? `<span class="muted">${esc(e.reason)}</span>` : ''}</div></div>

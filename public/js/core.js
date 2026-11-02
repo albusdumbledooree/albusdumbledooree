@@ -103,6 +103,9 @@ const FLOWI_PATH = 'M0 4 199 4 199 54 62 54 62 120 183 120 183 169 62 169 62 262
 function flowiLogo(height = 22) {
   return `<svg class="flowi" viewBox="0 0 1280 267" height="${height}" role="img" aria-label="FLOWI"><path fill="currentColor" fill-rule="evenodd" d="${FLOWI_PATH}"/></svg>`;
 }
+// What a worker is called on screen: their job type ("Dostavchik", "Katta ofitsant") or the built-in role.
+function jobName(u) { return (u && u.position && u.app !== 0 ? u.position : roleName(u && u.role)); }
+
 function placeName(o) {
   if (o.delivery) return `${t('Yetkazish')} #${o.id}${o.label ? ` · ${o.label}` : ''}`;
   if (o.takeaway) return `${isShop() ? t('Sotuv') : t('Olib ketish')} #${o.id}${o.label ? ` · ${o.label}` : ''}`;
@@ -364,7 +367,7 @@ function bindStaffPay(form, onChange) {
     if (sel.options.length <= 1) {
       try {
         const list = await GET('/api/staff-list');
-        sel.innerHTML = `<option value="">${t('Xodimni tanlang')}</option>${list.map((u) => `<option value="${u.id}">${esc(u.name)} — ${roleName(u.role)}</option>`).join('')}`;
+        sel.innerHTML = `<option value="">${t('Xodimni tanlang')}</option>${list.map((u) => `<option value="${u.id}">${esc(u.name)} — ${esc(jobName(u))}</option>`).join('')}`;
       } catch (e) { toastError(e); }
     }
     if (onChange) onChange();

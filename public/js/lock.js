@@ -146,7 +146,7 @@ Views.lock = {
       ${iosHintHtml()}
       ${backup.state === 'prompt' ? `<div class="lock-note"><button class="btn sm" id="allow-backup">${icon('folder-open', 16)} ${t('Zaxira papkasiga ruxsat bering')}</button></div>` : ''}
       ${names ? `<div class="staff-grid">${staff.map((u) => `<button class="staff-tile ${u.role} ${u.has_pin ? '' : 'nopin'}" data-staff="${u.id}">
-          <span class="role">${roleName(u.role)}</span><b>${esc(u.name)}</b></button>`).join('')}</div>`
+          <span class="role">${esc(jobName(u))}</span><b>${esc(u.name)}</b></button>`).join('')}</div>`
         : `<div class="lock-actions"><button class="lock-btn" id="lock-enter">${icon('log-in', 22)} ${t('Kirish')}</button></div>`}
       <div class="lock-foot">${supportHtml()}<span class="grow"></span><span class="lock-brand">${flowiLogo(14)}${App.info && App.info.release ? `<small>v${esc(App.info.release)}</small>` : ''}</span></div>
     </div>`;
@@ -227,7 +227,7 @@ function pinDialog(u) {
   const form = openModal({
     title: '',
     body: `<div class="pin-box"><div class="pin-who"><span class="avatar ${u.role}">${esc(initials(u.name))}</span><b>${esc(u.name)}</b>
-      <span class="muted small">${roleName(u.role)}</span></div>
+      <span class="muted small">${esc(jobName(u))}</span></div>
       ${boss ? `<label class="field" style="width:100%">${t('Parol')}<input type="password" name="pin" autocomplete="off" required>
         <span class="small muted" style="font-weight:500">${t('Sozlamalarda qo\'yilgan kirish paroli')}</span></label>`
         : keypadHtml(4)}</div>`,

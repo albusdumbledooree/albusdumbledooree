@@ -283,7 +283,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const order = { owner: 0, admin: 1, cashier: 2, waiter: 3, chef: 4 };
     return q('SELECT * FROM users WHERE active = 1 AND app = 1').all()
       .sort((a, b) => order[a.role] - order[b.role] || a.name.localeCompare(b.name))
-      .map((u) => ({ id: u.id, name: u.name, role: u.role, has_pin: !!u.pin_hash || MANAGERS.includes(u.role),
+      .map((u) => ({ id: u.id, name: u.name, role: u.role, position: u.position || '', has_pin: !!u.pin_hash || MANAGERS.includes(u.role),
         open: !u.pin_hash && MANAGERS.includes(u.role) }));
   }
 
@@ -2217,7 +2217,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['GET', '/api/dishes/:id/recipe', MANAGERS, pro.getRecipe],
     ['PUT', '/api/dishes/:id/recipe', MANAGERS, pro.setRecipe],
     ['GET', '/api/branches', ['owner'], branchReport],
-    ['GET', '/api/staff-list', ['owner', 'admin', 'cashier'], () => q("SELECT id, name, role FROM users WHERE active = 1 AND role != 'owner' ORDER BY name").all()],
+    ['GET', '/api/staff-list', ['owner', 'admin', 'cashier'], () => q("SELECT id, name, role, position FROM users WHERE active = 1 AND role != 'owner' ORDER BY name").all()],
     ['POST', '/api/attendance', MANAGERS, payroll.setAttendance],
     ['POST', '/api/attendance/pay', MANAGERS, payDaily],
     ['GET', '/api/checks', MONEY, listChecks],

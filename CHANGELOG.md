@@ -2,6 +2,10 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.23.3 — Ish oynasida lavozim nomi
+- Ish oynasida (xodimni tanlash, PIN), xodim tanlash ro'yxatlarida va ish vaqti jurnalida endi xodimning lavozimi
+  ("Dostavchik", "Katta ofitsant") ko'rinadi, asosiy huquqi ("Ofitsant") emas.
+
 ## 1.23.2 — Windows 7 uchun to'liq o'rnatuvchi
 - Kichik o'rnatuvchi Windows 7/8 da "internet connection seems to be unavailable" deb to'xtardi: u dasturni GitHub'dan
   Windows'ning eski tarmoq qismi orqali yuklaydi, Windows 7 esa unda TLS 1.2 ni qo'llamaydi.
