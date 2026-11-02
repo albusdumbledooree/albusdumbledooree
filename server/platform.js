@@ -335,10 +335,14 @@ function createPlatform(dataDir) {
       const r = await res.json();
       if (!/^desktop-v/.test(r.tag_name || '')) return null;
       if (!force && pget('desktop_sent') === r.tag_name) return null;
-      const a = (r.assets || []).find((x) => /^FLOWI-Setup-.*\.exe$/i.test(x.name));
+      const a = (r.assets || []).find((x) => /^FLOWI-Setup-\d[^/]*\.exe$/i.test(x.name));
       if (!a) return null;
+      const full = (r.assets || []).find((x) => /^FLOWI-Setup-Full-.*\.exe$/i.test(x.name));
       const version = r.tag_name.replace(/^desktop-v/, '');
-      const caption = `🖥 <b>FLOWI Windows ${version}</b>\nYangi versiya. Mijozga shu faylni yuboring — ikki marta bosilsa o'rnatiladi (internet kerak).\nO'rnatilgan dasturlar o'zi yangilanadi.`;
+      // Windows 7/8 cannot run the small installer (it downloads over TLS 1.2): the full one goes as a link (too big for a bot).
+      const caption = `🖥 <b>FLOWI Windows ${version}</b>\nWindows 10/11: shu faylni mijozga yuboring — ikki marta bosilsa o'rnatiladi.`
+        + (full ? `\nWindows 7/8 uchun to'liq o'rnatuvchi (${Math.round(full.size / 1048576)} MB): ${full.browser_download_url}` : '')
+        + `\nO'rnatilgan dastur yangi versiyani sozlamalarida ko'rsatadi.`;
       if (a.size > 49 * 1024 * 1024) {
         await leads.sendTo(chat, `${caption}\n\nFayl ${Math.round(a.size / 1048576)} MB — Telegram'ga sig'maydi, havola: ${a.browser_download_url}`);
       } else {

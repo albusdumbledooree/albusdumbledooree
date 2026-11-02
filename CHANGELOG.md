@@ -2,6 +2,12 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.23.2 — Windows 7 uchun to'liq o'rnatuvchi
+- Kichik o'rnatuvchi Windows 7/8 da "internet connection seems to be unavailable" deb to'xtardi: u dasturni GitHub'dan
+  Windows'ning eski tarmoq qismi orqali yuklaydi, Windows 7 esa unda TLS 1.2 ni qo'llamaydi.
+  Endi har versiyada **FLOWI-Setup-Full-<versiya>.exe** ham bor — internetdan hech narsa yuklamaydi.
+  Botga keladigan xabarda Windows 7/8 uchun shu to'liq o'rnatuvchining havolasi ham bo'ladi.
+
 ## 1.23.1 — Yangilanish faqat xohlaganda; dostavchik "Olib ketish" orqali
 - **FLOWI Windows dasturi 1.1.1**: endi o'zi yangilanmaydi. Yangi versiya chiqsa, dastur sozlamalarida (Ctrl+Shift+S) ko'rinadi —
   qulay paytda "Yuklab olish" va "Hozir yangilash" bosiladi. "Avtomatik yangilansin" belgisi o'chiq (xohlagan yoqadi).

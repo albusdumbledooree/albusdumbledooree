@@ -2215,11 +2215,13 @@ test('a new FLOWI for Windows goes to the owner\'s Telegram as the installer fil
     await waitFor(async () => (await call('GET', '/api/platform/telegram', admin)).data.chat_id, 'linked');
     // A release without the installer: nothing goes.
     assert.equal(await server.platform.desktopTick(), null);
-    release = { tag_name: 'desktop-v1.1.0', assets: [{ name: 'FLOWI-Setup-1.1.0.exe', size: exe.length, browser_download_url: `${ghBase}/dl/FLOWI-Setup-1.1.0.exe` }, { name: 'latest.yml', size: 300, browser_download_url: `${ghBase}/dl/latest.yml` }] };
+    release = { tag_name: 'desktop-v1.1.0', assets: [{ name: 'FLOWI-Setup-Full-1.1.0.exe', size: 133 * 1048576, browser_download_url: 'https://example.invalid/FLOWI-Setup-Full-1.1.0.exe' },
+      { name: 'FLOWI-Setup-1.1.0.exe', size: exe.length, browser_download_url: `${ghBase}/dl/FLOWI-Setup-1.1.0.exe` }, { name: 'latest.yml', size: 300, browser_download_url: `${ghBase}/dl/latest.yml` }] };
     let before = sent.length;
     assert.deepEqual(await server.platform.desktopTick(), { sent: 'desktop-v1.1.0', version: '1.1.0' });
     const doc = sent.slice(before).find((m) => m.method === 'sendDocument');
     assert.ok(doc && doc.body.includes('FLOWI-Setup-1.1.0.exe') && doc.body.includes('MZ fake web installer') && doc.body.includes('FLOWI Windows 1.1.0'));
+    assert.ok(doc.body.includes('Windows 7/8') && doc.body.includes('example.invalid/FLOWI-Setup-Full-1.1.0.exe'), 'the full installer goes as a link');
     // Once per version; the button sends it again.
     assert.equal(await server.platform.desktopTick(), null);
     assert.equal((await call('POST', '/api/platform/desktop/send', admin)).data.version, '1.1.0');
