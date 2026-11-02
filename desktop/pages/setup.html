@@ -24,6 +24,10 @@
   .msg { margin-top: 14px; font-size: 14px; min-height: 20px; } .msg.err { color: var(--red); } .msg.ok { color: var(--green); }
   .hint { background: #f4f6f9; border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--muted); margin-top: 18px; }
   kbd { background: #fff; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; font: 12px/1.6 Consolas, monospace; color: #111827; }
+  .upd { margin-top: 18px; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .upd .grow { flex: 1 1 220px; min-width: 0; } .upd b { display: block; } .upd small { color: var(--muted); }
+  .upd .bar { height: 6px; background: #eef1f6; border-radius: 4px; overflow: hidden; margin-top: 6px; } .upd .bar i { display: block; height: 100%; background: var(--blue); }
+  .upd.ready { border-color: var(--green); background: #effaf3; }
   @media (max-width: 560px) { .row { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -39,6 +43,7 @@
     </div>
     <label class="check"><input type="checkbox" name="silent"><span>Chop etish oynasisiz chiqarish<small>Chek to'g'ridan-to'g'ri tanlangan printerga ketadi.</small></span></label>
     <label class="check"><input type="checkbox" name="autostart"><span>Kompyuter yoqilganda o'zi ochilsin</span></label>
+    <label class="check"><input type="checkbox" name="autoUpdate"><span>Dastur avtomatik yangilansin<small>Yangi versiya orqada yuklanadi va dastur keyingi ochilganda o'rnatiladi.</small></span></label>
     <label class="check"><input type="checkbox" name="kiosk"><span>Kassa rejimi (doim to'liq ekran)<small>Xodim dasturdan tasodifan chiqib keta olmaydi. Sozlamalarga qaytish: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></small></span></label>
     <div class="actions">
       <button type="button" class="light" id="test">Sinov cheki</button>
@@ -47,6 +52,7 @@
     </div>
     <div class="msg" id="msg"></div>
   </form>
+  <div class="upd" id="upd" hidden></div>
   <div class="hint">Tugmalar: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> — shu sozlamalar · <kbd>F11</kbd> — to'liq ekran · <kbd>F5</kbd> — yangilash · <span id="ver"></span></div>
 </main>
 <script>
@@ -63,7 +69,7 @@
   }
   document.getElementById('ver').textContent = 'versiya ' + s.version;
   f.url.value = (s.url || '').replace(/^https:\/\//, '');
-  f.silent.checked = s.silent; f.autostart.checked = s.autostart; f.kiosk.checked = s.kiosk;
+  f.silent.checked = s.silent; f.autostart.checked = s.autostart; f.kiosk.checked = s.kiosk; f.autoUpdate.checked = s.autoUpdate !== false;
   var printers = [];
   try { printers = await D.printers(); } catch (e) { /* no printers */ }
   var opts = function (cur) {
@@ -75,7 +81,7 @@
   f.kitchenPrinter.innerHTML = opts(s.kitchenPrinter);
   if (!printers.length) msg("Bu kompyuterda printer topilmadi. Printerni Windows'ga o'rnatib, dasturni qayta oching.", 'err');
 
-  var data = function () { return { url: f.url.value, receiptPrinter: f.receiptPrinter.value, kitchenPrinter: f.kitchenPrinter.value, silent: f.silent.checked, autostart: f.autostart.checked, kiosk: f.kiosk.checked }; };
+  var data = function () { return { url: f.url.value, receiptPrinter: f.receiptPrinter.value, kitchenPrinter: f.kitchenPrinter.value, silent: f.silent.checked, autostart: f.autostart.checked, kiosk: f.kiosk.checked, autoUpdate: f.autoUpdate.checked }; };
   f.onsubmit = async function (e) {
     e.preventDefault();
     msg('Saqlanmoqda…');
@@ -92,6 +98,35 @@
     msg(r.ok ? "Yuborildi — printerni tekshiring." : 'Chop etilmadi: ' + (r.error || ''), r.ok ? 'ok' : 'err');
   };
   if (!f.url.value) f.url.focus();
+
+  // ---------- Updates of the program ----------
+  var box = document.getElementById('upd');
+  var act = null;
+  async function drawUpdate() {
+    var u = await D.updateState();
+    if (!u || !u.enabled) { box.hidden = true; return; }
+    box.hidden = false;
+    var text = '', btn = '', bar = '';
+    if (u.state === 'checking') text = 'Yangi versiya tekshirilmoqda…';
+    else if (u.state === 'downloading') { text = 'Yangi versiya ' + u.version + ' yuklanmoqda — ' + u.percent + '%'; bar = '<div class="bar"><i style="width:' + u.percent + '%"></i></div>'; }
+    else if (u.state === 'available') { text = 'Yangi versiya bor: ' + u.version; btn = '<button type="button" class="primary" data-u="download">Yuklab olish</button>'; }
+    else if (u.state === 'ready') { text = 'Yangi versiya ' + u.version + ' tayyor. Dastur keyingi ochilganda o\'rnatiladi.'; btn = '<button type="button" class="primary" data-u="install">Hozir yangilash</button>'; }
+    else if (u.state === 'error') { text = "Yangilanishni tekshirib bo'lmadi: " + u.error; btn = '<button type="button" class="light" data-u="check">Qayta tekshirish</button>'; }
+    else { text = u.state === 'none' ? 'Eng yangi versiya o\'rnatilgan' : 'Yangilanish'; btn = '<button type="button" class="light" data-u="check">Tekshirish</button>'; }
+    box.className = 'upd' + (u.state === 'ready' ? ' ready' : '');
+    box.innerHTML = '<div class="grow"><b>' + text.replace(/</g, '&lt;') + '</b><small>Hozirgi versiya: ' + u.current + (u.auto ? ' · avtomatik yangilanadi' : '') + '</small>' + bar + '</div>' + btn;
+    var b = box.querySelector('[data-u]');
+    if (b) b.onclick = async function () {
+      b.disabled = true;
+      var k = b.dataset.u;
+      var r = k === 'install' ? await D.updateInstall() : k === 'download' ? await D.updateDownload() : await D.updateCheck();
+      if (r && r.ok === false && r.error) msg(r.error, 'err');
+      drawUpdate();
+    };
+  }
+  drawUpdate();
+  act = setInterval(drawUpdate, 1500);
+  window.addEventListener('beforeunload', function () { clearInterval(act); });
 }());
 </script>
 </body>

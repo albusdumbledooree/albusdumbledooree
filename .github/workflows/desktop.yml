@@ -1,5 +1,7 @@
-# FLOWI for Windows: builds FLOWI-Setup-<version>.exe on a Windows machine of GitHub
-# and puts it on the "Releases" page of this repository (and as a downloadable artifact of the run).
+# FLOWI for Windows: builds the program on a Windows machine of GitHub and puts it on the "Releases" page:
+#  - FLOWI-Setup-<version>.exe — a small web installer (under Telegram's 50 MB, so the FLOWI server sends it to the bot);
+#  - flowi-desktop-<version>-x64.nsis.7z / -ia32.nsis.7z — the program itself, fetched by the installer for the computer;
+#  - latest.yml — what installed programs read to update themselves (…/releases/latest/download/latest.yml).
 # Runs when the desktop program changes, or by hand (Actions → "FLOWI Windows dasturi" → Run workflow).
 name: FLOWI Windows dasturi
 
@@ -31,12 +33,15 @@ jobs:
       - name: O'rnatish
         run: npm install --no-audit --no-fund
       - name: .exe yasash
-        run: npx electron-builder --win nsis --x64 --ia32 --publish never
+        run: npx electron-builder --win nsis-web --x64 --ia32 --publish never
       - name: Fayl (Actions sahifasida)
         uses: actions/upload-artifact@v4
         with:
           name: FLOWI-Setup-${{ steps.v.outputs.version }}
-          path: desktop/dist/*.exe
+          path: |
+            desktop/dist/nsis-web/*.exe
+            desktop/dist/nsis-web/*.7z
+            desktop/dist/nsis-web/latest.yml
           if-no-files-found: error
       - name: Releases sahifasiga
         uses: softprops/action-gh-release@v2
@@ -46,5 +51,10 @@ jobs:
           target_commitish: ${{ github.sha }}
           body: |
             FLOWI — kassa kompyuteri uchun dastur (Windows 7/8/10/11, 32 va 64-bit).
-            FLOWI-Setup-${{ steps.v.outputs.version }}.exe ni yuklab oling va ikki marta bosing.
-          files: desktop/dist/*.exe
+            FLOWI-Setup-${{ steps.v.outputs.version }}.exe ni yuklab oling va ikki marta bosing (internet kerak: dastur shu yerdan yuklanadi).
+            O'rnatilgan dasturlar o'zi yangilanadi.
+          make_latest: true
+          files: |
+            desktop/dist/nsis-web/*.exe
+            desktop/dist/nsis-web/*.7z
+            desktop/dist/nsis-web/latest.yml

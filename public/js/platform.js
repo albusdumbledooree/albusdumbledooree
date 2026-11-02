@@ -282,6 +282,9 @@ async function telegramDialog() {
           ${st.backup && st.backup.at ? `<br>Oxirgi: <b>${fmtDateTime(st.backup.at)}</b> — ${st.backup.sent} ta fayl` : ''}</p>
         ${st.backup && st.backup.error ? `<div class="notice red slim">${icon('triangle-alert', 16)} ${esc(st.backup.error)}</div>` : ''}
         <button type="button" class="btn sm" id="tg-backup-now" style="margin-top:8px">${icon('database', 16)} Hozir yuborish</button></div>
+      <div class="card" style="margin-top:10px"><b>${icon('monitor-smartphone', 16)} FLOWI Windows dasturi</b>
+        <p class="small muted" style="margin:6px 0 0">Yangi versiya chiqishi bilan o'rnatuvchi fayl (FLOWI-Setup.exe) shu chatga o'zi keladi — mijozga shuni yuborasiz.</p>
+        <button type="button" class="btn sm" id="tg-desktop-now" style="margin-top:8px">${icon('download', 16)} Oxirgi versiyani hozir yuborish</button></div>
       ${st.error ? `<div class="notice red">${icon('triangle-alert', 16)} ${esc(st.error)}</div>` : ''}`;
   const form = openModal({
     title: `${icon('send')} Telegram bot — arizalar`,
@@ -300,6 +303,12 @@ async function telegramDialog() {
   });
   const bk = form.querySelector('#tg-backup');
   if (bk) bk.onchange = async () => { try { await PUT('/api/platform/telegram/backup', { on: bk.checked }); toast(bk.checked ? 'Yoqildi' : "O'chirildi", 'ok'); } catch (e) { toastError(e); } };
+  const dn = form.querySelector('#tg-desktop-now');
+  if (dn) dn.onclick = async () => {
+    dn.disabled = true;
+    try { const r = await POST('/api/platform/desktop/send'); toast(`Yuborildi: FLOWI Windows ${r.version}`, 'ok'); } catch (e) { toastError(e); }
+    dn.disabled = false;
+  };
   const bn = form.querySelector('#tg-backup-now');
   if (bn) bn.onclick = async () => {
     bn.disabled = true;

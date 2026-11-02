@@ -320,7 +320,43 @@ function createPlatform(dataDir) {
       }
     } finally { tgBusy = false; }
   }
+  // ---------- A new FLOWI for Windows → the platform owner's Telegram, as the installer file itself ----------
+  // GitHub builds the program (desktop/); its latest release holds the small web installer FLOWI-Setup-<v>.exe.
+  // Telegram takes files from bots up to 50 MB: a bigger one goes as a link.
+  const releasesApi = () => process.env.FLOWI_RELEASES_API || 'https://api.github.com/repos/albusdumbledooree/albusdumbledooree/releases/latest';
+  let desktopBusy = false;
+  async function desktopTick({ force = false } = {}) {
+    const chat = leads.ownerChat();
+    if (desktopBusy || !chat || !leads.ready()) return null;
+    desktopBusy = true;
+    try {
+      const res = await fetch(releasesApi(), { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'FLOWI' }, signal: AbortSignal.timeout(20_000) });
+      if (!res.ok) return null;
+      const r = await res.json();
+      if (!/^desktop-v/.test(r.tag_name || '')) return null;
+      if (!force && pget('desktop_sent') === r.tag_name) return null;
+      const a = (r.assets || []).find((x) => /^FLOWI-Setup-.*\.exe$/i.test(x.name));
+      if (!a) return null;
+      const version = r.tag_name.replace(/^desktop-v/, '');
+      const caption = `🖥 <b>FLOWI Windows ${version}</b>\nYangi versiya. Mijozga shu faylni yuboring — ikki marta bosilsa o'rnatiladi (internet kerak).\nO'rnatilgan dasturlar o'zi yangilanadi.`;
+      if (a.size > 49 * 1024 * 1024) {
+        await leads.sendTo(chat, `${caption}\n\nFayl ${Math.round(a.size / 1048576)} MB — Telegram'ga sig'maydi, havola: ${a.browser_download_url}`);
+      } else {
+        const f = await fetch(a.browser_download_url, { headers: { 'User-Agent': 'FLOWI' }, signal: AbortSignal.timeout(120_000) });
+        if (!f.ok) return null;
+        await leads.sendFile(chat, a.name, Buffer.from(await f.arrayBuffer()), caption);
+      }
+      pset('desktop_sent', r.tag_name);
+      return { sent: r.tag_name, version };
+    } catch (e) {
+      console.error(`FLOWI Windows → Telegram: ${e.message}`);
+      return null;
+    } finally { desktopBusy = false; }
+  }
   const remindTimer = setInterval(() => { remindTick().catch(() => {}); tgBackupTick().catch(() => {}); }, 5 * 60 * 1000);
+  const desktopTimer = setInterval(() => { desktopTick().catch(() => {}); }, 60 * 60 * 1000);
+  const desktopFirst = setTimeout(() => { desktopTick().catch(() => {}); }, 2 * 60 * 1000);
+  desktopTimer.unref(); desktopFirst.unref();
   remindTimer.unref();
 
   // ---------- Every night a copy of every business goes to the platform owner's Telegram ----------
@@ -824,6 +860,13 @@ function createPlatform(dataDir) {
     ['PUT', '/api/platform/settings', true, savePlatformSettings],
     ['GET', '/api/platform/types', true, () => BUSINESS_TYPES],
     ['GET', '/api/platform/changelog', true, changelog],
+    // The latest FLOWI for Windows to the owner's Telegram now (again, even if it went before).
+    ['POST', '/api/platform/desktop/send', true, async () => {
+      if (!leads.ownerChat()) throw new HttpError(400, 'Avval botni chatga ulang');
+      const r = await desktopTick({ force: true });
+      if (!r) throw new HttpError(502, "Dasturni olib bo'lmadi — keyinroq urinib ko'ring");
+      return r;
+    }],
     // A business's Telegram from the platform: who gets its reports, a link to send to its owner, the report time.
     ['GET', '/api/platform/tenants/:id/telegram', true, ({ params }) => tenantTg(params.id).status()],
     ['POST', '/api/platform/tenants/:id/telegram/link', true, ({ params }) => tenantTg(params.id).link()],
@@ -861,11 +904,13 @@ function createPlatform(dataDir) {
   function close() {
     leads.stop();
     clearInterval(remindTimer);
+    clearInterval(desktopTimer);
+    clearTimeout(desktopFirst);
     for (const c of contexts.values()) c.db.close();
     pdb.close();
   }
 
-  return { handle, byCode, byToken, byGuestKey, remindTick, tgBackupTick, sendBackups, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, seoVerify, submitLead: leads.submit };
+  return { handle, byCode, byToken, byGuestKey, remindTick, tgBackupTick, sendBackups, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, seoVerify, desktopTick, submitLead: leads.submit };
 }
 
 module.exports = { createPlatform };

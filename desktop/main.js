@@ -9,14 +9,18 @@
  * - receipts and kitchen tickets print with no print dialog, to the printer chosen for each (USB / Windows printers);
  * - an optional full-screen "cash desk" mode the staff cannot leave by accident;
  * - when the internet drops: a clear page that reconnects by itself.
- * Settings: Ctrl+Shift+S (or the tray-less menu key F10).
+ * - updates of the program itself: checked on GitHub, downloaded in the background, installed on the next start
+ *   (or at once with the button in the settings); "Avtomatik yangilansin" can be switched off.
+ * Settings: Ctrl+Shift+S.
  */
 const { app, BrowserWindow, ipcMain, shell, Menu, globalShortcut, session } = require('electron');
 const { loadRoots, verifyChain, pemsOf } = require('./certs');
 const path = require('node:path');
 const fs = require('node:fs');
 
-const DEFAULTS = { url: '', kiosk: false, autostart: true, silent: true, receiptPrinter: '', kitchenPrinter: '', paper: 80 };
+const DEFAULTS = { url: '', kiosk: false, autostart: true, silent: true, receiptPrinter: '', kitchenPrinter: '', paper: 80, autoUpdate: true };
+// New versions of this program: the latest release of the FLOWI repository (only programs are released there).
+const UPDATE_FEED = 'https://github.com/albusdumbledooree/albusdumbledooree/releases/latest/download';
 const cfgFile = () => path.join(app.getPath('userData'), 'config.json');
 let cfg = { ...DEFAULTS };
 let win = null;
@@ -129,12 +133,49 @@ ipcMain.handle('flowi:save', (e, next) => {
   saveConfig({
     url, kiosk: !!next.kiosk, autostart: !!next.autostart, silent: !!next.silent,
     receiptPrinter: String(next.receiptPrinter || ''), kitchenPrinter: String(next.kitchenPrinter || ''),
+    autoUpdate: next.autoUpdate === undefined ? cfg.autoUpdate : !!next.autoUpdate,
   });
+  if (updater) updater.autoDownload = !!cfg.autoUpdate;
   applyKiosk();
   openSite();
   return { ok: true };
 });
 ipcMain.handle('flowi:open', (e) => { if (fromLocal(e)) openSite(); });
+
+// ---------- Updates of the program itself ----------
+// state: idle | checking | none | available | downloading | ready | error
+const upd = { state: 'idle', version: '', percent: 0, error: '', checkedAt: 0 };
+let updater = null;
+function setupUpdates() {
+  if (!app.isPackaged) return; // a copy started from the source folder does not update itself
+  try { ({ autoUpdater: updater } = require('electron-updater')); } catch { return; }
+  updater.setFeedURL({ provider: 'generic', url: UPDATE_FEED });
+  updater.autoDownload = !!cfg.autoUpdate;
+  updater.autoInstallOnAppQuit = true; // a downloaded version goes in when the program is closed or the computer restarts
+  updater.on('checking-for-update', () => Object.assign(upd, { state: 'checking', error: '' }));
+  updater.on('update-not-available', () => Object.assign(upd, { state: 'none', checkedAt: Date.now() }));
+  updater.on('update-available', (i) => Object.assign(upd, { state: cfg.autoUpdate ? 'downloading' : 'available', version: i.version, checkedAt: Date.now() }));
+  updater.on('download-progress', (p) => Object.assign(upd, { state: 'downloading', percent: Math.round(p.percent || 0) }));
+  updater.on('update-downloaded', (i) => Object.assign(upd, { state: 'ready', version: i.version, percent: 100 }));
+  updater.on('error', (err) => Object.assign(upd, { state: 'error', error: String((err && err.message) || err).slice(0, 200) }));
+  const check = () => updater.checkForUpdates().catch(() => {});
+  setTimeout(check, 20_000);
+  setInterval(check, 4 * 3600_000);
+}
+ipcMain.handle('flowi:update-state', (e) => (fromLocal(e) ? { ...upd, current: app.getVersion(), auto: !!cfg.autoUpdate, enabled: !!updater } : null));
+ipcMain.handle('flowi:update-check', async (e) => {
+  if (!fromLocal(e) || !updater) return { ok: false };
+  try { await updater.checkForUpdates(); return { ok: true }; } catch (err) { return { ok: false, error: String(err.message || err) }; }
+});
+ipcMain.handle('flowi:update-download', async (e) => {
+  if (!fromLocal(e) || !updater) return { ok: false };
+  try { upd.state = 'downloading'; await updater.downloadUpdate(); return { ok: true }; } catch (err) { return { ok: false, error: String(err.message || err) }; }
+});
+ipcMain.handle('flowi:update-install', (e) => {
+  if (!fromLocal(e) || !updater || upd.state !== 'ready') return { ok: false };
+  setImmediate(() => updater.quitAndInstall(true, true)); // quietly, then FLOWI opens again
+  return { ok: true };
+});
 
 // ---------- Windows 7/8 without the Let's Encrypt root ----------
 // Only for the business's own address, and only when Windows did not know the root: the program checks the chain itself.
@@ -161,6 +202,7 @@ if (!app.requestSingleInstanceLock()) {
     if (!fs.existsSync(cfgFile())) saveConfig({}); // first start: starts with Windows from now on
     trustLetsEncrypt();
     createWindow();
+    setupUpdates();
   });
   app.on('window-all-closed', () => app.quit());
   app.on('will-quit', () => globalShortcut.unregisterAll());

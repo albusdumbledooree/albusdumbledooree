@@ -13,4 +13,8 @@ contextBridge.exposeInMainWorld('flowiDesktop', {
   printers: () => ipcRenderer.invoke('flowi:printers'),
   save: (cfg) => ipcRenderer.invoke('flowi:save', cfg),
   open: () => ipcRenderer.invoke('flowi:open'),
+  updateState: () => ipcRenderer.invoke('flowi:update-state'),
+  updateCheck: () => ipcRenderer.invoke('flowi:update-check'),
+  updateDownload: () => ipcRenderer.invoke('flowi:update-download'),
+  updateInstall: () => ipcRenderer.invoke('flowi:update-install'),
 });

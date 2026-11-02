@@ -32,6 +32,8 @@ function localDay(n = 0) {
 }
 
 test.before(async () => {
+  // Tests never reach the real GitHub: the new-program check points nowhere unless a test sets it.
+  process.env.FLOWI_RELEASES_API = 'http://127.0.0.1:9/none';
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'choyxona-test-'));
   server = createServer({ dataDir });
   server.dataDir = dataDir;
@@ -2177,4 +2179,63 @@ test('deleting a check the guest left: the boss\'s delete password, who deleted 
   // Taking the password off.
   assert.equal((await call('PUT', '/api/settings', boss, { delete_code: '' })).data.has_delete_code, false);
   void kassir;
+});
+
+test('a new FLOWI for Windows goes to the owner\'s Telegram as the installer file, once per version', async () => {
+  const http = require('node:http');
+  const sent = []; const updates = [];
+  const exe = Buffer.from('MZ fake web installer');
+  let release = { tag_name: 'desktop-v1.1.0', assets: [] };
+  const gh = http.createServer((req, res) => {
+    if (req.url === '/release') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(release)); }
+    if (req.url.startsWith('/dl/')) { res.writeHead(200); return res.end(exe); }
+    res.writeHead(404); res.end();
+  });
+  const tg = http.createServer((req, res) => {
+    const chunks = []; req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      const method = req.url.split('/').pop(); const raw = Buffer.concat(chunks);
+      const ok = (result) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, result })); };
+      if (method === 'getMe') return ok({ username: 'flowi_bot' });
+      if (method === 'getUpdates') return setTimeout(() => ok(updates.splice(0)), 80);
+      if (method === 'sendMessage' || method === 'sendDocument') { sent.push({ method, body: raw.toString('latin1') }); return ok({ message_id: sent.length }); }
+      return ok(true);
+    });
+  });
+  await new Promise((r) => gh.listen(0, r)); await new Promise((r) => tg.listen(0, r));
+  const ghBase = `http://127.0.0.1:${gh.address().port}`;
+  process.env.FLOWI_RELEASES_API = `${ghBase}/release`;
+  process.env.TELEGRAM_API = `http://127.0.0.1:${tg.address().port}`;
+  const waitFor = async (fn, what) => { for (let i = 0; i < 100; i++) { const v = await fn(); if (v) return v; await new Promise((r) => setTimeout(r, 50)); } throw new Error(what); };
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  try {
+    assert.equal((await call('POST', '/api/platform/desktop/send', admin)).status, 400, 'no chat yet');
+    const st = (await call('PUT', '/api/platform/telegram', admin, { token: '123456:ABCdefGHIjklMNOpqrSTUvwxYZ_12345' })).data;
+    updates.push({ update_id: 1, message: { message_id: 1, chat: { id: 777, type: 'private', first_name: 'Ega' }, text: `/start ${st.link_code}` } });
+    await waitFor(async () => (await call('GET', '/api/platform/telegram', admin)).data.chat_id, 'linked');
+    // A release without the installer: nothing goes.
+    assert.equal(await server.platform.desktopTick(), null);
+    release = { tag_name: 'desktop-v1.1.0', assets: [{ name: 'FLOWI-Setup-1.1.0.exe', size: exe.length, browser_download_url: `${ghBase}/dl/FLOWI-Setup-1.1.0.exe` }, { name: 'latest.yml', size: 300, browser_download_url: `${ghBase}/dl/latest.yml` }] };
+    let before = sent.length;
+    assert.deepEqual(await server.platform.desktopTick(), { sent: 'desktop-v1.1.0', version: '1.1.0' });
+    const doc = sent.slice(before).find((m) => m.method === 'sendDocument');
+    assert.ok(doc && doc.body.includes('FLOWI-Setup-1.1.0.exe') && doc.body.includes('MZ fake web installer') && doc.body.includes('FLOWI Windows 1.1.0'));
+    // Once per version; the button sends it again.
+    assert.equal(await server.platform.desktopTick(), null);
+    assert.equal((await call('POST', '/api/platform/desktop/send', admin)).data.version, '1.1.0');
+    // Too big for a bot: the link instead.
+    release = { tag_name: 'desktop-v1.2.0', assets: [{ name: 'FLOWI-Setup-1.2.0.exe', size: 133 * 1048576, browser_download_url: 'https://example.invalid/FLOWI-Setup-1.2.0.exe' }] };
+    before = sent.length;
+    await server.platform.desktopTick();
+    const msg = sent.slice(before)[0];
+    assert.equal(msg.method, 'sendMessage'); assert.match(msg.body, /example\.invalid\/FLOWI-Setup-1\.2\.0\.exe/);
+    // Other releases (not the Windows program) are not sent.
+    release = { tag_name: 'v9.9.9', assets: [{ name: 'FLOWI-Setup-9.exe', size: 10, browser_download_url: `${ghBase}/dl/x` }] };
+    assert.equal(await server.platform.desktopTick(), null);
+  } finally {
+    await call('DELETE', '/api/platform/telegram', admin);
+    process.env.FLOWI_RELEASES_API = 'http://127.0.0.1:9/none';
+    delete process.env.TELEGRAM_API;
+    gh.close(); tg.close();
+  }
 });
