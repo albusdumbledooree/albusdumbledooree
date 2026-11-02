@@ -137,6 +137,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     for (const k of ['perm_admin_reports', 'perm_admin_finance', 'perm_cashier_reports', 'perm_cashier_finance', 'finance_lock']) out[k] = out[k] === '1';
     out.has_finance_code = !!out.finance_code_hash;
     delete out.finance_code_hash;
+    out.has_delete_code = !!out.delete_code_hash;
+    delete out.delete_code_hash;
     out.receipt_logo = out.receipt_logo !== '0';
     out.receipt_logo_id = out.receipt_logo_id ? Number(out.receipt_logo_id) : null;
     out.staff_meal_price = out.staff_meal_price === 'cost' ? 'cost' : 'menu';
@@ -427,6 +429,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const sellers = st.staff.filter((x) => x.revenue).slice(0, 5);
     if (sellers.length) out.push('', `👤 ${SHOP_TYPES.includes(businessType()) ? 'Sotuvchilar' : 'Ofitsantlar'}: ${sellers.map((x) => `${esc(x.name)} ${shop.money(x.revenue)} (${x.checks})`).join(', ')}`);
     if (st.suspicious_count) out.push(`🔎 Shubhali holatlar: <b>${st.suspicious_count} ta</b> — dasturda Hisobot → Shubhali`);
+    const del = stats.deleted(t0, now());
+    if (del.count) out.push(`🗑 O'chirilgan cheklar: <b>${del.count} ta — ${m(del.total)}</b> (${del.rows.map((r) => `${esc(r.room_name)}: ${esc(r.deleted_by || '')}`).join(', ')})`);
     if (n.open_checks) out.push('', `⚠️ Ochiq cheklar: ${n.open_checks} ta — ${m(n.open_sum)}`);
     const due = money.fixedDue();
     if (due.length) out.push('', `💳 To'lanmagan: ${due.map((x) => `${esc(x.name)} ${shop.money(x.amount)}`).join(', ')}`);
@@ -487,6 +491,14 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     for (const k of allowed) {
       if (body[k] === undefined) continue;
       let v = body[k];
+      // The password that deletes a check with dishes on it (the guest left); '' takes it off.
+      if (k === 'delete_code') {
+        const code = String(v ?? '');
+        if (!code) { q("DELETE FROM settings WHERE key = 'delete_code_hash'").run(); continue; }
+        if (!/^\d{4,8}$/.test(code)) throw new HttpError(400, "Chek o'chirish paroli 4–8 ta raqam bo'lsin");
+        set.run('delete_code_hash', hashPassword(code));
+        continue;
+      }
       if (k === 'finance_code') {
         const code = String(v);
         if (code.length < 4 || code.length > 32) throw new HttpError(400, "Moliya paroli 4–32 belgidan iborat bo'lsin");
@@ -553,12 +565,12 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       throw new HttpError(400, 'Avval moliya parolini kiriting');
     }
     cleanAssets();
-    audit(user, 'settings_update', { ...body, cancel_code: body.cancel_code ? '***' : undefined, finance_code: body.finance_code ? '***' : undefined });
+    audit(user, 'settings_update', { ...body, cancel_code: body.cancel_code ? '***' : undefined, finance_code: body.finance_code ? '***' : undefined, delete_code: body.delete_code ? '***' : undefined });
     events.publish('settings');
     return settings();
   }
 
-  const OWNER_SETTINGS = ['perm_admin_reports', 'perm_admin_finance', 'perm_cashier_reports', 'perm_cashier_finance', 'finance_lock', 'finance_code'];
+  const OWNER_SETTINGS = ['perm_admin_reports', 'perm_admin_finance', 'perm_cashier_reports', 'perm_cashier_finance', 'finance_lock', 'finance_code', 'delete_code'];
 
   // Room types: the boss renames them or adds new ones. Keys of types still used by a room cannot disappear.
   function roomTypesInput(v) {
@@ -1480,18 +1492,35 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const o = getOrderRow(params.id);
     if (o.status !== 'open') throw new HttpError(400, 'Buyurtma yopilgan');
     const live = q("SELECT COUNT(*) c FROM order_items WHERE order_id = ? AND status != 'cancelled'").get(o.id).c;
-    if (live && !MANAGERS.includes(user.role)) throw new HttpError(403, "Taomli buyurtmani faqat ega yoki admin bekor qiladi");
     if (user.role === 'waiter') assertOrderAccess(user, o);
+    // A check with dishes: the boss deletes it; when the boss has set a "delete password", anyone who knows it can,
+    // and then even an admin needs it. Nothing is erased: the check stays in the reports with who deleted it.
+    const codeHash = (q("SELECT value FROM settings WHERE key = 'delete_code_hash'").get() || {}).value;
+    if (live && user.role !== 'owner') {
+      if (codeHash) {
+        const key = `delete|${user.id}`;
+        const f = pinFailures.get(key);
+        if (f && f.count >= 5 && now() - f.first < 5 * MIN) throw new HttpError(429, "Juda ko'p xato. 5 daqiqadan keyin urinib ko'ring");
+        if (!verifyPassword(String(body.code ?? ''), codeHash)) {
+          pinFailures.set(key, !f || now() - f.first >= 5 * MIN ? { count: 1, first: now() } : { ...f, count: f.count + 1 });
+          throw new HttpError(403, "Chek o'chirish paroli noto'g'ri");
+        }
+        pinFailures.delete(key);
+      } else if (!MANAGERS.includes(user.role)) throw new HttpError(403, "Taomli buyurtmani faqat ega yoki admin bekor qiladi");
+    }
     const reason = str(body.reason, 'Sabab', { max: 200, required: live > 0 });
+    let what = '';
     tx(() => {
       const items = q("SELECT * FROM order_items WHERE order_id = ? AND status != 'cancelled'").all(o.id);
+      what = items.map((i) => `${i.name}×${i.qty}`).join(', ').slice(0, 300);
+      q('UPDATE orders SET cancelled_by = ?, cancel_total = ? WHERE id = ?').run(user.id, items.reduce((s, i) => s + i.price * i.qty, 0), o.id);
       for (const it of items) {
         if (it.dish_id) q('UPDATE dishes SET stock = stock + ?, available = 1 WHERE id = ? AND stock IS NOT NULL').run(it.qty, it.dish_id);
       }
       q("UPDATE order_items SET status = 'cancelled', cancel_reason = ? WHERE order_id = ? AND status != 'cancelled'").run(reason, o.id);
       q("UPDATE orders SET status = 'cancelled', closed_at = ?, cancel_reason = ? WHERE id = ?").run(now(), reason, o.id);
     });
-    audit(user, 'order_cancel', `#${o.id} ${reason}`);
+    audit(user, 'order_cancel', `#${o.id} ${reason}${what ? ` — ${what}` : ''}`);
     events.publish('rooms');
     events.publish('kitchen');
     return { ok: true };
@@ -1535,6 +1564,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const limit = Math.min(Number(query.limit) || 100, 500);
     const offset = Math.max(Number(query.offset) || 0, 0);
     const rows = q(`SELECT o.*, r.name room_name, r.number room_number, w.name waiter_name, c.name cashier_name, cu.name customer_name, cu.phone customer_phone,
+      (SELECT name FROM users WHERE id = o.cancelled_by) cancelled_by_name,
       (SELECT COALESCE(SUM(qty), 0) FROM order_items i WHERE i.order_id = o.id AND i.status != 'cancelled') items_count
       ${CHECK_FROM} WHERE ${where} ORDER BY ${query.status === 'unpaid' ? 'COALESCE(o.due_at, o.closed_at), o.id' : 'o.closed_at DESC, o.id DESC'} LIMIT ? OFFSET ?`).all(...params, limit, offset);
     const sums = q(`SELECT COUNT(*) count, COALESCE(SUM(o.total), 0) total, COALESCE(SUM(o.subtotal), 0) subtotal,

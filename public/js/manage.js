@@ -223,7 +223,7 @@ Views.history = {
             <td class="small">${fmtTime(o.opened_at)} → ${fmtDateTime(o.closed_at)}</td>
             <td>${o.takeaway ? `${icon(isShop() ? 'shopping-cart' : 'shopping-bag', 15)} ${esc(o.customer_name || o.label || (isShop() ? t('Sotuv') : t('Olib ketish')))}` : `${esc(o.room_number)} · ${esc(o.room_name)}`}</td>
             <td>${esc(o.waiter_name)}</td><td class="right">${o.guests}</td>
-            <td class="small">${cancelled ? esc(o.cancel_reason || '—') : ['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => icon(METHOD_ICONS[m], 16)).join(' ')}
+            <td class="small">${cancelled ? `${esc(o.cancel_reason || '—')}${o.cancelled_by_name ? ` <span class="muted">· ${icon('trash-2', 12)} ${esc(o.cancelled_by_name)}${o.cancel_total ? ` · ${num(o.cancel_total)}` : ''}</span>` : ''}` : ['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => icon(METHOD_ICONS[m], 16)).join(' ')}
               ${o.balance > 0 ? `<span class="chip ${o.due_at && o.due_at < Date.now() ? 'red' : 'orange'}" title="${o.due_at ? esc(t("To'lash sanasi")) + ': ' + fmtDate(o.due_at) : ''}">${t('Qoldi')} ${num(o.balance)}${o.due_at ? ` · ${fmtDate(o.due_at)}` : ''}</span>` : ''}</td>
             <td class="right num"><b>${num(o.total)}</b></td></tr>`).join('')}
         </table></div>
@@ -1676,7 +1676,11 @@ Views.settings = {
         <span class="small muted">${t("Umumiy qurilmada shuncha daqiqa hech narsa bosilmasa, xodimlar ro'yxatiga qaytadi. 0 — o'chiq.")}</span></div>
         <input type="number" name="auto_lock_minutes" min="0" max="240" value="${s.auto_lock_minutes}" style="max-width:110px"></div>
       <p class="small muted" style="margin-top:10px">${icon('info', 14)} ${t("Har bir xodimning chek chiqarish va chek yopish huquqi: Xodimlar bo'limida.")}</p>
-      ${can('owner') ? `<h3 style="margin:22px 0 4px">${icon('eye-off', 18)} ${t("Moliya bo'limlari")}</h3>
+      ${can('owner') ? `<div class="switch-row"><span style="color:var(--red)">${icon('trash-2', 24)}</span><div class="grow"><b>${t("Chek o'chirish paroli")}</b>
+        <span class="small muted">${t("Mijoz chiqib ketsa, taom urilgan chekni o'chirish uchun. Parolni bilgan xodim (kassir, ofitsant) o'chira oladi; o'rnatilsa, admin ham parol so'raydi. Hamma o'chirilgan cheklar Hisobot → O'chirilgan bo'limida qoladi.")}
+          ${s.has_delete_code ? `<br><b>${t("Parol o'rnatilgan.")}</b> <a href="#" id="del-code-off">${t("Olib tashlash")}</a>` : ''}</span></div>
+        <input name="delete_code" inputmode="numeric" placeholder="4–8 ${esc(t('raqam'))}" style="max-width:160px" autocomplete="off"></div>
+      <h3 style="margin:22px 0 4px">${icon('eye-off', 18)} ${t("Moliya bo'limlari")}</h3>
       <p class="small muted">${t("Hisobot, kirim-chiqim va ish haqini kim ko'rishini siz belgilaysiz. Ish haqini faqat boshliq ko'radi.")}</p>
       ${[['perm_admin_reports', 'shield-check', t('Admin hisobotni ko\'ra oladi')], ['perm_admin_finance', 'shield-check', t('Admin kirim-chiqimni ko\'ra oladi')],
         ['perm_cashier_reports', 'wallet', t('Kassir hisobotni ko\'ra oladi')], ['perm_cashier_finance', 'wallet', t('Kassir kirim-chiqimni ko\'ra oladi')]]
@@ -1691,11 +1695,18 @@ Views.settings = {
   },
   bind_rights(root) {
     const f = root.querySelector('#rights-form');
+    const off = root.querySelector('#del-code-off');
+    if (off) off.onclick = async (e) => {
+      e.preventDefault();
+      if (!(await confirmModal(t("Chek o'chirish paroli"), t("Parol olib tashlansinmi? Shundan keyin taomli chekni faqat boshliq va admin o'chira oladi."), t('Olib tashlash')))) return;
+      try { App.settings = await PUT('/api/settings', { delete_code: '' }); toast(t('Saqlandi'), 'ok'); refreshView(); } catch (err) { toastError(err); }
+    };
     f.onsubmit = async (e) => {
       e.preventDefault();
       const d = formData(f);
       if (!d.cancel_code) delete d.cancel_code;
       if (!d.finance_code) delete d.finance_code;
+      if (!d.delete_code) delete d.delete_code;
       if (d.waiter_cancel && !App.settings.has_cancel_code && !d.cancel_code) return toast(t('Bekor qilish kodini kiriting'), 'warn');
       if (d.finance_lock && !App.settings.has_finance_code && !d.finance_code) return toast(t('Moliya parolini kiriting'), 'warn');
       try {

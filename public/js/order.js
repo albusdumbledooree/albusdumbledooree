@@ -414,7 +414,8 @@ function moreActions(d) {
   if (can('owner', 'admin', 'cashier')) acts.push(['transfer', 'arrow-right-left', t("Boshqa xonaga ko'chirish")]);
   const live = order.items.filter((i) => i.status !== 'cancelled').length;
   if (live && (App.printers || []).length) acts.push(['reprint', 'printer', t('Oshxonaga qayta chop etish')]);
-  if (can('owner', 'admin') || (!live && App.user.role !== 'chef')) acts.push(['cancel', 'trash-2', t('Chekni bekor qilish')]);
+  // With dishes: the boss, an admin (no password set), or anyone who knows the boss's "delete password".
+  if (can('owner', 'admin') || (!live && App.user.role !== 'chef') || (live && App.settings.has_delete_code && App.user.role !== 'chef')) acts.push(['cancel', 'trash-2', t("Chekni o'chirish")]);
   const form = openModal({
     title: `${icon('list')} ${t('Chek')} #${order.id}`,
     body: acts.length ? `<div class="stack">${acts.map(([k, ic, n]) => `<button type="button" class="btn lg block ${k === 'cancel' ? 'red-text' : ''}" data-act="${k}" style="justify-content:flex-start">${icon(ic)} ${n}</button>`).join('')}</div>`
@@ -443,11 +444,36 @@ function moreActions(d) {
           } catch (e) { toastError(e); }
         }) });
     } else {
-      const reason = await promptModal(t('Chekni bekor qilish'), live ? t('Sabab (majburiy)') : t('Sabab'), { required: live > 0 });
-      if (reason === null) return;
-      try { await POST(`/api/orders/${order.id}/cancel`, { reason }); toast(t('Chek bekor qilindi'), 'warn'); location.hash = '#/rooms'; } catch (e) { toastError(e); }
+      deleteOrderDialog(order, live);
     }
   });
+}
+
+// Deleting a check (the guest left, written by mistake): a reason, and the boss's delete password when one is set.
+// Nothing is erased: the check leaves the room and the sales, and stays in Hisobot → O'chirilgan.
+function deleteOrderDialog(order, live) {
+  const needCode = live > 0 && App.settings.has_delete_code && App.user.role !== 'owner';
+  const sum = order.items.filter((i) => i.status !== 'cancelled').reduce((s, i) => s + i.price * i.qty, 0);
+  const REASONS = [t('Mijoz chiqib ketdi'), t('Xato urildi'), t('Mijoz bekor qildi')];
+  let pad;
+  const form = openModal({
+    title: `${icon('trash-2')} ${t("Chekni o'chirish")} — ${esc(placeName(order))}`,
+    body: `${live ? `<p class="lead" style="margin-top:0">${t('{0} ta taom', live)} · <b>${money(sum)}</b></p>` : ''}
+      <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:8px">${REASONS.map((r) => `<button type="button" class="btn sm" data-reason="${esc(r)}">${esc(r)}</button>`).join('')}</div>
+      <label class="field">${live ? t('Sabab (majburiy)') : t('Sabab')}<input name="reason"></label>
+      ${needCode ? `<p class="small muted" style="margin:14px 0 6px">${t("Boshliq bergan chek o'chirish paroli")}</p><div class="pin-box">${keypadHtml(8)}</div>` : ''}
+      <p class="small muted" style="margin-top:12px">${icon('info', 14)} ${t("Chek savdodan chiqadi, lekin Hisobot → O'chirilgan bo'limida kim urgan, kim o'chirgani bilan doim ko'rinib turadi.")}</p>`,
+    actions: [{ label: t('Orqaga') }, { label: t("O'chirish"), cls: 'danger', icon: 'trash-2', onClick: async (f) => {
+      const reason = f.reason.value.trim();
+      if (live && !reason) { toast(t('Sababni yozing'), 'warn'); return false; }
+      if (needCode && !pad.get()) { toast(t('Parolni kiriting'), 'warn'); return false; }
+      await POST(`/api/orders/${order.id}/cancel`, { reason, code: needCode ? pad.get() : undefined });
+      toast(t("Chek o'chirildi"), 'warn');
+      location.hash = '#/rooms';
+    } }],
+  });
+  form.querySelectorAll('[data-reason]').forEach((b) => b.onclick = () => { form.reason.value = b.dataset.reason; });
+  if (needCode) pad = bindKeypad(form, { maxLen: 8 });
 }
 
 // ---------- Payment: large and clean, the check in the same order as it was written ----------

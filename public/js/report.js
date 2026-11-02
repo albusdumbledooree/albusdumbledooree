@@ -10,7 +10,7 @@
  */
 UI.rep = UI.rep || { tab: 'general', user: '' };
 const REP_TABS = () => [['general', 'chart-column', t('Umumiy')], ['dishes', 'utensils', W('Taomlar')], ['staff', 'users', t('Xodimlar')],
-  ['shifts', 'wallet', t('Smenalar')], ['alerts', 'triangle-alert', t('Shubhali')]];
+  ['shifts', 'wallet', t('Smenalar')], ['deleted', 'trash-2', t("O'chirilgan")], ['alerts', 'triangle-alert', t('Shubhali')]];
 const SUS_NAMES = () => ({
   after_print: t('Chek chop etilgandan keyin taom olib tashlangan'), cooked_cancel: t('Tayyor taom bekor qilingan'),
   discount: t('Katta chegirma'), long_open: t('Chek juda uzoq ochiq turgan'), order_cancel: t('Butun chek bekor qilingan'), shortage: t('Kassada kamomad'),
@@ -69,6 +69,20 @@ function alertsHtml(rows) {
     <p class="small muted">${icon('info', 14)} ${t("Bu ro'yxat ayblov emas — shunchaki qarab chiqishga arziydigan holatlar. Chek raqamini bosing: kim, qachon, nima qilgani ko'rinadi.")}</p>`;
 }
 
+// Checks deleted with dishes on them: the room, what was written and by whom, who deleted it, when and why.
+function deletedHtml(d) {
+  if (!d || !d.count) return `<div class="card">${emptyState('shield-check', t("Bu davrda o'chirilgan chek yo'q"))}</div>`;
+  return `<div class="kpis">${kpi(t("O'chirilgan cheklar"), d.count, '', '', 'trash-2')}${kpi(t('Summasi'), money(d.total), '', d.total ? 'warn' : '', 'banknote')}</div>
+    <div class="card fx-list">${d.rows.map((r) => `<div class="fx-row del-row">
+      <div class="fx-name"><b>${esc(r.room_name)} · #${r.id}</b>
+        <span class="small">${r.items.map((i) => `${esc(i.name)} × ${i.qty}`).join(', ')}</span>
+        <span class="small muted">${icon('user-round', 12)} ${t('Urgan')}: ${esc(r.waiter_name)} · ${icon('trash-2', 12)} ${t("O'chirgan")}: <b>${esc(r.deleted_by || '—')}</b> · ${fmtDateTime(r.closed_at)}</span>
+        ${r.reason ? `<span class="small muted">${icon('message-square', 12)} ${esc(r.reason)}</span>` : ''}</div>
+      <b class="num">${money(r.total)}</b>
+      <div><button class="btn sm" data-story="${r.id}">${icon('history', 14)} ${t('Tarix')}</button></div></div>`).join('')}</div>
+    <p class="small muted">${icon('info', 14)} ${t("O'chirilgan cheklar savdoga kirmaydi, lekin bu yerda doim qoladi.")}</p>`;
+}
+
 Views.reports = {
   title: () => t('Hisobot'), icon: () => 'chart-column', roles: ['owner', 'admin', 'cashier'], refreshOn: ['finance', 'rooms'], module: 'reports', on: () => !!App.money.reports,
   async load() {
@@ -80,7 +94,7 @@ Views.reports = {
   render(d) {
     const s = d.stats.summary;
     const tab = UI.rep.tab;
-    const tabs = REP_TABS().map(([k, ic, n]) => `<button class="${tab === k ? 'active' : ''}" data-rtab="${k}">${icon(ic, 16)} ${n}${k === 'alerts' && d.stats.suspicious_count ? ` <span class="badge">${d.stats.suspicious_count}</span>` : ''}</button>`).join('');
+    const tabs = REP_TABS().map(([k, ic, n]) => `<button class="${tab === k ? 'active' : ''}" data-rtab="${k}">${icon(ic, 16)} ${n}${k === 'alerts' && d.stats.suspicious_count ? ` <span class="badge">${d.stats.suspicious_count}</span>` : ''}${k === 'deleted' && d.stats.deleted && d.stats.deleted.count ? ` <span class="badge">${d.stats.deleted.count}</span>` : ''}</button>`).join('');
     const who = `<label class="rep-who">${icon('user-round', 16)}<select id="rep-user"><option value="">${t('Hamma xodimlar')}</option>
       ${d.staff.map((u) => `<option value="${u.id}" ${String(UI.rep.user) === String(u.id) ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select></label>`;
     let body = '';
@@ -108,6 +122,7 @@ Views.reports = {
         ${categoriesHtml(d.stats.categories, d.stats.categories.reduce((x, c) => x + c.revenue, 0))}`;
     } else if (tab === 'staff') body = staffCards(d.stats.staff, UI.period.preset === 'today' ? t('bugun') : t('shu davrda'));
     else if (tab === 'shifts') body = shiftsHtml(d.stats.shifts);
+    else if (tab === 'deleted') body = deletedHtml(d.stats.deleted);
     else body = alertsHtml(d.stats.suspicious);
     return `<div class="page-head"><a class="btn sm" href="#/money">${icon('arrow-left', 16)}</a><h1>${t('Hisobot')}</h1>
         ${moduleOn('export') ? `<button class="btn" id="csv">${icon('file-spreadsheet', 18)}<span class="hide-sm"> Excel</span></button>` : ''}</div>

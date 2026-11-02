@@ -2132,3 +2132,49 @@ test('search engines: Uzbek and Russian front pages, the site map, robots, verif
   await call('PUT', '/api/platform/settings', admin, { google_verify: '', yandex_verify: '' });
   assert.ok(!/google-site-verification/.test(await (await get('/')).text()));
 });
+
+test('deleting a check the guest left: the boss\'s delete password, who deleted it and what was on it stay in the reports', async () => {
+  const boss = await login('ega', 'ega123', 'demo');
+  const jasur = await login('jasur', '1234', 'demo');
+  const kassir = (await call('GET', '/api/users', boss)).data.find((u) => u.role === 'cashier');
+  const me = (await call('GET', '/api/me', jasur)).data;
+  const rooms = (await call('GET', '/api/rooms', jasur)).data;
+  const room = rooms.find((r) => (r.waiters || []).some((w) => w.id === me.user.id) && !r.order);
+  const menu = (await call('GET', '/api/menu', jasur)).data;
+  const osh = menu.dishes.find((d) => /Osh/.test(d.name));
+  const o = (await call('POST', '/api/orders', jasur, { room_id: room.id })).data;
+  await call('POST', `/api/orders/${o.id}/items`, jasur, { items: [{ dish_id: osh.id, qty: 2 }] });
+  // No password set: a waiter cannot delete a check with dishes.
+  assert.equal((await call('POST', `/api/orders/${o.id}/cancel`, jasur, { reason: 'Mijoz chiqib ketdi' })).status, 403);
+  // The boss sets the password (only the boss may).
+  const admin = (await call('GET', '/api/users', boss)).data.find((u) => u.role === 'admin');
+  assert.equal((await call('PUT', '/api/settings', boss, { delete_code: '12ab' })).status, 400);
+  assert.equal((await call('PUT', '/api/settings', boss, { delete_code: '4321' })).data.has_delete_code, true);
+  assert.ok(!JSON.stringify((await call('GET', '/api/me', boss)).data.settings).includes('delete_code_hash'));
+  // Wrong password, then the right one.
+  assert.equal((await call('POST', `/api/orders/${o.id}/cancel`, jasur, { reason: 'Mijoz chiqib ketdi', code: '1111' })).status, 403);
+  assert.equal((await call('POST', `/api/orders/${o.id}/cancel`, jasur, { reason: '', code: '4321' })).status, 400, 'a reason is needed');
+  assert.equal((await call('POST', `/api/orders/${o.id}/cancel`, jasur, { reason: 'Mijoz chiqib ketdi', code: '4321' })).status, 200);
+  // It is gone from the room and the sales, and kept with who and what.
+  assert.ok(!(await call('GET', '/api/rooms', jasur)).data.find((r) => r.id === room.id).order);
+  const day0 = new Date(); day0.setHours(0, 0, 0, 0);
+  const st = (await call('GET', `/api/stats?from=${day0.getTime()}&to=${day0.getTime() + 864e5}`, boss)).data;
+  const row = st.deleted.rows.find((r) => r.id === o.id);
+  assert.equal(row.total, osh.price * 2); assert.equal(row.deleted_by, me.user.name); assert.equal(row.waiter_name, me.user.name);
+  assert.deepEqual(row.items, [{ name: osh.name, qty: 2, price: osh.price }]); assert.equal(row.reason, 'Mijoz chiqib ketdi');
+  const checks = (await call('GET', `/api/checks?status=cancelled&from=${day0.getTime()}&to=${day0.getTime() + 864e5}`, boss)).data;
+  assert.equal(checks.rows.find((r) => r.id === o.id).cancelled_by_name, me.user.name);
+  assert.ok(!(await call('GET', `/api/checks?status=closed&from=${day0.getTime()}&to=${day0.getTime() + 864e5}`, boss)).data.rows.some((r) => r.id === o.id));
+  // With the password set, even an admin needs it; the boss does not.
+  const o2 = (await call('POST', '/api/orders', boss, { room_id: room.id })).data;
+  await call('POST', `/api/orders/${o2.id}/items`, boss, { items: [{ dish_id: osh.id, qty: 1 }] });
+  if (admin) {
+    await call('PUT', `/api/users/${admin.id}`, boss, { password: 'admin12345' });
+    const adm = await login(admin.username, 'admin12345', 'demo');
+    assert.equal((await call('POST', `/api/orders/${o2.id}/cancel`, adm, { reason: 'Xato urildi' })).status, 403);
+  }
+  assert.equal((await call('POST', `/api/orders/${o2.id}/cancel`, boss, { reason: 'Xato urildi' })).status, 200);
+  // Taking the password off.
+  assert.equal((await call('PUT', '/api/settings', boss, { delete_code: '' })).data.has_delete_code, false);
+  void kassir;
+});

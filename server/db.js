@@ -754,6 +754,9 @@ CREATE INDEX IF NOT EXISTS idx_work_day ON work_log(day, user_id);
     created_at INTEGER NOT NULL
   )`);
   addCol('transactions', 'fixed_month', 'TEXT');
+  // A deleted check (the guest left): who deleted it and what was on it; it stays in the reports.
+  addCol('orders', 'cancelled_by', 'INTEGER');
+  addCol('orders', 'cancel_total', 'INTEGER NOT NULL DEFAULT 0');
   // Door shop: a sale with an advance (bosh to'lov). balance = what is still owed on this very check, due_at = when.
   if (!colsOf('orders').includes('balance')) {
     db.exec(`ALTER TABLE orders ADD COLUMN balance INTEGER NOT NULL DEFAULT 0;

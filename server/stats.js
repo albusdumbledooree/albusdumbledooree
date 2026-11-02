@@ -155,6 +155,18 @@ function createStats(db, { now }) {
   }
 
   // ---------- Handlers ----------
+  // Checks deleted with dishes on them (the guest left): what was on each, who wrote it, who deleted it and why.
+  function deleted(from, to, userId) {
+    const rows = q(`SELECT o.id, o.closed_at, o.opened_at, o.cancel_reason reason, o.cancel_total total, o.waiter_id, o.cancelled_by,
+        r.name room_name, w.name waiter_name, d.name deleted_by
+      FROM orders o JOIN rooms r ON r.id = o.room_id JOIN users w ON w.id = o.waiter_id LEFT JOIN users d ON d.id = o.cancelled_by
+      WHERE o.status = 'cancelled' AND o.cancel_total > 0 AND o.closed_at >= ? AND o.closed_at < ?
+      ${userId ? 'AND (o.waiter_id = ? OR o.cancelled_by = ?)' : ''} ORDER BY o.closed_at DESC`).all(from, to, ...(userId ? [userId, userId] : []));
+    const items = rows.length ? q(`SELECT order_id, name, qty, price FROM order_items WHERE order_id IN (${rows.map(() => '?').join(',')}) ORDER BY id`).all(...rows.map((r) => r.id)) : [];
+    for (const r of rows) r.items = items.filter((i) => i.order_id === r.id).map(({ name, qty, price }) => ({ name, qty, price }));
+    return { count: rows.length, total: rows.reduce((s, r) => s + r.total, 0), rows };
+  }
+
   function overview({ query }) {
     const { from, to } = range(query);
     const userId = userInput(query.user);
@@ -169,6 +181,7 @@ function createStats(db, { now }) {
       staff: staff(from, to, all.orders).filter((r) => !userId || r.id === userId),
       shifts: shifts(from, to, userId),
       suspicious: sus, suspicious_count: sus.filter((x) => x.level !== 'low').length,
+      deleted: deleted(from, to, userId),
     };
   }
 
@@ -217,7 +230,7 @@ function createStats(db, { now }) {
       status: o.status, total: o.total, guests: o.guests, discount: o.discount }, events: ev };
   }
 
-  return { overview, person, orderStory };
+  return { overview, person, orderStory, deleted };
 }
 
 module.exports = { createStats };
