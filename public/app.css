@@ -1033,3 +1033,8 @@ details.ver summary .grow { flex: 1 1 200px; min-width: 0; }
 .pay-mode button { flex: 1 1 0; justify-content: center; gap: 6px; }
 .adv-box { padding: 10px; border: 1px dashed var(--orange); border-radius: var(--radius); background: var(--orange-soft); }
 .adv-sep { border-top: 1px dashed var(--line); margin: 6px 0 2px; }
+
+/* ---------- Staff types ---------- */
+.type-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 220px) auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+@media (max-width: 560px) { .type-row { grid-template-columns: minmax(0, 1fr) auto; } .type-row select { grid-column: 1; grid-row: 2; } }
+.tile.add.delivery { border-color: var(--blue); color: var(--blue); background: var(--blue-soft); }

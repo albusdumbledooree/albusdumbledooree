@@ -407,7 +407,10 @@ Views.finance = {
 const MONTHS = () => [t('Yanvar'), t('Fevral'), t('Mart'), t('Aprel'), t('May'), t('Iyun'), t('Iyul'), t('Avgust'), t('Sentabr'), t('Oktabr'), t('Noyabr'), t('Dekabr')];
 const PAY_TYPES = () => ({ monthly: t('Oylik'), daily: t('Kunlik'), hourly: t('Soatbay'), none: t('Faqat foiz') });
 // A worker's job: the role for program users, the job title for those who never open it (a baker, a guard).
-const staffJob = (u) => (u.app === 0 ? (u.position || t('Dasturga kirmaydi')) : roleName(u.role));
+const staffJob = (u) => u.position || (u.app === 0 ? t('Dasturga kirmaydi') : roleName(u.role));
+// The business's own staff types (a name over built-in rights); a courier is a waiter with deliveries.
+const staffTypes = () => (Array.isArray(App.settings.staff_types) ? App.settings.staff_types : []);
+const typeBase = (ty) => (ty.delivery ? t('Dostavchik (yetkazib berish)') : roleName(ty.role));
 const JOB_TITLES = () => [t('Tandirchi'), t('Somsapaz'), t('Kabobchi'), t('Oshpaz yordamchisi'), t('Idish yuvuvchi'), t('Farrosh'), t('Qorovul'), t('Haydovchi'), t('Ombor mudiri')];
 const ENTRY_TYPES = () => ({ payment: [t("To'lov"), 'served', 'banknote'], advance: [t('Avans'), 'served', 'wallet'], bonus: [t('Bonus'), 'ready', 'gift'],
   fine: [t('Jarima'), 'red', 'triangle-alert'], deduction: [t('Xodim xarajati'), 'red', 'utensils'] });
@@ -1179,13 +1182,13 @@ Views.staff = {
   render({ users }) {
     const order = ['owner', 'admin', 'cashier', 'waiter', 'chef'];
     const pl = App.plan;
-    return `<div class="page-head"><h1>${t('Xodimlar')}</h1>${viewOn('attendance') ? `<a class="btn" href="#/attendance">${icon('calendar', 18)} ${t('Davomat')}</a>` : ''}${pl && pl.max_staff > 0 ? `<span class="chip ${pl.staff_used >= pl.max_staff ? 'red' : ''}" title="${esc(t('Tarif'))}: ${esc(pl.name)}">${icon('users', 14)} ${pl.staff_used}/${pl.max_staff}</span>` : ''}<button class="btn primary" id="add">${icon('plus', 18)} ${t('Xodim')}</button></div>
+    return `<div class="page-head"><h1>${t('Xodimlar')}</h1>${viewOn('attendance') ? `<a class="btn" href="#/attendance">${icon('calendar', 18)} ${t('Davomat')}</a>` : ''}${pl && pl.max_staff > 0 ? `<span class="chip ${pl.staff_used >= pl.max_staff ? 'red' : ''}" title="${esc(t('Tarif'))}: ${esc(pl.name)}">${icon('users', 14)} ${pl.staff_used}/${pl.max_staff}</span>` : ''}${can('owner', 'admin') ? `<button class="btn" id="types">${icon('users', 18)} ${t('Lavozimlar')}</button>` : ''}<button class="btn primary" id="add">${icon('plus', 18)} ${t('Xodim')}</button></div>
       <div class="card"><div class="table-wrap"><table>
       ${[...order.flatMap((role) => users.filter((u) => u.role === role && u.app !== 0)), ...users.filter((u) => u.app === 0)].map((u) => u.app === 0 ? `<tr style="${u.active ? '' : 'opacity:.5'}" class="${canEditRole('chef') ? 'clickable' : ''}" data-edit="${u.id}">
         <td><div class="row" style="flex-wrap:nowrap"><span class="avatar">${esc(initials(u.name))}</span><div><b>${esc(u.name)}</b><br><span class="small muted">${icon('user-round', 13)} ${esc(staffJob(u))}</span></div></div></td>
         <td colspan="3"><span class="chip">${t('Dasturga kirmaydi')}</span></td>
         <td class="actions">${u.active ? '' : `<span class="chip">${t('Bloklangan')}</span>`} ${icon('chevron-right', 18)}</td></tr>` : `<tr style="${u.active ? '' : 'opacity:.5'}" class="${canEditRole(u.role) ? 'clickable' : ''}" data-edit="${u.id}">
-        <td><div class="row" style="flex-wrap:nowrap"><span class="avatar ${u.role}">${esc(initials(u.name))}</span><div><b>${esc(u.name)}</b><br><span class="small muted">${icon(ROLE_ICONS[u.role], 13)} ${roleName(u.role)}</span></div></div></td>
+        <td><div class="row" style="flex-wrap:nowrap"><span class="avatar ${u.role}">${esc(initials(u.name))}</span><div><b>${esc(u.name)}</b><br><span class="small muted">${icon(u.delivery ? 'truck' : ROLE_ICONS[u.role], 13)} ${esc(u.position && u.app !== 0 ? u.position : roleName(u.role))}</span></div></div></td>
         <td>${u.has_pin ? `<span class="chip green">${icon('key-round', 14)} PIN</span>` : `<span class="chip red">${icon('key-round', 14)} ${t("PIN yo'q")}</span>`}</td>
         <td>${u.perms.print ? `<span class="chip" title="${esc(t('Chek chiqaradi'))}">${icon('printer', 14)}</span>` : ''} ${u.perms.close ? `<span class="chip" title="${esc(t('Chek yopadi'))}">${icon('wallet', 14)}</span>` : ''}</td>
         <td class="small muted">${u.role === 'waiter' && !sellsAtCounter() ? (u.rooms.map((r) => esc(r.number)).join(', ') || '—') : ''}</td>
@@ -1200,7 +1203,11 @@ Views.staff = {
     const DEF = { cashier: [1, 1], waiter: [1, 0], chef: [0, 0] };
     const edit = (u = {}) => {
       const roles = ['owner', 'admin', 'cashier', 'waiter', 'chef'].filter((r) => canEditRole(r) && !(isShop() && r === 'chef'));
+      const types = staffTypes().map((ty, i) => ({ ...ty, i })).filter((ty) => canEditRole(ty.role) && !(isShop() && ty.role === 'chef'));
+      const curType = types.find((ty) => ty.name === u.position && ty.role === u.role && !!ty.delivery === !!u.delivery);
       const role = u.role || 'waiter';
+      // "type:2" → the rights of that type; a plain role → itself.
+      const baseRole = (v) => (String(v).startsWith('type:') ? staffTypes()[Number(String(v).slice(5))].role : v);
       const boss = (r) => r === 'owner' || r === 'admin';
       // New workers get their pay right away (the boss), so the month's costs are complete.
       const withPay = !u.id && can('owner') && moduleOn('payroll');
@@ -1214,7 +1221,8 @@ Views.staff = {
           <label class="field">${t("To'liq ism")}<input name="name" value="${esc(u.name || '')}" required></label>
           <label class="field" id="pos-f">${t('Lavozimi')}<input name="position" list="job-titles" value="${esc(u.position || '')}" placeholder="${esc(t('Masalan: Tandirchi'))}">
             <datalist id="job-titles">${JOB_TITLES().map((x) => `<option value="${esc(x)}">`).join('')}</datalist></label>
-          <label class="field">${t('Lavozim')}<select name="role">${roles.map((r) => `<option value="${r}" ${role === r ? 'selected' : ''}>${roleName(r)}</option>`).join('')}</select></label>
+          <label class="field">${t('Lavozim')}<select name="role">${roles.map((r) => `<option value="${r}" ${!curType && role === r ? 'selected' : ''}>${roleName(r)}</option>`).join('')}
+            ${types.length ? `<optgroup label="${esc(t('Sizning lavozimlaringiz'))}">${types.map((ty) => `<option value="type:${ty.i}" ${curType && curType.i === ty.i ? 'selected' : ''}>${esc(ty.name)} (${esc(typeBase(ty))})</option>`).join('')}</optgroup>` : ''}</select></label>
           <label class="field" id="pin-f"><span id="pin-label"></span><input name="pin" inputmode="numeric" autocomplete="off" placeholder="${u.id ? esc(t("O'zgartirish uchun yozing")) : ''}"></label>
           <label class="field">${t('Telefon')}<input name="phone" type="tel" value="${esc(u.phone || '')}"></label></div>
           ${withPay ? `<h3 style="margin:14px 0 8px">${icon('hand-coins', 18)} ${t('Maosh')}</h3><div class="form-grid">
@@ -1238,6 +1246,11 @@ Views.staff = {
             if (withPay && pay.amount) await PUT(`/api/payroll/rates/${saved.id}`, { pay_type: pay.pay_type, amount: pay.amount, sales_pct: 0 });
             toast(t('Saqlandi'), 'ok'); refreshView(); return;
           }
+          // A staff type: its rights, its name as the job title, deliveries for a courier.
+          if (String(d.role).startsWith('type:')) {
+            const ty = staffTypes()[Number(d.role.slice(5))];
+            Object.assign(d, { role: ty.role, position: ty.name, delivery: !!ty.delivery });
+          } else Object.assign(d, { position: '', delivery: false });
           if (!d.pin) delete d.pin;
           if (!d.password) delete d.password;
           if (!d.username) delete d.username;
@@ -1246,12 +1259,12 @@ Views.staff = {
           if (!u.id && !d.pin) { toast(t('PIN kiriting'), 'warn'); return false; }
           if (u.id && u.app === 0 && !d.pin) { toast(t('Dasturga kirishi uchun PIN kiriting'), 'warn'); return false; }
           const saved = u.id ? await PUT(`/api/users/${u.id}`, d) : await POST('/api/users', d);
-          if (withPay && pay.amount && !boss(d.role)) await PUT(`/api/payroll/rates/${saved.id}`, { pay_type: pay.pay_type, amount: pay.amount, sales_pct: 0 });
+          if (withPay && pay.amount && !boss(baseRole(d.role))) await PUT(`/api/payroll/rates/${saved.id}`, { pay_type: pay.pay_type, amount: pay.amount, sales_pct: 0 });
           toast(t('Saqlandi'), 'ok'); refreshView();
         } }],
       });
       const sync = () => {
-        const r = form.role.value;
+        const r = baseRole(form.role.value);
         const noApp = form.app.value === '0';
         form.querySelector('#pin-label').textContent = boss(r) ? t('Parol (4–32 belgi)') : t('PIN (1–4 raqam)');
         form.pin.inputMode = boss(r) ? 'text' : 'numeric';
@@ -1268,9 +1281,37 @@ Views.staff = {
       form.role.onchange = sync; sync();
     };
     root.querySelector('#add').onclick = () => edit();
+    const tb = root.querySelector('#types');
+    if (tb) tb.onclick = () => staffTypesDialog();
     root.querySelectorAll('tr.clickable[data-edit]').forEach((b) => b.onclick = () => edit(users.find((u) => u.id === Number(b.dataset.edit))));
   },
 };
+
+// The business's own staff types: a name ("Katta ofitsant", "Barmen", "Dostavchik") over one of the built-in rights.
+function staffTypesDialog() {
+  const BASES = [['waiter', t('Ofitsant')], ['courier', t('Dostavchik (yetkazib berish)')], ['cashier', t('Kassir')], ['chef', t('Oshpaz')], ['admin', t('Admin')]];
+  const baseOf = (ty) => (ty.delivery ? 'courier' : ty.role);
+  const row = (ty = { name: '', role: 'waiter' }) => `<div class="type-row"><input name="tname" maxlength="40" value="${esc(ty.name)}" placeholder="${esc(t('Masalan: Katta ofitsant'))}">
+      <select name="tbase">${BASES.map(([k, n]) => `<option value="${k}" ${baseOf(ty) === k ? 'selected' : ''}>${n}</option>`).join('')}</select>
+      <button type="button" class="icon-btn danger" data-del title="${esc(t("O'chirish"))}">${icon('trash-2', 16)}</button></div>`;
+  const form = openModal({
+    title: `${icon('users')} ${t('Lavozimlar')}`,
+    body: `<p class="small muted" style="margin-top:0">${t("O'zingizning lavozimlaringiz: nomini yozing va qaysi huquq bilan ishlashini tanlang. Xodim qo'shganda shu ro'yxatdan tanlanadi.")}</p>
+      <div id="type-rows">${staffTypes().map(row).join('')}</div>
+      <button type="button" class="btn sm" id="type-add" style="margin-top:8px">${icon('plus', 16)} ${t("Lavozim qo'shish")}</button>`,
+    actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: 'primary', icon: 'check', onClick: async (f) => {
+      const list = [...f.querySelectorAll('.type-row')].map((r) => {
+        const base = r.querySelector('[name=tbase]').value;
+        return { name: r.querySelector('[name=tname]').value.trim(), role: base === 'courier' ? 'waiter' : base, delivery: base === 'courier' };
+      }).filter((x) => x.name);
+      App.settings = await PUT('/api/settings', { staff_types: list });
+      toast(t('Saqlandi'), 'ok'); refreshView();
+    } }],
+  });
+  const bindRows = () => form.querySelectorAll('[data-del]').forEach((b) => b.onclick = () => b.closest('.type-row').remove());
+  form.querySelector('#type-add').onclick = () => { form.querySelector('#type-rows').insertAdjacentHTML('beforeend', row()); bindRows(); form.querySelector('.type-row:last-child input').focus(); };
+  bindRows();
+}
 
 // ---------- Settings ----------
 const AUDIT_NAMES = () => ({

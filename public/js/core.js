@@ -104,6 +104,7 @@ function flowiLogo(height = 22) {
   return `<svg class="flowi" viewBox="0 0 1280 267" height="${height}" role="img" aria-label="FLOWI"><path fill="currentColor" fill-rule="evenodd" d="${FLOWI_PATH}"/></svg>`;
 }
 function placeName(o) {
+  if (o.delivery) return `${t('Yetkazish')} #${o.id}${o.label ? ` · ${o.label}` : ''}`;
   if (o.takeaway) return `${isShop() ? t('Sotuv') : t('Olib ketish')} #${o.id}${o.label ? ` · ${o.label}` : ''}`;
   return o.room ? o.room.name : o.room_name || '';
 }

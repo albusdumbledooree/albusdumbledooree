@@ -2,6 +2,21 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.23.0 — Chekni o'chirish, dostavchik, xodim turlari, Windows dasturi o'zi yangilanadi
+- **Chekni o'chirish** (mijoz chiqib ketdi): Sozlamalar → Ruxsatlar → **"Chek o'chirish paroli"** (faqat boshliq qo'yadi).
+  Parolni bilgan xodim taomli chekni sabab bilan o'chiradi; parol o'rnatilsa admin ham uni so'raydi.
+  Chek bazadan o'chmaydi: savdodan chiqadi va **Hisobot → O'chirilgan** bo'limida qoladi — nima urilgan, kim urgan,
+  kim va qachon o'chirgan, sababi. Kechki Telegram hisobotida ham ko'rinadi.
+- **Dostavchik va xodim turlari**: Xodimlar → **"Lavozimlar"** — o'z lavozimlaringizni yarating (masalan "Katta ofitsant",
+  "Barmen") va qaysi huquq bilan ishlashini tanlang. **Dostavchik** faqat yetkazib berishni ko'radi: mijoz ismi,
+  telefoni, manzili va yetkazish haqi bilan buyurtma uradi, taomlar oshxonaga boradi. Pulni kassaga topshiradi —
+  kassir chekni "Olib ketish"dan yopadi. Hisobot → Xodimlar'da dostavchikning cheklari, summasi va sotgan taomlari.
+- **Xonalar**: kartochkalar har ekranda bir xil ixcham o'lchamda, atrofda ko'proq joy.
+- **FLOWI Windows dasturi 1.1** — **o'zi yangilanadi**: dastur sozlamalarida "Yangilanish" bo'limi
+  (Tekshirish / Yuklab olish / Hozir yangilash) va "Avtomatik yangilansin" belgisi. O'rnatuvchi endi kichik (0,6 MB).
+- **Yangi Windows dasturi botga fayl bo'lib keladi**: yangi versiya chiqishi bilan FLOWI-Setup.exe sizning Telegram'ingizga
+  o'zi yuboriladi; platformada "Oxirgi versiyani hozir yuborish" tugmasi.
+
 ## 1.22.2 — Windows dasturi: Windows 7'da "ERR_CERT_AUTHORITY_INVALID" tuzatildi
 - Yangilanmagan Windows 7/8 saytning Let's Encrypt sertifikatini tanimasdi. Dastur endi Let's Encrypt'ning ildiz
   sertifikatlarini (ISRG Root X1, X2) o'zi bilan olib yuradi va zanjirni o'zi tekshiradi: faqat biznesingiz manzili uchun,

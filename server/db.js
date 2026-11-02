@@ -756,6 +756,12 @@ CREATE INDEX IF NOT EXISTS idx_work_day ON work_log(day, user_id);
   addCol('transactions', 'fixed_month', 'TEXT');
   // A deleted check (the guest left): who deleted it and what was on it; it stays in the reports.
   addCol('orders', 'cancelled_by', 'INTEGER');
+  // Delivery (dostavka): a takeaway check brought to the customer by a courier — their phone and address.
+  addCol('orders', 'delivery', 'INTEGER NOT NULL DEFAULT 0');
+  addCol('orders', 'phone', "TEXT NOT NULL DEFAULT ''");
+  addCol('orders', 'address', "TEXT NOT NULL DEFAULT ''");
+  // A courier works with a waiter's rights plus the delivery screen.
+  addCol('users', 'delivery', 'INTEGER NOT NULL DEFAULT 0');
   addCol('orders', 'cancel_total', 'INTEGER NOT NULL DEFAULT 0');
   // Door shop: a sale with an advance (bosh to'lov). balance = what is still owed on this very check, due_at = when.
   if (!colsOf('orders').includes('balance')) {

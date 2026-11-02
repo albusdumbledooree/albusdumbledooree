@@ -2239,3 +2239,46 @@ test('a new FLOWI for Windows goes to the owner\'s Telegram as the installer fil
     gh.close(); tg.close();
   }
 });
+
+test('courier (dostavchik): own staff types, a delivery with phone, address and fee; the cashier takes the money; the report shows it', async () => {
+  const boss = await login('ega', 'ega123', 'demo');
+  // Staff types: a name over built-in rights; a courier is a waiter with deliveries.
+  assert.deepEqual((await call('GET', '/api/me', boss)).data.settings.staff_types, [{ name: 'Dostavchik', role: 'waiter', delivery: true }]);
+  assert.equal((await call('PUT', '/api/settings', boss, { staff_types: [{ name: 'X', role: 'owner' }] })).status, 400);
+  assert.equal((await call('PUT', '/api/settings', boss, { staff_types: [{ name: 'Barmen', role: 'waiter' }, { name: 'barmen', role: 'chef' }] })).status, 400);
+  const types = (await call('PUT', '/api/settings', boss, { staff_types: [{ name: 'Dostavchik', role: 'waiter', delivery: true }, { name: 'Katta ofitsant', role: 'waiter' }, { name: 'Kassa yordamchisi', role: 'chef', delivery: true }] })).data.staff_types;
+  assert.equal(types[2].delivery, false, 'only a waiter-based type delivers');
+  const c = (await call('POST', '/api/users', boss, { name: 'Sardor', role: 'waiter', position: 'Dostavchik', delivery: true, username: 'sardor', password: 'pass1234', pin: '7777' })).data;
+  assert.equal(c.delivery, 1); assert.equal(c.position, 'Dostavchik');
+  const courier = await login('sardor', 'pass1234', 'demo');
+  assert.equal((await call('GET', '/api/me', courier)).data.user.delivery, 1);
+  // A delivery: phone and address are needed; the fee is a line on the check.
+  const soboy = (await call('GET', '/api/takeaway', courier)).data.room_id;
+  assert.equal((await call('POST', '/api/orders', courier, { room_id: soboy, delivery: { name: 'Aziz', phone: '', address: 'Yunusobod' } })).status, 400);
+  const o = (await call('POST', '/api/orders', courier, { room_id: soboy, delivery: { name: 'Aziz aka', phone: '+998901112233', address: 'Yunusobod 4-kvartal, 12-uy', fee: 15000 } })).data;
+  assert.equal(o.delivery, 1); assert.equal(o.label, 'Aziz aka'); assert.equal(o.address, 'Yunusobod 4-kvartal, 12-uy');
+  const menu = (await call('GET', '/api/menu', courier)).data;
+  const osh = menu.dishes.find((d) => /Osh/.test(d.name));
+  const withDish = (await call('POST', `/api/orders/${o.id}/items`, courier, { items: [{ dish_id: osh.id, qty: 3 }] })).data;
+  const ord = (await call('GET', `/api/orders/${o.id}`, courier)).data;
+  assert.equal(ord.total, osh.price * 3 + 15000 + (ord.service_amount || 0));
+  assert.ok(ord.items.some((i) => i.name === 'Yetkazib berish' && i.price === 15000 && i.needs_kitchen === 0));
+  void withDish;
+  // Only their own; the courier cannot take the money — the cashier closes it.
+  assert.deepEqual((await call('GET', '/api/takeaway', courier)).data.orders.map((x) => x.id), [o.id]);
+  assert.equal((await call('POST', `/api/orders/${o.id}/close`, courier, { paid_cash: ord.total })).status, 403);
+  for (const it of ord.items.filter((i) => i.needs_kitchen)) { await call('POST', `/api/items/${it.id}/accept`, boss); await call('POST', `/api/items/${it.id}/ready`, boss); }
+  const kassir = boss;
+  const closed = await call('POST', `/api/orders/${o.id}/close`, kassir, { paid_cash: ord.total });
+  assert.equal(closed.status, 200, JSON.stringify(closed.data));
+  // The report: the courier's checks, sum and dishes.
+  const day0 = new Date(); day0.setHours(0, 0, 0, 0);
+  const st = (await call('GET', `/api/stats?from=${day0.getTime()}&to=${day0.getTime() + 864e5}`, boss)).data;
+  const row = st.staff.find((r) => r.id === c.id);
+  assert.ok(row, JSON.stringify(st.staff.map((r) => r.name)));
+  assert.equal(row.revenue, ord.total);
+  const person = (await call('GET', `/api/stats/user/${c.id}?from=${day0.getTime()}&to=${day0.getTime() + 864e5}`, boss)).data;
+  assert.ok(JSON.stringify(person).includes(osh.name));
+  // Changing their type to a plain waiter takes the deliveries off.
+  assert.equal((await call('PUT', `/api/users/${c.id}`, boss, { role: 'waiter', position: '', delivery: false })).data.delivery, 0);
+});

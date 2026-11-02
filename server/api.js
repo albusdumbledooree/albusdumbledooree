@@ -137,6 +137,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     for (const k of ['perm_admin_reports', 'perm_admin_finance', 'perm_cashier_reports', 'perm_cashier_finance', 'finance_lock']) out[k] = out[k] === '1';
     out.has_finance_code = !!out.finance_code_hash;
     delete out.finance_code_hash;
+    // Staff types of this business: a name over one of the built-in rights (a courier = a waiter with deliveries).
+    try { out.staff_types = JSON.parse(out.staff_types || 'null'); } catch { out.staff_types = null; }
+    if (!Array.isArray(out.staff_types)) out.staff_types = [{ name: 'Dostavchik', role: 'waiter', delivery: true }];
     out.has_delete_code = !!out.delete_code_hash;
     delete out.delete_code_hash;
     out.receipt_logo = out.receipt_logo !== '0';
@@ -169,7 +172,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   }
 
   function publicUser(u) {
-    return { id: u.id, name: u.name, username: u.username, role: u.role, phone: u.phone, active: u.active, app: u.app ?? 1, position: u.position || '',
+    return { id: u.id, name: u.name, username: u.username, role: u.role, phone: u.phone, active: u.active, app: u.app ?? 1, position: u.position || '', delivery: u.delivery ? 1 : 0,
       has_pin: !!u.pin_hash, perm_print: u.perm_print, perm_close: u.perm_close, perms: perms(u) };
   }
 
@@ -485,12 +488,26 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width',
       'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo',
       'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', 'cashback_pct', 'qr_order', 'qr_from', 'qr_to',
-      'geo_lat', 'geo_lng', 'geo_radius', 'work_from', 'expense_groups', ...GEO_FLAGS, ...OWNER_SETTINGS];
+      'geo_lat', 'geo_lng', 'geo_radius', 'work_from', 'expense_groups', 'staff_types', ...GEO_FLAGS, ...OWNER_SETTINGS];
     if (user.role !== 'owner' && OWNER_SETTINGS.some((k) => body[k] !== undefined)) throw new HttpError(403, "Moliya huquqlarini faqat boshliq o'zgartiradi");
     const set = q('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     for (const k of allowed) {
       if (body[k] === undefined) continue;
       let v = body[k];
+      if (k === 'staff_types') {
+        if (!Array.isArray(v) || v.length > 30) throw new HttpError(400, "Xodim turlari noto'g'ri");
+        const seen = new Set();
+        const list = v.map((x) => {
+          const name = str(x && x.name, 'Turi nomi', { required: true, max: 40 });
+          const role = String(x.role || '');
+          if (!['admin', 'cashier', 'waiter', 'chef'].includes(role)) throw new HttpError(400, `"${name}": huquqi noto'g'ri`);
+          if (seen.has(name.toLowerCase())) throw new HttpError(400, `"${name}" ikki marta yozilgan`);
+          seen.add(name.toLowerCase());
+          return { name, role, delivery: role === 'waiter' && !!x.delivery };
+        });
+        set.run('staff_types', JSON.stringify(list));
+        continue;
+      }
       // The password that deletes a check with dishes on it (the guest left); '' takes it off.
       if (k === 'delete_code') {
         const code = String(v ?? '');
@@ -668,10 +685,11 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     if (q('SELECT 1 FROM users WHERE username = ?').get(username)) throw new HttpError(409, 'Bu login band');
     const pin = body.pin ? pinHash(role, body.pin) : null;
     const position = str(body.position, 'Lavozim nomi', { max: 40 });
-    const id = q(`INSERT INTO users (name, username, pass_hash, role, phone, salary, pin_hash, perm_print, perm_close, app, position, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    const delivery = !noApp && role === 'waiter' && body.delivery ? 1 : 0;
+    const id = q(`INSERT INTO users (name, username, pass_hash, role, phone, salary, pin_hash, perm_print, perm_close, app, position, delivery, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       name, username, hashPassword(password), role, str(body.phone, 'Telefon', { max: 30 }), int(body.salary, 'Maosh'), pin,
-      permInput(body.perm_print), permInput(body.perm_close), noApp ? 0 : 1, position, now()
+      permInput(body.perm_print), permInput(body.perm_close), noApp ? 0 : 1, position, delivery, now()
     ).lastInsertRowid;
     audit(user, 'user_create', `${name} (${noApp ? position || 'dasturga kirmaydi' : ROLE_NAMES[role]})`);
     return publicUser(q('SELECT * FROM users WHERE id = ?').get(id));
@@ -715,6 +733,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       q('UPDATE users SET pass_hash = ? WHERE id = ?').run(hashPassword(pw), target.id);
     }
     if (body.pin) q('UPDATE users SET pin_hash = ? WHERE id = ?').run(pinHash(role, body.pin), target.id);
+    if (body.delivery !== undefined || role !== 'waiter') q('UPDATE users SET delivery = ? WHERE id = ?').run(role === 'waiter' && app && (body.delivery === undefined ? target.delivery : body.delivery) ? 1 : 0, target.id);
     if (body.perm_print !== undefined) q('UPDATE users SET perm_print = ? WHERE id = ?').run(permInput(body.perm_print), target.id);
     if (body.perm_close !== undefined) q('UPDATE users SET perm_close = ? WHERE id = ?').run(permInput(body.perm_close), target.id);
     if (!active || !app || body.password || role !== target.role) {
@@ -1021,6 +1040,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   // Name shown to the kitchen and on lists: "3 · Banket 3" or "Olib ketish #12 · Aziz".
   function placeName(o, room) {
+    if (o.delivery) return `Yetkazish #${o.id}${o.label ? ` · ${o.label}` : ''}`;
     return o.takeaway ? `Olib ketish #${o.id}${o.label ? ` · ${o.label}` : ''}` : room.name;
   }
 
@@ -1051,12 +1071,24 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const room = q('SELECT * FROM rooms WHERE id = ? AND active = 1').get(roomId);
     if (!room) throw new HttpError(404, 'Xona topilmadi');
     if (room.type === 'soboy') {
+      // Delivery: the customer's name, phone and address; the delivery charge is a line on the check (no kitchen).
+      const dv = body.delivery && typeof body.delivery === 'object' ? {
+        name: str(body.delivery.name, 'Mijoz ismi', { max: 60 }),
+        phone: str(body.delivery.phone, 'Telefon', { required: true, max: 30 }),
+        address: str(body.delivery.address, 'Manzil', { required: true, max: 200 }),
+        fee: int(body.delivery.fee, 'Yetkazish haqi', { max: 10_000_000 }),
+      } : null;
       // Takeaway: every customer gets a new check, written by any waiter or cashier.
-      const id = q("INSERT INTO orders (room_id, waiter_id, guests, note, opened_at, takeaway, label) VALUES (?, ?, ?, ?, ?, 1, ?)").run(
-        roomId, user.id, int(body.guests, 'Mehmonlar', { min: 1, max: 1000, def: 1 }), str(body.note, 'Izoh', { max: 300 }), now(),
-        str(body.label, 'Mijoz', { max: 60 })
+      const t0 = now();
+      const id = q("INSERT INTO orders (room_id, waiter_id, guests, note, opened_at, takeaway, label, delivery, phone, address) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)").run(
+        roomId, user.id, int(body.guests, 'Mehmonlar', { min: 1, max: 1000, def: 1 }), str(body.note, 'Izoh', { max: 300 }), t0,
+        dv ? dv.name : str(body.label, 'Mijoz', { max: 60 }), dv ? 1 : 0, dv ? dv.phone : '', dv ? dv.address : ''
       ).lastInsertRowid;
-      audit(user, 'order_open', `#${id} Olib ketish`);
+      if (dv && dv.fee > 0) {
+        q(`INSERT INTO order_items (order_id, dish_id, name, price, cost, qty, note, status, needs_kitchen, prep_minutes, created_at, served_at)
+          VALUES (?, NULL, 'Yetkazib berish', ?, 0, 1, ?, 'served', 0, 0, ?, ?)`).run(id, dv.fee, dv.address, t0, t0);
+      }
+      audit(user, 'order_open', `#${id} ${dv ? `Yetkazib berish: ${dv.name} ${dv.phone}, ${dv.address}` : 'Olib ketish'}`);
       events.publish('rooms');
       return orderDetails(id);
     }

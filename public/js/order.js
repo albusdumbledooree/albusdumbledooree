@@ -44,7 +44,8 @@ function takeawayTile(o) {
   const cooking = o.items.new + o.items.cooking;
   return `<button class="tile st-${st}" data-order="${o.id}">
     <span class="t-top"><span class="no">#${o.id}</span><span class="amt">${num(o.total)}</span></span>
-    <span class="nm">${esc(o.label || t('Olib ketish'))}</span>
+    <span class="nm">${o.delivery ? `${icon('truck', 14)} ` : ''}${esc(o.label || t('Olib ketish'))}</span>
+    ${o.delivery ? `<span class="meta"><span>${icon('map-pin', 13)} ${esc(o.address)}</span></span>` : ''}
     <span class="meta">${App.user.role !== 'waiter' ? `<span>${icon('user-round', 14)} ${esc(o.waiter_name.split(' ').pop())}</span>` : ''}<span>${icon('clock', 14)} <b data-since="${o.opened_at}"></b></span>
       ${cooking ? `<span class="hot">${icon('flame', 14)} ${cooking}</span>` : ''}</span>
     ${tileFoot(st)}</button>`;
@@ -59,8 +60,8 @@ function roomSections(rooms) {
 
 UI.roomsMode = store('cp_rooms_mode') || '';
 Views.rooms = {
-  title: () => (App.biz === 'fastfood' ? t('Buyurtmalar') : App.user.role === 'cashier' ? t('Kassa') : t('Xonalar')),
-  icon: () => (App.biz === 'fastfood' ? 'receipt' : App.user.role === 'cashier' ? 'wallet' : 'house'),
+  title: () => (App.user.delivery ? t('Yetkazib berish') : App.biz === 'fastfood' ? t('Buyurtmalar') : App.user.role === 'cashier' ? t('Kassa') : t('Xonalar')),
+  icon: () => (App.user.delivery ? 'truck' : App.biz === 'fastfood' ? 'receipt' : App.user.role === 'cashier' ? 'wallet' : 'house'),
   roles: ['owner', 'admin', 'cashier', 'waiter'], refreshOn: ['rooms', 'finance'], badge: 'bills', on: () => !isShop(),
   async load() {
     const money = can('owner', 'admin', 'cashier') && moduleOn('finance');
@@ -74,10 +75,12 @@ Views.rooms = {
     const sections = roomSections(rooms);
     const sec = sections.includes(UI.section) ? UI.section : '';
     const fast = App.biz === 'fastfood';
-    const mode = UI.roomsMode === 'takeaway' || (!UI.roomsMode && (fast || !rooms.length)) ? 'takeaway' : 'hall';
+    // A courier: only deliveries (their own); the hall is not theirs.
+    const courier = !!App.user.delivery;
+    const mode = courier || UI.roomsMode === 'takeaway' || (!UI.roomsMode && (fast || !rooms.length)) ? 'takeaway' : 'hall';
     const modes = `<div class="modes">
-      ${rooms.length ? `<button class="mode ${mode === 'hall' ? 'active' : ''}" data-mode="hall">${icon(fast ? 'utensils' : 'house', 20)} ${fast ? t('Stollar') : t('Zal')}<span class="cnt">${busy}/${rooms.length}</span></button>` : ''}
-      <button class="mode ${mode === 'takeaway' ? 'active' : ''}" data-mode="takeaway">${icon('shopping-bag', 20)} ${fast ? t('Ochiq buyurtmalar') : t('Olib ketish')}<span class="cnt">${takeaway.orders.length}</span></button>
+      ${rooms.length && !courier ? `<button class="mode ${mode === 'hall' ? 'active' : ''}" data-mode="hall">${icon(fast ? 'utensils' : 'house', 20)} ${fast ? t('Stollar') : t('Zal')}<span class="cnt">${busy}/${rooms.length}</span></button>` : ''}
+      <button class="mode ${mode === 'takeaway' ? 'active' : ''}" data-mode="takeaway">${icon(courier ? 'truck' : 'shopping-bag', 20)} ${courier ? t('Mening yetkazishlarim') : fast ? t('Ochiq buyurtmalar') : t('Olib ketish')}<span class="cnt">${takeaway.orders.length}</span></button>
       ${moduleOn('reservations') && can('owner', 'admin', 'cashier') ? `<a class="mode" href="#/reservations">${icon('calendar', 20)} ${t('Bronlar')}<span class="cnt">${rooms.reduce((n, r) => n + r.reservations.length, 0)}</span></a>` : ''}
       <span class="grow"></span>
       ${quickMoneyHtml()}
@@ -86,7 +89,8 @@ Views.rooms = {
 
     if (mode === 'takeaway') {
       return `${modes}<div class="floor">
-        <button class="tile add" data-new-takeaway>${icon('circle-plus', 34)}<span>${t('Yangi chek')}</span></button>
+        ${courier ? '' : `<button class="tile add" data-new-takeaway>${icon('circle-plus', 34)}<span>${t('Yangi chek')}</span></button>`}
+        ${!fast ? `<button class="tile add delivery" data-new-delivery>${icon('truck', 34)}<span>${t('Yetkazib berish')}</span></button>` : ''}
         ${takeaway.orders.map(takeawayTile).join('')}</div>`;
     }
     const group = (title, list) => `${title ? `<div class="group-head"><b># ${esc(title)}</b><span>${list.filter((r) => r.order).length}/${list.length} ${t('band')}</span></div>` : ''}
@@ -113,10 +117,30 @@ Views.rooms = {
     root.querySelectorAll('[data-order]').forEach((b) => b.onclick = () => { location.hash = `#/order/${b.dataset.order}`; });
     const nt = root.querySelector('[data-new-takeaway]');
     if (nt) nt.onclick = () => { delete Carts.soboy; location.hash = '#/soboy'; };
+    const nd = root.querySelector('[data-new-delivery]');
+    if (nd) nd.onclick = () => deliveryDialog();
     const sh = root.querySelector('#shift');
     if (sh) sh.onclick = () => (data.shift ? closeShiftDialog(data.shift) : openShiftDialog());
   },
 };
+
+// A delivery: the customer's name, phone, address and the delivery charge; then the dishes, as for takeaway.
+function deliveryDialog() {
+  openModal({
+    title: `${icon('truck')} ${t('Yetkazib berish')}`,
+    body: `<div class="form-grid"><label class="field">${t('Mijoz ismi')}<input name="name" maxlength="60" autocomplete="off"></label>
+        <label class="field">${t('Telefon')}<input name="phone" type="tel" placeholder="+998" required></label></div>
+      <label class="field" style="margin-top:10px">${t('Manzil')}<input name="address" maxlength="200" placeholder="${esc(t("Tuman, ko'cha, uy, mo'ljal"))}" required></label>
+      <label class="field" style="margin-top:10px">${t('Yetkazish haqi')} (${esc(App.settings.currency)})<input name="fee" type="number" min="0" step="1000" placeholder="0"></label>`,
+    actions: [{ label: t('Bekor') }, { label: t('Taom tanlash'), cls: 'primary', icon: 'arrow-right', onClick: (f) => {
+      const d = formData(f);
+      if (String(d.phone || '').replace(/\D/g, '').length < 7) { toast(t('Mijoz telefonini yozing'), 'warn'); f.phone.focus(); return false; }
+      if (!String(d.address || '').trim()) { toast(t('Manzilni yozing'), 'warn'); f.address.focus(); return false; }
+      Carts.soboy = { lines: [], guests: 1, label: d.name.trim(), delivery: { name: d.name.trim(), phone: d.phone.trim(), address: d.address.trim(), fee: Number(d.fee) || 0 } };
+      location.hash = '#/soboy';
+    } }],
+  });
+}
 
 function openShiftDialog() {
   openModal({ title: `${icon('wallet')} ${t('Smenani ochish')}`,
@@ -186,7 +210,12 @@ function checkPane({ order, room, cart, takeaway }) {
   const items = order ? order.items : [];
   const subtotalPending = cart.lines.reduce((s, c) => s + c.price * c.qty, 0);
   const guests = order ? order.guests : cart.guests || 1;
-  const head = takeaway
+  const dv = order ? (order.delivery ? { name: order.label, phone: order.phone, address: order.address } : null) : cart.delivery;
+  const head = dv
+    ? `<span class="avatar" style="background:var(--blue)">${icon('truck', 18)}</span>
+       <div class="grow"><b>${t('Yetkazib berish')}${order ? ` #${order.id}` : ''} · ${esc(dv.name || '')}</b>
+       <span class="small muted">${icon('phone', 13)} <a href="tel:${esc(dv.phone)}">${esc(dv.phone)}</a> · ${icon('map-pin', 13)} ${esc(dv.address)}</span></div>`
+    : takeaway
     ? `<span class="avatar" style="background:var(--orange)">${icon('shopping-bag', 18)}</span>
        <div class="grow"><b>${t('Olib ketish')}${order ? ` #${order.id}` : ''}</b>
        <input id="cp-label" placeholder="${esc(t('Mijoz ismi (ixtiyoriy)'))}" value="${esc(order ? order.label : cart.label)}" style="min-height:36px;margin-top:4px;padding:6px 10px"></div>`
@@ -368,7 +397,7 @@ function confirmSend(d, cart) {
       let o = d.order;
       if (!o) {
         const room_id = d.takeaway ? (await GET('/api/takeaway')).room_id : d.room.id;
-        o = await POST('/api/orders', { room_id, guests: cart.guests || 1, label: cart.label || '' });
+        o = await POST('/api/orders', { room_id, guests: cart.guests || 1, label: cart.label || '', ...(cart.delivery ? { delivery: cart.delivery } : {}) });
       }
       await POST(`/api/orders/${o.id}/items`, { items: cart.lines.map(({ dish_id, qty, note }) => ({ dish_id, qty, note })) });
       cart.lines = [];
