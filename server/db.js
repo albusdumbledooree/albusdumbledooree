@@ -540,6 +540,9 @@ CREATE INDEX IF NOT EXISTS idx_guest_req ON guest_requests(status, room_id);
   addCol('dishes', 'supplier_id', 'INTEGER');
   addCol('dishes', 'min_stock', 'INTEGER');
   addCol('order_items', 'service', "TEXT NOT NULL DEFAULT ''");
+  // Who cancelled a dish and when (shown in the checks report next to the cancelled line).
+  addCol('order_items', 'cancelled_at', 'INTEGER');
+  addCol('order_items', 'cancelled_by', 'INTEGER');
   // When a product was added: goods with no sale since then for 60 days are "dead" stock (older rows: unknown).
   addCol('dishes', 'created_at', 'INTEGER');
   db.exec(`CREATE TRIGGER IF NOT EXISTS dishes_created AFTER INSERT ON dishes WHEN NEW.created_at IS NULL

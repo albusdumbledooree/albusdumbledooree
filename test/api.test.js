@@ -2414,3 +2414,52 @@ test('a deleted check prints "BUTUN CHEK O\'CHIRILDI" on the order printers, eac
   await call('POST', `/api/orders/${o2.id}/cancel`, boss, { reason: '' });
   assert.equal((await call('GET', '/api/device/print-jobs', kitchen)).data.jobs.length, 1);
 });
+
+test('checks report: filters (type, payment, waiter, hall, room, discount), cost, open checks counted live, who cancelled a dish', async () => {
+  const boss = await login('ega', 'ega123');
+  const bobur = await login('bobur', '1234');
+  const day = Date.now() - 60 * 60 * 1000;
+  const range = `from=${day}&to=${Date.now() + 60 * 60 * 1000}`;
+  const mine = (await call('GET', '/api/rooms', bobur)).data.filter((r) => r.mine && !r.order);
+  const a = (await call('POST', '/api/orders', bobur, { room_id: mine[0].id, guests: 2 })).data;
+  const added = (await call('POST', `/api/orders/${a.id}/items`, bobur, { items: [{ dish_id: (await dish(bobur, 'Patir')).id, qty: 3 }, { dish_id: (await dish(bobur, "Sho'rva")).id, qty: 1 }] })).data;
+  const shorva = added.items.find((i) => /Sho'rva/.test(i.name));
+  await call('POST', `/api/items/${shorva.id}/cancel`, boss, { reason: 'mijoz voz kechdi' });
+  const cur = (await call('GET', `/api/orders/${a.id}`, boss)).data;
+  assert.equal((await call('POST', `/api/orders/${a.id}/close`, boss, { paid_card: cur.total - 1000, discount: 1000 })).status, 200);
+  const b = (await call('POST', '/api/orders', bobur, { room_id: mine[1].id, guests: 1 })).data;
+  await call('POST', `/api/orders/${b.id}/items`, bobur, { items: [{ dish_id: (await dish(bobur, 'Patir')).id, qty: 1 }] });
+
+  const list = async (qs) => (await call('GET', `/api/checks?${range}&${qs}`, boss)).data;
+  const all = await list('status=all&filters=1');
+  const ra = all.rows.find((r) => r.id === a.id); const rb = all.rows.find((r) => r.id === b.id);
+  assert.ok(ra && rb, 'closed and open checks in "all"');
+  assert.equal(rb.status, 'open');
+  assert.equal(rb.subtotal, 8000, 'an open check is summed from its dishes now');
+  assert.ok(all.sums.total >= ra.total + rb.total);
+  assert.equal(ra.cancelled_count, 1);
+  assert.equal(ra.subtotal, 24000, 'the cancelled dish is not counted');
+  assert.ok(ra.cost >= 0);
+  assert.ok(all.filters.waiters.some((w) => w.name.includes('Bobur')) && all.filters.rooms.length > 0);
+  assert.ok((await list('status=open')).rows.every((r) => r.status === 'open'));
+  const card = await list('status=all&method=card');
+  assert.ok(card.rows.some((r) => r.id === a.id) && !card.rows.some((r) => r.id === b.id));
+  assert.ok((await list('status=all&method=cash')).rows.every((r) => r.paid_cash > 0));
+  assert.ok((await list('status=all&discount=yes')).rows.every((r) => r.discount > 0));
+  assert.ok((await list('status=all&discount=no')).rows.every((r) => r.discount === 0));
+  const bob = (await call('GET', '/api/me', bobur)).data.user.id;
+  assert.ok((await list(`status=all&waiter=${bob}`)).rows.every((r) => r.waiter_id === bob));
+  assert.deepEqual((await list(`status=all&room=${mine[0].id}`)).rows.map((r) => r.room_id).filter((x) => x !== mine[0].id), []);
+  if (mine[0].section) assert.ok((await list(`status=all&section=${encodeURIComponent(mine[0].section)}`)).rows.every((r) => r.room_section === mine[0].section));
+  assert.ok((await list('status=all&section=-')).rows.every((r) => r.takeaway));
+  // The opened check: the cancelled dish with its reason, who and when.
+  const det = (await call('GET', `/api/orders/${a.id}`, boss)).data;
+  const off = det.items.find((i) => i.status === 'cancelled');
+  assert.equal(off.cancel_reason, 'mijoz voz kechdi');
+  assert.equal(off.cancelled_by_name, 'Boshliq');
+  assert.ok(off.cancelled_at > 0);
+  // Excel takes the same filter.
+  const csv = await fetch(`${base}/api/checks/export?${range}&status=all&method=card`, { headers: { Authorization: `Bearer ${boss}` } }).then((r) => r.text());
+  assert.ok(csv.includes('Tannarx') && csv.includes(`"${a.id}"`) && !csv.includes(`"${b.id}";"Ochiq"`));
+  await call('POST', `/api/orders/${b.id}/close`, boss, { paid_cash: 1e6 });
+});

@@ -558,20 +558,32 @@ function bindKeypad(root, { maxLen, masked = true, onChange, onFull }) {
 // Thermal printers (58/80 mm) work through the normal system printer driver.
 // With Chrome started as "chrome --kiosk-printing" receipts print without the dialog.
 // kind: 'receipt' or 'kitchen' — inside the FLOWI program for Windows each goes to its own printer, with no dialog.
-function printDoc(title, body, kind = 'receipt') {
-  const narrow = String(App.settings.receipt_width) === '58';
-  // Thermal printers fade thin letters: a bold sans font in pure black prints clearly.
-  const html = `<!doctype html><html><head><meta charset="utf-8"><base href="${esc(location.origin)}/"><title>${esc(title)}</title><style>
-    *{color:#000 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    body{font:700 ${narrow ? 12 : 13.5}px/1.35 Arial,"Segoe UI",Tahoma,sans-serif;width:${narrow ? 48 : 72}mm;margin:0 auto;padding:3mm 0;color:#000;-webkit-font-smoothing:none}
+// The paper page around a check or ticket. Thermal printers fade thin letters: a bold sans font in pure black prints clearly.
+function docHtml(title, body, s = App.settings || {}) {
+  const narrow = String(s.receipt_width) === '58';
+  const logo = Math.min(100, Math.max(20, Number(s.receipt_logo_size) || 50));
+  return `<!doctype html><html><head><meta charset="utf-8"><base href="${esc(location.origin)}/"><title>${esc(title)}</title><style>
+    *{color:#000 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;box-sizing:border-box}
+    body{font:700 ${narrow ? 12 : 13.5}px/1.35 Arial,"Segoe UI",Tahoma,sans-serif;width:${narrow ? 48 : 72}mm;margin:0 auto;padding:3mm 0;color:#000;-webkit-font-smoothing:none;background:#fff}
     h1{font-size:${narrow ? 16 : 19}px;font-weight:900;text-align:center;margin:0}.c{text-align:center}.r{text-align:right;white-space:nowrap}
-    table{width:100%;border-collapse:collapse}td{padding:2px 0;vertical-align:top;font-weight:700}small{font-size:.92em;font-weight:700}
-    hr{border:0;border-top:2px dashed #000;margin:6px 0}
+    table{width:100%;border-collapse:collapse}td,th{padding:2px 0;vertical-align:top;font-weight:700;text-align:left}small{font-size:.92em;font-weight:700}
+    hr{border:0;border-top:2px dashed #000;margin:6px 0}hr.thick{border-top:3px solid #000;margin:5px 0}
     .big{font-size:${narrow ? 14 : 17}px;font-weight:900}.huge{font-size:${narrow ? 19 : 24}px;font-weight:900}
-    .logo{display:block;margin:0 auto 4px;max-width:70%;max-height:24mm;filter:grayscale(1) contrast(1.8)}
+    .logo{display:block;margin:0 auto 4px;width:${logo}%;height:auto;filter:grayscale(1) contrast(1.8)}
     .inv{background:#000;color:#fff !important;padding:3px 0}
+    .name{font-size:${narrow ? 17 : 21}px;font-weight:900;text-align:center;letter-spacing:.06em;text-transform:uppercase;margin:2px 0 1px}
+    .addr{text-align:center;font-size:.9em;margin-bottom:6px}
+    .kv td:last-child{text-align:right}
+    .items th{border-bottom:2px solid #000;padding-bottom:3px}.items .q{text-align:center;width:16%}.items .s{text-align:right;width:28%;white-space:nowrap}
+    .items .sec td{padding-top:6px;text-decoration:underline;text-transform:uppercase;font-weight:900}
+    .jami td{font-size:${narrow ? 19 : 24}px;font-weight:900;padding:3px 0}
+    .foot{text-align:center;margin-top:6px;font-family:"Courier New",Consolas,monospace;font-weight:900;white-space:pre-wrap}
+    .foot div:last-child{font-size:.9em}
     @page{size:${narrow ? 58 : 80}mm auto;margin:0}
   </style></head><body>${body}</body></html>`;
+}
+function printDoc(title, body, kind = 'receipt', s = App.settings) {
+  const html = docHtml(title, body, s);
   if (window.flowiDesktop) {
     window.flowiDesktop.print(html, { kind }).then((r) => { if (!r || !r.ok) { toast(`${t('Chop etilmadi')}: ${(r && r.error) || ''}`, 'warn'); printInFrame(html); } })
       .catch(() => printInFrame(html));
@@ -614,31 +626,55 @@ function receiptLogo(s = App.settings) {
   return s.receipt_logo !== false && id && code ? `<img class="logo" src="/media/${esc(code)}/${id}" alt="">` : '';
 }
 
-// s: the business's name and check settings (a bill printed for another device brings its own).
-function printReceipt(o, s = App.settings) {
+/* The guest's check: logo (its width set in Settings), name, address; date, waiter, check number, table, guests;
+   the dishes (under their sections when chosen); sums, the total in big letters, per person, payments, advance;
+   the lines the boss wrote under it. s: the business's name and check settings (a bill printed elsewhere brings its own). */
+function receiptBody(o, s = App.settings) {
   const live = o.items.filter((i) => i.status !== 'cancelled');
-  const lines = live.map((i) => `<tr><td>${esc(i.name)}<br><small>${i.qty} × ${money(i.price)}</small></td><td class="r">${money(i.qty * i.price)}</td></tr>`).join('');
-  const share = perPerson(o);
-  printDoc(`${t('Chek')} #${o.id}`, `
-    ${receiptLogo(s)}
-    <h1>${esc(s.name)}</h1>${s.address ? `<div class="c">${esc(s.address)}</div>` : ''}${s.phone ? `<div class="c">${esc(s.phone)}</div>` : ''}
-    <hr><div>${t('Chek')}: #${o.id}${o.status !== 'closed' ? ` (${t('hisob')})` : ''}</div><div>${esc(placeName(o))}</div>
-    ${o.takeaway && sellsAtCounter() ? `<div class="c huge">№ ${o.id}</div>` : `<div>${roleName('waiter')}: ${esc(o.waiter.name)}</div><div>${t('Mehmonlar')}: ${o.guests}</div>`}
-    <div>${t('Ochildi')}: ${fmtDateTime(o.opened_at)}</div>${o.closed_at ? `<div>${t('Yopildi')}: ${fmtDateTime(o.closed_at)}</div>` : ''}
-    <hr><table>${lines}</table><hr><table>
-    <tr><td>${W('Taomlar')}</td><td class="r">${money(o.subtotal)}</td></tr>
-    ${o.service_amount ? `<tr><td>${esc(serviceLabel(o))}</td><td class="r">${money(o.service_amount)}</td></tr>` : ''}
-    ${o.discount ? `<tr><td>${t('Chegirma')}</td><td class="r">-${money(o.discount)}</td></tr>` : ''}
-    <tr class="big"><td>${t('JAMI')}</td><td class="r">${money(o.total)}</td></tr>
-    ${share ? `<tr><td>${t('{0} kishi — har biriga', o.guests)}</td><td class="r">${money(share)}</td></tr>` : ''}
-    ${o.status === 'closed' ? ['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => `<tr><td>${methodName(m)}</td><td class="r">${money(o[`paid_${m}`])}</td></tr>`).join('') : ''}
-    ${o.advance || o.balance > 0 || (o.payments || []).length ? `</table><hr><table>
+  const row = (i) => `<tr><td>${esc(i.name)}</td><td class="q">${i.qty}</td><td class="s">${num(i.qty * i.price)}</td></tr>`;
+  let lines;
+  const named = live.filter((i) => i.category_name);
+  if (s.receipt_group !== false && named.length) {
+    const groups = new Map();
+    for (const i of live) {
+      const k = i.category_name || '';
+      if (!groups.has(k)) groups.set(k, { sort: i.category_name ? i.category_sort ?? 0 : 1e9, items: [] });
+      groups.get(k).items.push(i);
+    }
+    lines = [...groups.entries()].sort((x, y) => x[1].sort - y[1].sort).map(([k, g]) => `${k ? `<tr class="sec"><td colspan="3">${esc(k)}</td></tr>` : `<tr class="sec"><td colspan="3">${t('Boshqa')}</td></tr>`}${g.items.map(row).join('')}`).join('');
+  } else lines = live.map(row).join('');
+  const share = s.receipt_per_person !== false ? perPerson(o) : 0;
+  const counter = o.takeaway && sellsAtCounter();
+  const kv = [
+    [t('Sana'), fmtDateTime(o.closed_at || Date.now())],
+    ...(counter ? [] : [[roleName('waiter'), esc(o.waiter.name)]]),
+    [t('Chek №'), `${o.id}${o.status !== 'closed' ? ` (${t('hisob')})` : ''}`],
+    [o.takeaway ? t('Joy') : t('Stol'), esc(o.takeaway ? placeName(o) : `${o.room.number}, ${o.room.name}`)],
+    ...(counter ? [] : [[t('Mehmonlar'), o.guests]]),
+  ];
+  const pays = o.status === 'closed' ? ['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => `<tr><td>${methodName(m)}:</td><td class="r">${num(o[`paid_${m}`])}</td></tr>`).join('') : '';
+  const foot = String(s.receipt_footer || '').split('\n').map((x) => x.trim()).filter(Boolean);
+  return `${receiptLogo(s)}
+    <div class="name">${esc(s.name)}</div>${s.address || s.phone ? `<div class="addr">${[s.address, s.phone].filter(Boolean).map(esc).join(' · ')}</div>` : ''}
+    ${counter ? `<div class="c huge">№ ${o.id}</div>` : ''}
+    <table class="kv">${kv.map(([k, v]) => `<tr><td>${k}:</td><td>${v}</td></tr>`).join('')}</table>
+    <hr><table class="items"><tr><th>${t('Nomi')}</th><th class="q">${t('Soni')}</th><th class="s">${t('Summa')}</th></tr>${lines}</table><hr>
+    <table class="kv"><tr><td>${t('Summa')}:</td><td>${num(o.subtotal)}</td></tr>
+      ${o.service_amount ? `<tr><td>${esc(serviceLabel(o))}:</td><td>${num(o.service_amount)}</td></tr>` : ''}
+      ${o.discount ? `<tr><td>${t('Chegirma')}:</td><td>−${num(o.discount)}</td></tr>` : ''}</table>
+    <hr class="thick"><table class="kv jami"><tr><td>${t('JAMI')}:</td><td>${num(o.total)}</td></tr></table><hr class="thick">
+    <table class="kv">${share ? `<tr class="big"><td>${t('{0} kishi — har biriga', o.guests)}:</td><td>${num(share)}</td></tr>` : ''}${pays}</table>
+    ${o.advance || o.balance > 0 || (o.payments || []).length ? `<hr><table class="kv">
       ${o.customer ? `<tr><td colspan="2">${t('Mijoz')}: ${esc(o.customer.name)} ${esc(o.customer.phone || '')}</td></tr>` : ''}
-      ${o.advance ? `<tr><td>${t("Avans (bosh to'lov)")}</td><td class="r">${money(o.advance)}</td></tr>` : ''}
-      ${(o.payments || []).map((p) => `<tr><td>${fmtDate(p.created_at)} ${methodName(p.method)}</td><td class="r">${money(p.amount)}</td></tr>`).join('')}
-      ${o.balance > 0 ? `<tr class="big"><td>${t('QOLDI')}</td><td class="r">${money(o.balance)}</td></tr>${o.due_at ? `<tr><td>${t("To'lash sanasi")}</td><td class="r">${fmtDate(o.due_at)}</td></tr>` : ''}`
-        : `<tr class="big"><td colspan="2" class="c">${t("TO'LIQ TO'LANDI")}</td></tr>`}` : ''}
-    </table><hr>${o.cashier ? `<div>${t('Kassir')}: ${esc(o.cashier.name)}</div>` : ''}<div class="c">${esc(s.receipt_footer || '')}</div>`);
+      ${o.advance ? `<tr><td>${t("Avans (bosh to'lov)")}:</td><td>${num(o.advance)}</td></tr>` : ''}
+      ${(o.payments || []).map((p) => `<tr><td>${fmtDate(p.created_at)} ${methodName(p.method)}:</td><td>${num(p.amount)}</td></tr>`).join('')}
+      ${o.balance > 0 ? `<tr class="big"><td>${t('QOLDI')}:</td><td>${num(o.balance)}</td></tr>${o.due_at ? `<tr><td>${t("To'lash sanasi")}:</td><td>${fmtDate(o.due_at)}</td></tr>` : ''}`
+        : `<tr class="big"><td colspan="2" class="c">${t("TO'LIQ TO'LANDI")}</td></tr>`}</table>` : ''}
+    ${o.cashier ? `<div style="margin-top:4px">${t('Kassir')}: ${esc(o.cashier.name)}</div>` : ''}
+    ${foot.length ? `<div class="foot">${foot.map((x) => `<div>${esc(x)}</div>`).join('')}</div>` : ''}`;
+}
+function printReceipt(o, s = App.settings) {
+  printDoc(`${t('Chek')} #${o.id}`, receiptBody(o, s), 'receipt', s);
 }
 
 // Kitchen ticket: big place name, dishes and notes — no prices.

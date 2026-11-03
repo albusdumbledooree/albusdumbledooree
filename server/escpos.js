@@ -123,10 +123,21 @@ function bill(job, { width = 48 } = {}) {
   text(`Ochildi: ${dt(o.opened_at)}`);
   if (o.closed_at) text(`Yopildi: ${dt(o.closed_at)}`);
   text('-'.repeat(width));
-  for (const i of (o.items || []).filter((x) => x.status !== 'cancelled')) {
-    for (const r of wrap(i.name, width)) text(r);
-    pair(`  ${i.qty} x ${sum(i.price)}`, sum(i.qty * i.price));
-  }
+  const live = (o.items || []).filter((x) => x.status !== 'cancelled');
+  const line = (i) => { for (const r of wrap(i.name, width)) text(r); pair(`  ${i.qty} x ${sum(i.price)}`, sum(i.qty * i.price)); };
+  // Under their sections (BAR, OSHXONA…) when the boss chose so in the check settings.
+  if (s.receipt_group !== false && live.some((i) => i.category_name)) {
+    const groups = new Map();
+    for (const i of live) {
+      const k = i.category_name || 'Boshqa';
+      if (!groups.has(k)) groups.set(k, { sort: i.category_name ? i.category_sort ?? 0 : 1e9, items: [] });
+      groups.get(k).items.push(i);
+    }
+    for (const [k, g] of [...groups.entries()].sort((x, y) => x[1].sort - y[1].sort)) {
+      bold(true); raw(ESC, 0x2d, 1); text(k.toUpperCase()); raw(ESC, 0x2d, 0); bold(false);
+      g.items.forEach(line);
+    }
+  } else live.forEach(line);
   text('-'.repeat(width));
   pair('Taomlar', sum(o.subtotal));
   if (o.service_amount) pair(o.service_type === 'per_guest' ? `Xizmat haqi (${o.guests} kishi)` : `Xizmat haqi ${o.service_pct}%`, sum(o.service_amount));

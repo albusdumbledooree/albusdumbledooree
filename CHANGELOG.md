@@ -2,6 +2,22 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.25.0 — Cheklar hisoboti va yangi chek ko'rinishi
+- **Cheklar hisoboti** yangilandi: keng jadval — №, turi (yopilgan / ochiq / o'chirilgan), ochilgan va yopilgan vaqt, ofitsant,
+  stol va zal, mehmonlar, tannarx, taomlar, xizmat haqi (% va summa), chegirma (% va summa), jami.
+  - Filtrlar: sana, chek turi, to'lov turi, ofitsant, zal, stol/xona, chegirma, qidiruv; "Filtrlarni tozalash".
+  - Har chek o'z joyida ochiladi: taomlar qo'shilgan vaqti bilan, **bekor qilingan taom OTKAZ deb chizilgan**
+    (sababi, kim va qachon bekor qilgani bilan) va jamiga qo'shilmaydi; to'lovlar, kim yopgani, necha marta chop etilgani.
+    Shu yerning o'zida: chek tarixi, qaytarish, qolganini to'lash, chop etish.
+  - Sahifalar yo'q: pastga aylantirgan sari keyingi cheklar o'zi yuklanadi. Pastda butun davr bo'yicha jami doim ko'rinib turadi.
+  - Ochiq cheklar summasi hozirgi taomlardan hisoblanadi. Excel ham shu filtr bilan, tannarx va zal ustunlari bilan.
+  - Telefonda — kartochkalar, filtrlar bitta tugma ostida, jami pastda ixcham (bosilsa to'liq ochiladi).
+- **Yangi chek ko'rinishi**: katta nom, manzil, Sana / Ofitsant / Chek № / Stol / Mehmonlar, taomlar bo'limlar bo'yicha
+  (BAR, OSHXONA…), Summa / Xizmat haqi / Chegirma, katta **JAMI**, "N kishi — har biriga", to'lov turlari, avans.
+- **Sozlamalar → Ko'rinish → Chek**: logotip o'lchami surgich bilan (20–100%), qog'oz kengligi (80 / 58 mm),
+  bo'limlar bo'yicha guruhlash, "har biriga" qatori, chek ostiga bir nechta qator yozuv — yonida **jonli ko'rinish**
+  va "Sinov cheki" tugmasi. FLOWI Printer dasturi chiqaradigan chek ham shunday.
+
 ## 1.24.0 — Printer vazifalari, boshqa xonalarni ko'rish, PIN ko'rish
 - **Printerlar** (Sozlamalar → Printerlar): har printerda ikki belgi — **"Mijoz cheki (hisob)"** va **"Buyurtma qog'ozlari"**
   (qaysi bo'limlar chiqishi tanlanadi, "Hamma bo'limlar" ham bor). Kassa printeriga ham bo'lim biriktirsa bo'ladi.

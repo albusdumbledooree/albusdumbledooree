@@ -110,7 +110,9 @@ function histRange() {
 }
 function histQuery(extra = {}) {
   const r = histRange();
-  const p = new URLSearchParams({ status: UI.hist.status, ...(UI.hist.q ? { q: UI.hist.q } : {}), ...extra });
+  const h = UI.hist;
+  const p = new URLSearchParams({ status: h.status, ...extra });
+  for (const k of ['q', 'method', 'waiter', 'section', 'room', 'discount']) if (h[k]) p.set(k, h[k]);
   if (r.from) p.set('from', r.from);
   if (r.to) p.set('to', r.to);
   return p.toString();
@@ -157,117 +159,201 @@ function payRestDialog(o, done) {
   form.amount.select();
 }
 
-// The selected check on the left (like the order screen), the list of checks on the right.
-function checkDetailHtml(o) {
-  if (!o) return `<aside class="checkpane hist-pane empty">${emptyState('receipt', t('Chekni tanlang'))}</aside>`;
-  const share = perPerson(o);
-  const permsOf = App.user.perms || {};
-  return `<aside class="checkpane hist-pane">
-    <div class="cp-head"><span class="avatar">${icon(o.takeaway ? 'shopping-bag' : 'receipt', 18)}</span>
-      <div class="grow"><b>${t('Chek')} #${o.id}</b><span class="small muted">${esc(placeName(o))} · ${icon('user-round', 12)} ${esc(o.waiter.name)} · ${icon('users', 12)} ${o.guests}</span></div>
-      ${o.status === 'cancelled' ? `<span class="chip red">${t('Bekor')}</span>` : ''}</div>
-    <div class="cp-body">
-      <p class="small muted" style="margin:8px 0">${icon('clock', 12)} ${fmtDateTime(o.opened_at)} → ${fmtDateTime(o.closed_at)}${o.cashier ? ` · ${icon('wallet', 12)} ${esc(o.cashier.name)}` : ''}${o.print_count ? ` · ${icon('printer', 12)} ${o.print_count}` : ''}
-        ${can('owner', 'admin', 'cashier') ? ` <button class="btn sm" id="h-story">${icon('history', 14)} ${t('Chek tarixi')}</button>` : ''}</p>
-      ${o.items.map((i, n) => `<div class="line ${i.status === 'cancelled' ? 'cancelled' : ''}"><span class="q">${n + 1}</span><span class="n">${esc(i.name)} <span class="muted">× ${i.qty}</span></span><span class="p">${num(i.price * i.qty)}</span></div>`).join('')}
-      ${o.cancel_reason ? `<p class="small" style="color:var(--red);margin-top:8px">${esc(o.cancel_reason)}</p>` : ''}
-    </div>
-    <div class="cp-foot"><div class="sum-rows num">
-      <span>${W('Taomlar')}</span><span class="right">${money(o.subtotal)}</span>
-      <span>${o.service_amount ? esc(serviceLabel(o)) : t('Xizmat haqi')}</span><span class="right">${money(o.service_amount)}</span>
-      <span>${t('Chegirma')}</span><span class="right">${o.discount ? '−' : ''}${money(o.discount)}</span>
-      ${o.refunded ? `<span style="color:var(--red)">${t('Qaytarildi')}</span><span class="right" style="color:var(--red)">−${money(o.refunded)}</span>` : ''}
-      <span class="total">${t('Jami')}</span><span class="total right">${money(o.total)}</span>
-      ${share ? `<span class="share">${t('{0} kishi — har biriga', o.guests)}</span><span class="share right">${money(share)}</span>` : ''}
-      ${['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => `<span class="small muted">${methodName(m)}</span><span class="right small muted">${money(o[`paid_${m}`])}</span>`).join('')}
-      ${advanceRows(o)}</div>
-      ${o.status === 'closed' && o.balance > 0 && (permsOf.close) ? `<button class="btn ok block" id="h-payrest" style="margin-top:8px">${icon('hand-coins', 18)} ${t("Qolganini to'lash")} — ${money(o.balance)}</button>` : ''}
-      ${o.status === 'closed' ? `<div class="order-actions">
-        ${can('owner', 'admin', 'cashier') && o.refunded < o.total ? `<button class="btn" id="h-refund">${icon('undo-2', 18)} ${t('Qaytarish')}</button>` : ''}
-        ${isShop() ? `<button class="btn" id="h-invoice">${icon('file-text', 18)} ${t('Nakladnoy')}</button>` : ''}
-        ${permsOf.print ? `<button class="btn primary" id="h-print">${icon('printer', 18)} ${t('Chop etish')}</button>` : ''}</div>` : ''}
-    </div></aside>`;
+/* ---------- Checks report ----------
+   One wide table: number, type, opened / closed, waiter, place, guests, cost, dishes, service, discount, total.
+   A row opens in place: every dish with the time it was added (cancelled ones marked OTKAZ, not counted),
+   the payments and what can be done with the check. No pages: more checks load while scrolling down;
+   the totals of the whole filter stay at the bottom. On a phone the rows are cards and the filters fold away. */
+const CK_TYPES = () => [['all', t('Hammasi')], ['closed', t('Yopilgan')], ['open', t('Ochiq')], ['cancelled', t("O'chirilgan")], ...(isDoors() ? [['unpaid', t("To'lanmagan")]] : [])];
+const CK_METHODS = () => [['', t("To'lov turi: hammasi")], ['cash', methodName('cash')], ['card', methodName('card')], ['transfer', methodName('transfer')], ['staff', t('Xodim hisobiga')], ['debt', t('Qarzga / qoldi')]];
+const ckStatus = (o) => (o.status === 'open' ? ['orange', t('Ochiq')] : o.status === 'cancelled' ? ['red', t("O'chirilgan")] : ['green', t('Yopilgan')]);
+const ckPlace = (o) => (o.takeaway ? esc(o.customer_name || placeName({ ...o, room: null })) : `<b>${esc(o.room_number)}</b><br><span class="small muted">${esc(o.room_section || o.room_name)}</span>`);
+const ckPct = (part, base) => (base > 0 && part > 0 ? Math.round((part * 1000) / base) / 10 : 0);
+function ckService(o) { return o.service_type === 'per_guest' ? `${num(o.service_amount)}` : `${o.service_pct || 0}%<br><span class="small muted">${num(o.service_amount)}</span>`; }
+function ckDiscount(o) { return `${ckPct(o.discount, o.subtotal + o.service_amount)}%<br><span class="small muted">${num(o.discount)}</span>`; }
+const ckTime = (ts) => (ts ? `${fmtDate(ts)}<br><span class="small muted">${fmtTime(ts)}</span>` : '—');
+function ckFilterCount() {
+  const h = UI.hist;
+  return ['method', 'waiter', 'section', 'room', 'discount', 'q'].filter((k) => h[k]).length + (h.status !== 'all' ? 1 : 0);
 }
 
+// The opened check: dishes (with the time each was added), payments, notes and the actions.
+function ckDetail(o) {
+  const permsOf = App.user.perms || {};
+  const share = perPerson(o);
+  const items = o.items.map((i, n) => {
+    const off = i.status === 'cancelled';
+    return `<tr class="${off ? 'ck-off' : ''}"><td>${n + 1}</td><td class="ck-hide-sm">${fmtTime(i.created_at)}</td>
+      <td><span class="${off ? 'strike' : ''}">${esc(i.name)}</span><span class="ck-show-sm small muted"> · ${fmtTime(i.created_at)}</span>${off ? ` <span class="chip red ck-otkaz">${t('OTKAZ')}</span>` : ''}${i.refunded_qty ? ` <span class="chip orange">${t('qaytarilgan')}: ${i.refunded_qty}</span>` : ''}
+        ${off && (i.cancel_reason || i.cancelled_by_name) ? `<br><span class="small muted">${esc(i.cancel_reason || '')}${i.cancelled_by_name ? ` · ${esc(i.cancelled_by_name)}` : ''}${i.cancelled_at ? ` · ${fmtTime(i.cancelled_at)}` : ''}</span>` : ''}
+        ${i.note ? `<br><span class="small muted">${icon('sticky-note', 12)} ${esc(i.note)}</span>` : ''}</td>
+      <td class="right">${i.qty}</td><td class="right num ck-hide-sm">${num(i.price)}</td><td class="right num">${off ? '—' : num(i.price * i.qty)}</td></tr>`;
+  }).join('');
+  const pays = [];
+  if (o.status === 'closed') {
+    for (const m of ['cash', 'card', 'transfer']) if (o[`paid_${m}`]) pays.push([o.closed_at, `${icon(METHOD_ICONS[m], 15)} ${methodName(m)}`, o[`paid_${m}`]]);
+    if (o.paid_staff) pays.push([o.closed_at, `${icon('user-round', 15)} ${t('Xodim hisobiga')}`, o.paid_staff]);
+  }
+  for (const p of o.payments || []) pays.push([p.created_at, `${icon(METHOD_ICONS[p.method] || 'wallet', 15)} ${methodName(p.method)}${p.user_name ? ` · ${esc(p.user_name)}` : ''}`, p.amount]);
+  const meta = [
+    o.cashier ? `${t('Yopdi')}: <b>${esc(o.cashier.name)}</b>` : '',
+    o.print_count ? t('Chek {0} marta chop etilgan', o.print_count) : '',
+    o.note ? `${t('Izoh')}: ${esc(o.note)}` : '',
+    o.status === 'cancelled' ? `<span class="red-text">${t("O'chirildi")}${o.cancelled_by_name ? `: ${esc(o.cancelled_by_name)}` : ''}${o.cancel_reason ? ` · ${esc(o.cancel_reason)}` : ''}${o.cancel_total ? ` · ${num(o.cancel_total)}` : ''}</span>` : '',
+  ].filter(Boolean).join(' · ');
+  return `<div class="ck-det">
+    <div class="ck-items"><h4>${icon('utensils', 16)} ${W('Taomlar')}</h4><div class="table-wrap"><table class="ck-sub">
+      <tr><th>№</th><th class="ck-hide-sm">${t("Qo'shildi")}</th><th>${W('Taom')}</th><th class="right">${t('Soni')}</th><th class="right ck-hide-sm">${t('Narxi')}</th><th class="right">${t('Jami')}</th></tr>
+      ${items || `<tr><td colspan="6" class="muted">${t("Taom yo'q")}</td></tr>`}</table></div></div>
+    <div class="ck-pay"><h4>${icon('wallet', 16)} ${t("To'lovlar")}</h4>
+      ${pays.length ? `<table class="ck-sub"><tr><th>${t('Sana')}</th><th>${t('Turi')}</th><th class="right">${t('Summa')}</th></tr>
+        ${pays.map(([at, n, v]) => `<tr><td>${fmtDate(at)} ${fmtTime(at)}</td><td>${n}</td><td class="right num">${num(v)}</td></tr>`).join('')}</table>`
+        : `<p class="small muted">${o.status === 'open' ? t("Chek hali ochiq — to'lanmagan") : t("To'lov yo'q")}</p>`}
+      ${meta ? `<p class="small muted ck-meta">${meta}</p>` : ''}
+      <div class="sum-rows num ck-sums">
+        <span>${W('Taomlar')}</span><span class="right">${money(o.subtotal)}</span>
+        ${o.service_amount ? `<span>${esc(serviceLabel(o))}</span><span class="right">${money(o.service_amount)}</span>` : ''}
+        ${o.discount ? `<span>${t('Chegirma')}</span><span class="right">−${money(o.discount)}</span>` : ''}
+        ${o.refunded ? `<span class="red-text">${t('Qaytarildi')}</span><span class="right red-text">−${money(o.refunded)}</span>` : ''}
+        <span class="total">${t('Jami')}</span><span class="total right">${money(o.total)}</span>
+        ${share ? `<span class="share">${t('{0} kishi — har biriga', o.guests)}</span><span class="share right">${money(share)}</span>` : ''}
+        ${advanceRows(o)}</div>
+      <div class="ck-acts">
+        ${can('owner', 'admin', 'cashier') ? `<button class="btn sm" data-ck="story">${icon('history', 16)} ${t('Chek tarixi')}</button>` : ''}
+        ${o.status === 'closed' && o.balance > 0 && permsOf.close ? `<button class="btn sm ok" data-ck="payrest">${icon('hand-coins', 16)} ${t("Qolganini to'lash")}</button>` : ''}
+        ${o.status === 'closed' && can('owner', 'admin', 'cashier') && o.refunded < o.total ? `<button class="btn sm" data-ck="refund">${icon('undo-2', 16)} ${t('Qaytarish')}</button>` : ''}
+        ${o.status === 'closed' && isShop() ? `<button class="btn sm" data-ck="invoice">${icon('file-text', 16)} ${t('Nakladnoy')}</button>` : ''}
+        ${o.status === 'open' ? `<a class="btn sm" href="#/${o.takeaway ? `order/${o.id}` : `room/${o.room_id}`}">${icon('arrow-right', 16)} ${t('Chekni ochish')}</a>` : ''}
+        ${o.status !== 'cancelled' && permsOf.print ? `<button class="btn sm primary" data-ck="print">${icon('printer', 16)} ${t('Chop etish')}</button>` : ''}</div>
+    </div></div>`;
+}
+
+UI.hist = { ...UI.hist, status: 'all', method: '', waiter: '', section: '', room: '', discount: '', open: null, filters: false };
 Views.history = {
   title: () => t('Cheklar'), icon: () => 'receipt', roles: ['owner', 'admin', 'cashier'], refreshOn: ['finance'], module: 'history',
   async load() {
-    const list = await GET(`/api/checks?${histQuery({ limit: 100 })}`);
-    const sel = UI.hist.sel && (list.rows.some((r) => r.id === UI.hist.sel) ? UI.hist.sel : null);
-    list.order = sel ? await GET(`/api/orders/${sel}`).catch(() => null) : null;
-    if (list.order && list.order.status === 'closed') LocalBackup.save(list.order);
+    const list = await GET(`/api/checks?${histQuery({ limit: 100, filters: 1 })}`);
+    list.details = {};
+    if (UI.hist.open && list.rows.some((r) => r.id === UI.hist.open)) list.details[UI.hist.open] = await GET(`/api/orders/${UI.hist.open}`).catch(() => null);
     return list;
   },
   render(d) {
     const h = UI.hist;
     const r = histRange();
     const s = d.sums;
-    const cancelled = h.status === 'cancelled';
-    const unpaid = h.status === 'unpaid';
-    const label = unpaid ? t("Barcha to'lanmagan cheklar") : h.period === 'all' ? (s.first_at ? t('{0} dan beri', fmtDate(s.first_at)) : '') : `${fmtDate(r.from)}${r.to - r.from > 24 * 60 * MIN ? ` — ${fmtDate(r.to - 1)}` : ''}`;
-    return `<div class="split">
-      ${checkDetailHtml(d.order)}
-      <section class="split-main">
-        <div class="toolbar">
-          ${unpaid ? '' : `<div class="seg">${HIST_PERIODS().map(([k, n]) => `<button class="${h.period === k ? 'active' : ''}" data-hp="${k}">${n}</button>`).join('')}</div>`}
-          ${h.period === 'custom' && !unpaid ? `<input type="date" id="h-from" value="${h.from || localDay()}" style="width:auto"> — <input type="date" id="h-to" value="${h.to || localDay()}" style="width:auto">` : ''}
-          <div class="seg"><button class="${h.status === 'closed' ? 'active' : ''}" data-hs="closed">${t('Yopilgan')}</button>
-            ${isDoors() ? `<button class="${unpaid ? 'active' : ''}" data-hs="unpaid">${icon('hand-coins', 15)} ${t("To'lanmagan")}</button>` : ''}
-            <button class="${cancelled ? 'active' : ''}" data-hs="cancelled">${t('Bekor qilingan')}</button></div>
-          <div class="scan" style="max-width:280px">${icon('search', 18)}<input type="search" id="h-q" placeholder="${esc(t('Chek raqami, xona yoki ofitsant'))}" value="${esc(h.q)}"></div>
-          <span class="grow"></span><span class="muted small">${label}</span>
-          ${moduleOn('export') ? `<button class="btn" id="hist-export" ${s.count ? '' : 'disabled'}>${icon('file-spreadsheet', 18)} Excel</button>` : ''}</div>
-        <div class="card flush">${d.rows.length ? `<div class="table-wrap"><table class="list">
-          <tr><th>#</th><th>${t('Ochildi')} / ${t('Yopildi')}</th><th>${t('Joy')}</th><th>${roleName('waiter')}</th><th class="right">${icon('users', 15)}</th><th>${cancelled ? t('Sabab') : t("To'lov")}</th><th class="right">${t('Jami')}</th></tr>
-          ${d.rows.map((o) => `<tr class="clickable ${d.order && d.order.id === o.id ? 'selected' : ''}" data-view="${o.id}"><td><b>${o.id}</b></td>
-            <td class="small">${fmtTime(o.opened_at)} → ${fmtDateTime(o.closed_at)}</td>
-            <td>${o.takeaway ? `${icon(isShop() ? 'shopping-cart' : 'shopping-bag', 15)} ${esc(o.customer_name || o.label || (isShop() ? t('Sotuv') : t('Olib ketish')))}` : `${esc(o.room_number)} · ${esc(o.room_name)}`}</td>
-            <td>${esc(o.waiter_name)}</td><td class="right">${o.guests}</td>
-            <td class="small">${cancelled ? `${esc(o.cancel_reason || '—')}${o.cancelled_by_name ? ` <span class="muted">· ${icon('trash-2', 12)} ${esc(o.cancelled_by_name)}${o.cancel_total ? ` · ${num(o.cancel_total)}` : ''}</span>` : ''}` : ['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => icon(METHOD_ICONS[m], 16)).join(' ')}
-              ${o.balance > 0 ? `<span class="chip ${o.due_at && o.due_at < Date.now() ? 'red' : 'orange'}" title="${o.due_at ? esc(t("To'lash sanasi")) + ': ' + fmtDate(o.due_at) : ''}">${t('Qoldi')} ${num(o.balance)}${o.due_at ? ` · ${fmtDate(o.due_at)}` : ''}</span>` : ''}</td>
-            <td class="right num"><b>${num(o.total)}</b></td></tr>`).join('')}
-        </table></div>
-        ${d.rows.length < s.count ? `<div class="row" style="justify-content:center;margin:10px 0"><button class="btn" id="h-more">${t("Yana ko'rsatish")} (${d.rows.length} / ${s.count})</button></div>` : ''}`
-        : emptyState('receipt', h.period === 'today' ? t('Bugun hali chek yopilmagan') : t("Bu davrda chek yo'q"))}
-        <div class="list-foot"><span>${t('Cheklar')}: <b>${s.count}</b> · ${t('{0} mehmon', s.guests)}</span><span class="grow"></span>
-          ${unpaid ? `<span class="big orange-text">${t('Qolgan')}: ${money(s.balance)}</span>` : ''}
-          ${cancelled ? '' : `<span>${icon('banknote', 15)} ${num(s.cash)}</span><span>${icon('credit-card', 15)} ${num(s.card)}</span><span>${icon('smartphone', 15)} ${num(s.transfer)}</span>`}
-          <span class="big">${t('Jami')}: ${money(s.total)}</span></div></div>
-      </section></div>`;
+    const f = d.filters || { waiters: [], sections: [], rooms: [] };
+    const phone = window.matchMedia('(max-width: 760px)').matches;
+    const label = h.status === 'unpaid' ? t("Barcha to'lanmagan cheklar") : h.period === 'all' ? (s.first_at ? t('{0} dan beri', fmtDate(s.first_at)) : '') : `${fmtDate(r.from)}${r.to - r.from > 24 * 60 * MIN ? ` — ${fmtDate(r.to - 1)}` : ''}`;
+    const sel = (name, opts, val) => `<select data-hf="${name}">${opts.map(([k, n]) => `<option value="${esc(k)}" ${String(val) === String(k) ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>`;
+    const rooms = f.rooms.filter((x) => !h.section || h.section === '-' || x.section === h.section);
+    const filters = `<div class="ck-filters">
+        ${sel('status', CK_TYPES().map(([k, n]) => [k, `${t('Turi')}: ${n}`]), h.status)}
+        ${sel('method', CK_METHODS(), h.method)}
+        ${sel('waiter', [['', `${roleName('waiter')}: ${t('hammasi')}`], ...f.waiters.map((w) => [w.id, w.name])], h.waiter)}
+        ${isShop() ? '' : sel('section', [['', `${t('Zal')}: ${t('hammasi')}`], ...f.sections.map((x) => [x, x]), ['-', t('Olib ketish')]], h.section)}
+        ${isShop() ? '' : sel('room', [['', `${t('Stol / xona')}: ${t('hammasi')}`], ...rooms.map((x) => [x.id, `${x.number} · ${x.name}`])], h.room)}
+        ${sel('discount', [['', `${t('Chegirma')}: ${t('hammasi')}`], ['yes', t('Chegirmali')], ['no', t('Chegirmasiz')]], h.discount)}
+        <div class="scan">${icon('search', 18)}<input type="search" id="h-q" placeholder="${esc(t('Chek raqami, xona yoki ofitsant'))}" value="${esc(h.q)}"></div></div>`;
+    const nf = ckFilterCount();
+    const head = `<div class="page-head ck-head"><h1>${t('Cheklar hisoboti')}</h1>
+        ${h.status === 'unpaid' ? '' : `<div class="seg">${HIST_PERIODS().map(([k, n]) => `<button class="${h.period === k ? 'active' : ''}" data-hp="${k}">${n}</button>`).join('')}</div>`}
+        ${h.period === 'custom' && h.status !== 'unpaid' ? `<span class="ck-dates"><input type="date" id="h-from" value="${h.from || localDay()}"> — <input type="date" id="h-to" value="${h.to || localDay()}"></span>` : ''}
+        <span class="grow"></span><span class="muted small">${label}</span>
+        ${phone ? `<button class="btn ${nf ? 'primary' : ''}" id="h-filters">${icon('list-filter', 18)} ${t('Filtrlar')}${nf ? ` (${nf})` : ''}</button>` : ''}
+        ${nf ? `<button class="btn" id="h-clear">${icon('x', 18)} ${t('Filtrlarni tozalash')}</button>` : ''}
+        ${moduleOn('export') ? `<button class="btn primary" id="hist-export" ${s.count ? '' : 'disabled'}>${icon('file-spreadsheet', 18)} Excel</button>` : ''}</div>
+      ${!phone || h.filters ? filters : ''}`;
+    const more = d.rows.length < s.count ? `<div id="ck-more" class="ck-more">${icon('loader', 18)} ${t('Yuklanmoqda…')} (${d.rows.length} / ${s.count})</div>` : '';
+    const foot = `<div class="ck-foot ${h.footOpen ? 'full' : ''}" id="ck-foot">
+        <span><b>${t('Jami')}: ${t('{0} chek', s.count)}</b></span><span class="ck-x">${t('{0} mehmon', s.guests)}</span>
+        <span class="ck-x">${t('Tannarx')} <b class="num">${num(s.cost)}</b></span><span class="ck-x">${W('Taomlar')} <b class="num">${num(s.subtotal)}</b></span>
+        <span class="ck-x">${t('Xizmat')} <b class="num">${num(s.service)}</b></span><span class="ck-x">${t('Chegirma')} <b class="num">${num(s.discount)}</b></span>
+        <span class="ck-pays ck-x">${[['cash', 'banknote'], ['card', 'credit-card'], ['transfer', 'smartphone']].filter(([k]) => s[k]).map(([k, ic]) => `<span title="${esc(methodName(k))}">${icon(ic, 15)} ${num(s[k])}</span>`).join(' ')}${s.balance ? ` · <span class="orange-text">${t('Qoldi')} ${num(s.balance)}</span>` : ''}</span>
+        <span class="grow"></span><span class="big">${money(s.total)}</span><span class="ck-show-sm ck-foot-tog">${icon(h.footOpen ? 'chevron-down' : 'chevron-up', 18)}</span></div>`;
+    if (!d.rows.length) return `${head}<div class="card">${emptyState('receipt', h.period === 'today' ? t('Bugun hali chek yopilmagan') : t("Bu davrda chek yo'q"))}</div>${foot}`;
+    const det = (o) => (d.details[o.id] ? ckDetail(d.details[o.id]) : `<div class="ck-more">${icon('loader', 18)} ${t('Yuklanmoqda…')}</div>`);
+    if (phone) {
+      return `${head}<div class="ck-cards">${d.rows.map((o) => {
+        const [c, n] = ckStatus(o);
+        const open = h.open === o.id;
+        return `<div class="card ck-card ${open ? 'open' : ''}"><button type="button" class="ck-card-top" data-open="${o.id}">
+            <span class="ck-no">#${o.id}</span><span class="chip ${c}">${n}</span>${o.cancelled_count && o.status !== 'cancelled' ? `<span class="chip red ck-otkaz">${t('OTKAZ')} ${o.cancelled_count}</span>` : ''}
+            <span class="grow"></span><b class="num ck-total">${num(o.total)}</b>${icon(open ? 'chevron-up' : 'chevron-down', 18)}</button>
+          <div class="ck-card-meta small muted">${o.takeaway ? esc(o.customer_name || placeName({ ...o, room: null })) : `${esc(o.room_number)} · ${esc(o.room_name)}`} · ${esc(o.waiter_name)} · ${icon('users', 12)} ${o.guests}
+            <br>${fmtDate(o.opened_at)} ${fmtTime(o.opened_at)} → ${o.closed_at ? fmtTime(o.closed_at) : '…'}${o.discount ? ` · ${t('Chegirma')} ${num(o.discount)}` : ''}${o.balance > 0 ? ` · <span class="orange-text">${t('Qoldi')} ${num(o.balance)}</span>` : ''}</div>
+          ${open ? det(o) : ''}</div>`;
+      }).join('')}${more}</div>${foot}`;
+    }
+    return `${head}<div class="card flush ck-card-wrap"><div class="table-wrap"><table class="list ck-table">
+        <tr><th>№</th><th>${t('Turi')}</th><th>${t('Ochildi')}</th><th>${t('Yopildi')}</th><th>${roleName('waiter')}</th><th>${isShop() ? t('Mijoz') : t('Stol')}</th>
+          <th class="right">${t('Mehmon')}</th><th class="right">${t('Tannarx')}</th><th class="right">${W('Taomlar')}</th><th class="right">${t('Xizmat')}</th><th class="right">${t('Chegirma')}</th><th class="right">${t('Jami')}</th><th></th></tr>
+        ${d.rows.map((o) => {
+          const [c, n] = ckStatus(o);
+          const open = h.open === o.id;
+          return `<tr class="clickable ck-row ${open ? 'ck-sel' : ''}" data-open="${o.id}"><td><b>${o.id}</b></td>
+            <td><span class="chip ${c}">${n}</span>${o.cancelled_count && o.status !== 'cancelled' ? `<br><span class="chip red ck-otkaz" title="${esc(t('Bekor qilingan taomlar'))}">${t('OTKAZ')} ${o.cancelled_count}</span>` : ''}${o.balance > 0 ? `<br><span class="chip orange">${t('Qoldi')} ${num(o.balance)}</span>` : ''}</td>
+            <td>${ckTime(o.opened_at)}</td><td>${ckTime(o.closed_at)}</td><td>${esc(o.waiter_name)}</td><td>${ckPlace(o)}</td>
+            <td class="right">${o.guests}</td><td class="right num">${num(o.cost)}</td><td class="right num">${num(o.subtotal)}</td>
+            <td class="right num">${ckService(o)}</td><td class="right num">${ckDiscount(o)}</td><td class="right num"><b>${num(o.total)}</b></td>
+            <td class="right"><span class="ck-tog ${open ? 'on' : ''}">${icon(open ? 'chevron-up' : 'chevron-down', 18)}</span></td></tr>
+            ${open ? `<tr class="ck-detail"><td colspan="13">${det(o)}</td></tr>` : ''}`;
+        }).join('')}</table></div>${more}</div>${foot}`;
   },
   bind(root, d) {
     const h = UI.hist;
-    root.querySelectorAll('[data-hp]').forEach((b) => b.onclick = () => { h.period = b.dataset.hp; refreshView(); });
-    root.querySelectorAll('[data-hs]').forEach((b) => b.onclick = () => { h.status = b.dataset.hs; h.sel = null; refreshView(); });
+    root.querySelectorAll('[data-hp]').forEach((b) => b.onclick = () => { h.period = b.dataset.hp; h.open = null; refreshView(); });
+    root.querySelectorAll('[data-hf]').forEach((x) => x.onchange = () => {
+      h[x.dataset.hf] = x.value;
+      if (x.dataset.hf === 'section') h.room = '';
+      h.open = null; refreshView();
+    });
     const f = root.querySelector('#h-from'); const to = root.querySelector('#h-to');
     if (f) f.onchange = to.onchange = () => { h.from = f.value; h.to = to.value; refreshView(); };
     const q = root.querySelector('#h-q');
     let timer;
-    q.oninput = () => { clearTimeout(timer); timer = setTimeout(() => { h.q = q.value.trim(); refreshView(); }, 350); };
-    const more = root.querySelector('#h-more');
-    if (more) more.onclick = async () => {
-      more.disabled = true;
-      try { const next = await GET(`/api/checks?${histQuery({ limit: 200, offset: d.rows.length })}`); renderView({ ...d, rows: [...d.rows, ...next.rows] }); } catch (e) { toastError(e); more.disabled = false; }
-    };
-    root.querySelectorAll('[data-view]').forEach((b) => b.onclick = async () => {
-      h.sel = Number(b.dataset.view);
-      try {
-        const o = await GET(`/api/orders/${h.sel}`);
-        if (o.status === 'closed') LocalBackup.save(o);
-        renderView({ ...d, order: o });
-        if (window.matchMedia('(max-width: 1000px)').matches) window.scrollTo({ top: 0, behavior: 'smooth' });
-      } catch (e) { toastError(e); }
+    if (q) q.oninput = () => { clearTimeout(timer); timer = setTimeout(() => { h.q = q.value.trim(); refreshView(); }, 350); };
+    const ft = root.querySelector('#ck-foot');
+    if (ft) ft.onclick = () => { if (window.matchMedia('(max-width: 760px)').matches) { h.footOpen = !h.footOpen; ft.classList.toggle('full', h.footOpen); ft.querySelector('.ck-foot-tog').innerHTML = icon(h.footOpen ? 'chevron-down' : 'chevron-up', 18); } };
+    const fb = root.querySelector('#h-filters');
+    if (fb) fb.onclick = () => { h.filters = !h.filters; renderView(d); };
+    const cl = root.querySelector('#h-clear');
+    if (cl) cl.onclick = () => { Object.assign(h, { status: 'all', method: '', waiter: '', section: '', room: '', discount: '', q: '', open: null }); refreshView(); };
+    // A row opens in place (its dishes are fetched once); a second tap closes it.
+    root.querySelectorAll('[data-open]').forEach((b) => b.onclick = async (e) => {
+      if (e.target.closest('a, .ck-det')) return;
+      const id = Number(b.dataset.open);
+      h.open = h.open === id ? null : id;
+      renderView(d);
+      if (h.open && !d.details[id]) {
+        try {
+          const o = await GET(`/api/orders/${id}`);
+          if (o.status === 'closed') LocalBackup.save(o);
+          d.details[id] = o;
+          if (h.open === id) renderView(d);
+        } catch (err) { toastError(err); }
+      }
     });
-    const pr = root.querySelector('#h-print');
-    if (pr) pr.onclick = () => printCheck(d.order.id);
-    const st = root.querySelector('#h-story');
-    if (st) st.onclick = () => checkStory(d.order.id);
-    const rf = root.querySelector('#h-refund');
-    if (rf) rf.onclick = () => refundDialog(d.order);
-    const inv = root.querySelector('#h-invoice');
-    if (inv) inv.onclick = () => printInvoice(d.order.id);
-    const prb = root.querySelector('#h-payrest');
-    if (prb) prb.onclick = () => payRestDialog(d.order, (o) => renderView({ ...d, order: o }));
+    const o = h.open && d.details[h.open];
+    const act = { story: () => checkStory(o.id), payrest: () => payRestDialog(o, (x) => { d.details[x.id] = x; refreshView(); }), refund: () => refundDialog(o),
+      invoice: () => printInvoice(o.id), print: () => printCheck(o.id) };
+    root.querySelectorAll('[data-ck]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); if (o) act[b.dataset.ck](); });
+    // More checks while scrolling: the next 100 load when the end of the list comes into view.
+    const more = root.querySelector('#ck-more');
+    if (more && 'IntersectionObserver' in window) {
+      const io = new IntersectionObserver(async (en) => {
+        if (!en.some((x) => x.isIntersecting) || d.loading) return;
+        d.loading = true; io.disconnect();
+        try {
+          const next = await GET(`/api/checks?${histQuery({ limit: 100, offset: d.rows.length })}`);
+          const seen = new Set(d.rows.map((x) => x.id));
+          d.rows = [...d.rows, ...next.rows.filter((x) => !seen.has(x.id))];
+          d.sums = next.sums;
+        } catch (err) { toastError(err); }
+        d.loading = false;
+        if (currentView === Views.history) renderView(d);
+      }, { rootMargin: '400px' });
+      io.observe(more);
+    }
     (root.querySelector('#hist-export') || {}).onclick = async () => {
       try {
         const res = await fetch(`/api/checks/export?${histQuery()}`, { headers: { Authorization: `Bearer ${App.token}` } });
@@ -1338,6 +1424,52 @@ function staffTypesDialog() {
   bindRows();
 }
 
+// ---------- Settings → Ko'rinish → Chek: the check's look with a live preview ----------
+function sampleCheck() {
+  const it = (name, qty, price, cat, sort) => ({ name, qty, price, status: 'served', category_name: cat, category_sort: sort });
+  const items = [it(t('Gazlangan suv 1 L'), 1, 5000, t('Bar'), 1), it('Coca-Cola 1,5 L', 1, 16000, t('Bar'), 1),
+    it(t('Osh (palov)'), 2, 45000, t('Oshxona'), 2), it(t('Salat'), 1, 18000, t('Oshxona'), 2), it(t('Non'), 4, 5000, t('Oshxona'), 2),
+    it(t("Ko'k choy"), 3, 5000, t('Choy'), 3)];
+  const subtotal = items.reduce((a, i) => a + i.qty * i.price, 0);
+  const service = Math.round(subtotal / 10);
+  return { id: 53, status: 'closed', takeaway: 0, guests: 2, waiter: { name: t('Ofitsant') }, room: { number: '10', name: t('Kabina') }, cashier: { name: App.user.name },
+    opened_at: Date.now() - 3600000, closed_at: Date.now(), items, subtotal, service_type: 'percent', service_pct: 10, service_amount: service, discount: 0,
+    total: subtotal + service, paid_cash: subtotal + service, paid_card: 0, paid_transfer: 0, payments: [] };
+}
+function bindReceiptSettings(root, save) {
+  const f = root.querySelector('#rc-form');
+  if (!f) return;
+  let width = String(App.settings.receipt_width || '80');
+  const draft = () => ({ ...App.settings, receipt_logo_size: Number(f.receipt_logo_size.value), receipt_width: width,
+    receipt_group: f.receipt_group.checked, receipt_per_person: f.receipt_per_person.checked, receipt_footer: f.receipt_footer.value,
+    receipt_logo: root.querySelector('#rlogo-on').checked });
+  const frame = f.querySelector('#rc-preview');
+  const draw = () => {
+    const d = draft();
+    f.querySelector('#rc-size').textContent = `${d.receipt_logo_size}%`;
+    frame.style.width = `${width === '58' ? 210 : 300}px`;
+    // The preview is as tall as the check itself (measured from its content, so a shorter 58 mm check shrinks it again).
+    frame.onload = () => { try { frame.style.height = `${Math.ceil(frame.contentDocument.body.getBoundingClientRect().height) + 8}px`; } catch { /* preview only */ } };
+    frame.srcdoc = docHtml(t('Chek'), receiptBody(sampleCheck(), d), d);
+  };
+  f.receipt_logo_size.oninput = draw;
+  f.receipt_group.onchange = f.receipt_per_person.onchange = draw;
+  f.receipt_footer.oninput = draw;
+  root.querySelector('#rlogo-on').addEventListener('change', draw);
+  f.querySelectorAll('[data-w]').forEach((b) => b.onclick = () => {
+    width = b.dataset.w;
+    f.querySelectorAll('[data-w]').forEach((x) => x.classList.toggle('active', x === b));
+    draw();
+  });
+  f.querySelector('#rc-test').onclick = () => { const d = draft(); printReceipt(sampleCheck(), d); };
+  f.onsubmit = (e) => {
+    e.preventDefault();
+    const d = draft();
+    save({ receipt_logo_size: d.receipt_logo_size, receipt_width: d.receipt_width, receipt_group: d.receipt_group, receipt_per_person: d.receipt_per_person, receipt_footer: d.receipt_footer });
+  };
+  draw();
+}
+
 // ---------- Settings ----------
 const AUDIT_NAMES = () => ({
   login: t('Kirdi'), pin_login: t('PIN bilan kirdi'), order_open: t('Chek ochdi'), items_add: t("Taom qo'shdi"), item_ready: t('Taom tayyor'), item_cancel: t('Taomni bekor qildi'),
@@ -1421,10 +1553,7 @@ Views.settings = {
         <label class="field" id="sv-pct">${t('Foiz, %')}<input type="number" name="service_pct" min="0" max="50" step="0.5" value="${s.service_pct}"></label>
         <label class="field" id="sv-guest">${t('Bir kishi uchun')} (${esc(s.currency)})<input type="number" name="service_per_guest" min="0" step="500" value="${s.service_per_guest}"></label></div>
       <p class="small muted" style="margin-top:8px">${t("Xizmat haqi faqat shu yerda o'zgaradi. Olib ketishda xizmat haqi olinmaydi.")}</p>
-      <h3 style="margin:18px 0 10px">${icon('printer', 18)} ${t('Chek')}</h3>
-      <div class="form-grid">
-        <label class="field">${t('Chek ostidagi matn')}<input name="receipt_footer" value="${esc(s.receipt_footer)}"></label>
-        <label class="field">${t('Printer kengligi')}<select name="receipt_width">${['80', '58'].map((w) => `<option value="${w}" ${String(s.receipt_width || '80') === w ? 'selected' : ''}>${w} mm</option>`).join('')}</select></label></div>
+      <p class="small muted" style="margin-top:12px">${icon('receipt', 14)} ${t("Chek ko'rinishi (logotip o'lchami, qog'oz kengligi, chek ostidagi yozuvlar): Sozlamalar → Ko'rinish.")}</p>
       ${moduleOn('payroll') ? `<h3 style="margin:18px 0 10px">${icon('utensils', 18)} ${t('Xodimlar ovqati')}</h3>
       <div class="form-grid"><label class="field">${t('Kassada "Xodim hisobiga" yopilgan chek ish haqidan qaysi narxda ushlanadi')}<select name="staff_meal_price">
         <option value="menu" ${s.staff_meal_price !== 'cost' ? 'selected' : ''}>${t('Menyu narxida')}</option>
@@ -1474,17 +1603,31 @@ Views.settings = {
         <p class="small muted">${t("Ish stoli, yuqori panel va chekda chiqadi. PNG (shaffof fon) yoki JPG.")}</p>
         <div class="row"><label class="btn primary">${icon('upload', 18)} ${t('Yuklash')}<input type="file" id="logo-file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg" hidden></label>
           ${s.logo ? `<button type="button" class="btn red-text" id="logo-del">${icon('trash-2', 18)} ${t("O'chirish")}</button>` : ''}</div></form>
-      <form class="card" id="rlogo-form"><div class="card-head"><h2>${icon('printer')} ${t('Chekdagi logotip')}</h2></div>
-        <label class="check"><input type="checkbox" id="rlogo-on" ${s.receipt_logo ? 'checked' : ''}> ${t("Chek tepasida logotip chiqsin")}</label>
-        <div class="logo-box receipt-box" style="margin-top:10px">${s.receipt_logo_id || s.logo ? `<img src="/media/${esc(code)}/${s.receipt_logo_id || s.logo}" alt="">` : `<span class="muted">${t("Logotip yo'q")}</span>`}</div>
-        <p class="small muted">${t("Chek printeri oq-qora chiqaradi. Alohida oq-qora logotip yuklasangiz, chekda o'sha chiqadi; bo'lmasa — asosiy logotip. PNG yoki JPG.")}</p>
-        <div class="row"><label class="btn">${icon('upload', 18)} ${t('Chek uchun yuklash')}<input type="file" id="rlogo-file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg" hidden></label>
-          ${s.receipt_logo_id ? `<button type="button" class="btn red-text" id="rlogo-del">${icon('trash-2', 18)} ${t("O'chirish")}</button>` : ''}</div></form>
       <form class="card" id="bg-form"><div class="card-head"><h2>${icon('monitor-smartphone')} ${t('Ish stoli foni')}</h2></div>
         <div class="seg" style="margin-bottom:12px">${modes.map(([k, ic, n]) => `<button type="button" class="${bg.mode === k ? 'active' : ''}" data-bgmode="${k}">${icon(ic, 16)} ${n}</button>`).join('')}</div>
         <div id="bg-extra"></div>
         <div class="bg-preview" id="bg-preview"></div>
         <p class="small muted" style="margin-top:8px">${icon('info', 14)} ${t("Yozuvlar har qanday fonda o'qiladigan bo'lishi uchun rang avtomatik moslashadi.")}</p></form>
+      <form class="card rc-card" id="rc-form"><div class="rc-grid"><div class="rc-left">
+        <div class="card-head"><h2>${icon('receipt')} ${t('Chek')}</h2></div>
+        <h3>${t('Logotip')}</h3>
+        <div class="row rc-logo-row"><div class="logo-box receipt-box">${s.receipt_logo_id || s.logo ? `<img src="/media/${esc(code)}/${s.receipt_logo_id || s.logo}" alt="">` : `<span class="muted small">${t("Logotip yo'q")}</span>`}</div>
+          <label class="btn">${icon('upload', 18)} ${s.receipt_logo_id ? t('Almashtirish') : t('Chek uchun yuklash')}<input type="file" id="rlogo-file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg" hidden></label>
+          ${s.receipt_logo_id ? `<button type="button" class="btn red-text" id="rlogo-del">${icon('trash-2', 18)} ${t("O'chirish")}</button>` : ''}</div>
+        <label class="check" style="margin-top:8px"><input type="checkbox" id="rlogo-on" ${s.receipt_logo ? 'checked' : ''}> ${t("Chek tepasida logotip chiqsin")}</label>
+        <p class="small muted">${t("Chek printeri oq-qora chiqaradi. Alohida oq-qora logotip yuklasangiz, chekda o'sha chiqadi; bo'lmasa — asosiy logotip. PNG yoki JPG.")}</p>
+        <h3>${t("Logotip o'lchami")}</h3>
+        <div class="rc-range"><span class="small muted">${t('Kichik')}</span><input type="range" name="receipt_logo_size" min="20" max="100" step="5" value="${s.receipt_logo_size || 50}"><span class="small muted">${t('Katta')}</span><b id="rc-size">${s.receipt_logo_size || 50}%</b></div>
+        <h3>${t("Qog'oz kengligi")}</h3>
+        <div class="seg" id="rc-width">${['80', '58'].map((w) => `<button type="button" data-w="${w}" class="${String(s.receipt_width || '80') === w ? 'active' : ''}">${w} mm</button>`).join('')}</div>
+        <label class="check" style="margin-top:14px"><input type="checkbox" name="receipt_group" ${s.receipt_group !== false ? 'checked' : ''}> ${t("Taomlarni bo'limlar bo'yicha guruhlash (BAR, OSHXONA…)")}</label>
+        <label class="check" style="margin-top:8px"><input type="checkbox" name="receipt_per_person" ${s.receipt_per_person !== false ? 'checked' : ''}> ${t('"{0} kishi — har biriga" qatori', 'N')}</label>
+        <h3>${t('Chek ostidagi yozuvlar')}</h3>
+        <span class="small muted">${t('Har bir qator alohida chiqadi')}</span>
+        <textarea name="receipt_footer" rows="4" maxlength="520">${esc(s.receipt_footer || '')}</textarea>
+        <div class="row" style="margin-top:14px;gap:8px"><button class="btn primary">${icon('check', 18)} ${t('Saqlash')}</button>
+          <button type="button" class="btn" id="rc-test">${icon('printer', 18)} ${t('Sinov cheki')}</button></div></div>
+        <div class="rc-right"><div class="small muted rc-live">${t("Jonli ko'rinish")}</div><iframe id="rc-preview" title="${esc(t("Jonli ko'rinish"))}"></iframe></div></div></form>
     </div>`;
   },
   bind_look(root) {
@@ -1545,6 +1688,7 @@ Views.settings = {
     const del = root.querySelector('#logo-del');
     if (del) del.onclick = () => save({ logo: '' }, t("O'chirildi"));
     root.querySelector('#rlogo-on').onchange = (e) => save({ receipt_logo: e.target.checked });
+    bindReceiptSettings(root, save);
     root.querySelector('#rlogo-file').onchange = async (e) => {
       const f = e.target.files[0];
       if (!f) return;

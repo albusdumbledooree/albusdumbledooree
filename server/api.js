@@ -144,6 +144,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     out.has_delete_code = !!out.delete_code_hash;
     delete out.delete_code_hash;
     out.receipt_logo = out.receipt_logo !== '0';
+    // The check's look: logo width (% of the paper), dishes under their sections, the "per person" line.
+    out.receipt_logo_size = Math.min(100, Math.max(20, Number(out.receipt_logo_size) || 50));
+    out.receipt_group = out.receipt_group !== '0';
+    out.receipt_per_person = out.receipt_per_person !== '0';
     out.receipt_logo_id = out.receipt_logo_id ? Number(out.receipt_logo_id) : null;
     out.staff_meal_price = out.staff_meal_price === 'cost' ? 'cost' : 'menu';
     out.cashback_pct = Number(out.cashback_pct ?? 3) || 0;
@@ -489,7 +493,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   // ---------- Settings ----------
   function updateSettings({ user, body }) {
-    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width',
+    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'receipt_logo_size', 'receipt_group', 'receipt_per_person',
       'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo',
       'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', 'cashback_pct', 'qr_order', 'qr_from', 'qr_to',
       'geo_lat', 'geo_lng', 'geo_radius', 'work_from', 'expense_groups', 'staff_types', ...GEO_FLAGS, ...OWNER_SETTINGS];
@@ -529,7 +533,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       }
       if (k.startsWith('perm_') || k === 'finance_lock') v = v ? '1' : '0';
       if (k === 'logo' || k === 'receipt_logo_id') v = v ? String(assetId(v, 'logo')) : '';
-      if (k === 'receipt_logo') v = v ? '1' : '0';
+      if (k === 'receipt_logo' || k === 'receipt_group' || k === 'receipt_per_person') v = v ? '1' : '0';
+      if (k === 'receipt_logo_size') v = int(v, "Logotip o'lchami", { min: 20, max: 100 });
+      // Lines under the check: several, each printed on its own line.
+      if (k === 'receipt_footer') v = String(v ?? '').replace(/\r/g, '').split('\n').map((x) => x.trim().slice(0, 64)).slice(0, 8).join('\n').trim();
       if (k === 'pin_lock_attempts') v = int(v, 'Urinishlar soni', { max: 50 });
       if (k === 'pin_lock_minutes') v = int(v, 'Daqiqalar', { min: 1, max: 1440 });
       if (k === 'room_types') v = JSON.stringify(roomTypesInput(v));
@@ -1012,8 +1019,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   function orderDetails(id) {
     const order = getOrderRow(id);
-    const items = q(`SELECT i.*, u.name chef_name FROM order_items i LEFT JOIN users u ON u.id = i.chef_id
-      WHERE i.order_id = ? ORDER BY i.created_at, i.id`).all(id);
+    const items = q(`SELECT i.*, u.name chef_name, cb.name cancelled_by_name, cat.id category_id, cat.name category_name, cat.sort category_sort
+      FROM order_items i LEFT JOIN users u ON u.id = i.chef_id LEFT JOIN users cb ON cb.id = i.cancelled_by
+      LEFT JOIN dishes d ON d.id = i.dish_id LEFT JOIN categories cat ON cat.id = d.category_id WHERE i.order_id = ? ORDER BY i.created_at, i.id`).all(id);
     const room = q('SELECT * FROM rooms WHERE id = ?').get(order.room_id);
     const waiter = q('SELECT id, name FROM users WHERE id = ?').get(order.waiter_id);
     const cashier = order.cashier_id ? q('SELECT id, name FROM users WHERE id = ?').get(order.cashier_id) : null;
@@ -1279,10 +1287,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     tx(() => {
       if (qty < it.qty) {
         q('UPDATE order_items SET qty = ? WHERE id = ?').run(it.qty - qty, it.id);
-        q(`INSERT INTO order_items (order_id, dish_id, name, price, cost, qty, note, status, needs_kitchen, prep_minutes, created_at, accepted_at, ready_at, eta_at, chef_id, cancel_reason)
-          SELECT order_id, dish_id, name, price, cost, ?, note, 'cancelled', needs_kitchen, prep_minutes, created_at, accepted_at, ready_at, eta_at, chef_id, ? FROM order_items WHERE id = ?`).run(qty, reason, it.id);
+        q(`INSERT INTO order_items (order_id, dish_id, name, price, cost, qty, note, status, needs_kitchen, prep_minutes, created_at, accepted_at, ready_at, eta_at, chef_id, cancel_reason, cancelled_at, cancelled_by)
+          SELECT order_id, dish_id, name, price, cost, ?, note, 'cancelled', needs_kitchen, prep_minutes, created_at, accepted_at, ready_at, eta_at, chef_id, ?, ?, ? FROM order_items WHERE id = ?`).run(qty, reason, now(), user.id, it.id);
       } else {
-        q("UPDATE order_items SET status = 'cancelled', cancel_reason = ? WHERE id = ?").run(reason, it.id);
+        q("UPDATE order_items SET status = 'cancelled', cancel_reason = ?, cancelled_at = ?, cancelled_by = ? WHERE id = ?").run(reason, now(), user.id, it.id);
       }
       if (it.dish_id) q('UPDATE dishes SET stock = stock + ?, available = 1 WHERE id = ? AND stock IS NOT NULL').run(qty, it.dish_id);
     });
@@ -1594,7 +1602,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       for (const it of items) {
         if (it.dish_id) q('UPDATE dishes SET stock = stock + ?, available = 1 WHERE id = ? AND stock IS NOT NULL').run(it.qty, it.dish_id);
       }
-      q("UPDATE order_items SET status = 'cancelled', cancel_reason = ? WHERE order_id = ? AND status != 'cancelled'").run(reason, o.id);
+      q("UPDATE order_items SET status = 'cancelled', cancel_reason = ?, cancelled_at = ?, cancelled_by = ? WHERE order_id = ? AND status != 'cancelled'").run(reason, now(), user.id, o.id);
       q("UPDATE orders SET status = 'cancelled', closed_at = ?, cancel_reason = ? WHERE id = ?").run(now(), reason, o.id);
     });
     audit(user, 'order_cancel', `#${o.id} ${reason}${what ? ` — ${what}` : ''}`);
@@ -1636,44 +1644,79 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   }
 
   // ---------- Checks history ----------
+  /* The checks report's filter. status: closed (default) | cancelled (deleted) | open | all | unpaid;
+     method: cash | card | transfer | staff | debt; waiter, section (hall), room, discount (yes | no), q (search). */
   function checksWhere(query) {
     // "unpaid": every closed check with money still owed on it (an advance sale), whatever the period.
     const unpaid = query.status === 'unpaid';
-    const status = ['closed', 'cancelled'].includes(query.status) ? query.status : 'closed';
-    let where = unpaid ? "o.status = ? AND o.balance > 0" : 'o.status = ?';
-    const params = [status];
-    if (query.from && !unpaid) { where += ' AND o.closed_at >= ?'; params.push(Number(query.from)); }
-    if (query.to && !unpaid) { where += ' AND o.closed_at < ?'; params.push(Number(query.to)); }
+    const st = ['closed', 'cancelled', 'open', 'all'].includes(query.status) ? query.status : 'closed';
+    let where = unpaid ? "o.status = 'closed' AND o.balance > 0" : st === 'all' ? '1 = 1' : 'o.status = ?';
+    const params = unpaid || st === 'all' ? [] : [st];
+    // Open checks have no closing time: they count by when they were opened.
+    const at = st === 'closed' || st === 'cancelled' ? 'o.closed_at' : 'COALESCE(o.closed_at, o.opened_at)';
+    if (query.from && !unpaid) { where += ` AND ${at} >= ?`; params.push(Number(query.from)); }
+    if (query.to && !unpaid) { where += ` AND ${at} < ?`; params.push(Number(query.to)); }
+    const m = { cash: 'o.paid_cash > 0', card: 'o.paid_card > 0', transfer: 'o.paid_transfer > 0', staff: 'o.paid_staff > 0', debt: '(o.balance > 0 OR o.paid_debt > 0)' }[query.method];
+    if (m) where += ` AND ${m}`;
+    if (Number(query.waiter)) { where += ' AND o.waiter_id = ?'; params.push(Number(query.waiter)); }
+    if (query.section !== undefined && query.section !== '') {
+      if (query.section === '-') where += ' AND o.takeaway = 1';
+      else { where += ' AND o.takeaway = 0 AND r.section = ?'; params.push(str(query.section, "Bo'lim", { max: 40 })); }
+    }
+    if (Number(query.room)) { where += ' AND o.room_id = ? AND o.takeaway = 0'; params.push(Number(query.room)); }
+    if (query.discount === 'yes') where += ' AND o.discount > 0';
+    if (query.discount === 'no') where += ' AND o.discount = 0';
     const search = str(query.q, 'Qidiruv', { max: 60 });
     if (search) {
       where += ' AND (CAST(o.id AS TEXT) = ? OR r.name LIKE ? OR r.number = ? OR w.name LIKE ? OR o.label LIKE ? OR cu.name LIKE ? OR cu.phone LIKE ?)';
       params.push(search.replace(/^#/, ''), `%${search}%`, search, `%${search}%`, `%${search}%`, `%${search}%`, `%${search.replace(/\D/g, '') || search}%`);
     }
-    return { where, params };
+    return { where, params, at };
   }
   const CHECK_FROM = `FROM orders o JOIN rooms r ON r.id = o.room_id JOIN users w ON w.id = o.waiter_id LEFT JOIN users c ON c.id = o.cashier_id
     LEFT JOIN customers cu ON cu.id = o.customer_id`;
 
+  // The cost of the dishes on a check (what they cost the business), cancelled lines left out.
+  const COST_OF = "(SELECT COALESCE(SUM(i.cost * (i.qty - i.refunded_qty)), 0) FROM order_items i WHERE i.order_id = o.id AND i.status != 'cancelled')";
   function listChecks({ query }) {
-    const { where, params } = checksWhere(query);
+    const { where, params, at } = checksWhere(query);
     const limit = Math.min(Number(query.limit) || 100, 500);
     const offset = Math.max(Number(query.offset) || 0, 0);
-    const rows = q(`SELECT o.*, r.name room_name, r.number room_number, w.name waiter_name, c.name cashier_name, cu.name customer_name, cu.phone customer_phone,
-      (SELECT name FROM users WHERE id = o.cancelled_by) cancelled_by_name,
-      (SELECT COALESCE(SUM(qty), 0) FROM order_items i WHERE i.order_id = o.id AND i.status != 'cancelled') items_count
-      ${CHECK_FROM} WHERE ${where} ORDER BY ${query.status === 'unpaid' ? 'COALESCE(o.due_at, o.closed_at), o.id' : 'o.closed_at DESC, o.id DESC'} LIMIT ? OFFSET ?`).all(...params, limit, offset);
-    const sums = q(`SELECT COUNT(*) count, COALESCE(SUM(o.total), 0) total, COALESCE(SUM(o.subtotal), 0) subtotal,
+    const rows = q(`SELECT o.*, r.name room_name, r.number room_number, r.section room_section, w.name waiter_name, c.name cashier_name, cu.name customer_name, cu.phone customer_phone,
+      (SELECT name FROM users WHERE id = o.cancelled_by) cancelled_by_name, ${COST_OF} cost,
+      (SELECT COALESCE(SUM(qty), 0) FROM order_items i WHERE i.order_id = o.id AND i.status != 'cancelled') items_count,
+      (SELECT COUNT(*) FROM order_items i WHERE i.order_id = o.id AND i.status = 'cancelled') cancelled_count
+      ${CHECK_FROM} WHERE ${where} ORDER BY ${query.status === 'unpaid' ? 'COALESCE(o.due_at, o.closed_at), o.id' : `${at} DESC, o.id DESC`} LIMIT ? OFFSET ?`).all(...params, limit, offset);
+    const sums = q(`SELECT COUNT(*) count, COALESCE(SUM(o.total), 0) total, COALESCE(SUM(o.subtotal), 0) subtotal, COALESCE(SUM(${COST_OF}), 0) cost,
       COALESCE(SUM(o.service_amount), 0) service, COALESCE(SUM(o.discount), 0) discount, COALESCE(SUM(o.guests), 0) guests,
       COALESCE(SUM(o.paid_cash), 0) cash, COALESCE(SUM(o.paid_card), 0) card, COALESCE(SUM(o.paid_transfer), 0) transfer,
       COALESCE(SUM(o.paid_staff), 0) staff, COALESCE(SUM(o.balance), 0) balance, MIN(o.closed_at) first_at ${CHECK_FROM} WHERE ${where}`).get(...params);
-    return { rows, sums, offset, limit };
+    // An open check keeps its sums only when it is closed: here they are worked out from its dishes now.
+    const live = (o) => totals(o, q('SELECT price, qty, status FROM order_items WHERE order_id = ?').all(o.id));
+    if (query.status === 'open' || query.status === 'all') {
+      for (const o of q(`SELECT o.* ${CHECK_FROM} WHERE ${where} AND o.status = 'open'`).all(...params)) {
+        const x = live(o);
+        sums.subtotal += x.subtotal; sums.service += x.service_amount; sums.discount += x.discount; sums.total += x.total;
+      }
+    }
+    const out = { rows: rows.map((o) => (o.status === 'open' ? { ...o, ...live(o) } : o)), sums, offset, limit };
+    // The choices for the report's filters (asked once, with the first page).
+    if (query.filters) {
+      out.filters = {
+        waiters: q("SELECT id, name FROM users WHERE role != 'chef' AND (active = 1 OR id IN (SELECT DISTINCT waiter_id FROM orders)) ORDER BY active DESC, name").all(),
+        sections: q("SELECT DISTINCT section FROM rooms WHERE type != 'soboy' AND section != '' ORDER BY section").all().map((r) => r.section),
+        rooms: q("SELECT id, number, name, section FROM rooms WHERE type != 'soboy' ORDER BY CAST(number AS INTEGER), number").all(),
+      };
+    }
+    return out;
   }
 
   // Excel-friendly CSV (semicolon, UTF-8 BOM) of every check in the filter, with its dishes.
   function exportChecks({ query }) {
-    const { where, params } = checksWhere(query);
-    const rows = q(`SELECT o.*, r.name room_name, r.number room_number, w.name waiter_name, c.name cashier_name
-      ${CHECK_FROM} WHERE ${where} ORDER BY o.closed_at, o.id`).all(...params);
+    const { where, params, at } = checksWhere(query);
+    const rows = q(`SELECT o.*, r.name room_name, r.number room_number, r.section room_section, w.name waiter_name, c.name cashier_name, ${COST_OF} cost
+      ${CHECK_FROM} WHERE ${where} ORDER BY ${at}, o.id`).all(...params)
+      .map((o) => (o.status === 'open' ? { ...o, ...totals(o, q('SELECT price, qty, status FROM order_items WHERE order_id = ?').all(o.id)) } : o));
     const items = new Map();
     for (const i of q(`SELECT i.order_id, i.name, i.qty, i.price FROM order_items i JOIN orders o ON o.id = i.order_id JOIN rooms r ON r.id = o.room_id
       JOIN users w ON w.id = o.waiter_id LEFT JOIN users c ON c.id = o.cashier_id LEFT JOIN customers cu ON cu.id = o.customer_id WHERE ${where} AND i.status != 'cancelled' ORDER BY i.id`).all(...params)) {
@@ -1686,11 +1729,11 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       const p2 = (n) => String(n).padStart(2, '0');
       return `${p2(d.getDate())}.${p2(d.getMonth() + 1)}.${d.getFullYear()} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
     };
-    const head = ['Chek', 'Holat', 'Ochilgan', 'Yopilgan', 'Xona', 'Ofitsant', 'Kassir', 'Mehmon', 'Taomlar', 'Taomlar summasi',
+    const head = ['Chek', 'Holat', 'Ochilgan', 'Yopilgan', 'Zal', 'Xona', 'Ofitsant', 'Kassir', 'Mehmon', 'Taomlar', 'Tannarx', 'Taomlar summasi',
       'Xizmat haqi', 'Chegirma', 'Jami', 'Naqd', 'Karta', "O'tkazma", 'Bekor sababi'];
-    const lines = rows.map((o) => [o.id, o.status === 'closed' ? 'Yopilgan' : 'Bekor', dt(o.opened_at), dt(o.closed_at),
-      `${o.room_number} ${o.room_name}`, o.waiter_name, o.cashier_name || '', o.guests, (items.get(o.id) || []).join(', '),
-      o.subtotal, o.service_amount, o.discount, o.total, o.paid_cash, o.paid_card, o.paid_transfer, o.cancel_reason || '']);
+    const lines = rows.map((o) => [o.id, { closed: 'Yopilgan', open: 'Ochiq', cancelled: "O'chirilgan" }[o.status] || o.status, dt(o.opened_at), dt(o.closed_at),
+      o.takeaway ? 'Olib ketish' : o.room_section || '', o.takeaway ? placeName(o, null) : `${o.room_number} ${o.room_name}`, o.waiter_name, o.cashier_name || '', o.guests,
+      (items.get(o.id) || []).join(', '), o.cost, o.subtotal, o.service_amount, o.discount, o.total, o.paid_cash, o.paid_card, o.paid_transfer, o.cancel_reason || '']);
     const csv = '\ufeff' + [head, ...lines].map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
     return { __file: { name: `cheklar_${dt(Date.now()).slice(0, 10)}.csv`, type: 'text/csv; charset=utf-8', body: csv } };
   }
