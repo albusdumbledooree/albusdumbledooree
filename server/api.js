@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { hashPassword, verifyPassword, newToken, HttpError, str, int } = require('./util');
+const { NO_BOX } = require('./secret');
 const { createPro } = require('./pro');
 const { createGuest } = require('./guest');
 const { createTasks } = require('./tasks');
@@ -72,7 +73,7 @@ function routeModule(pattern) {
 // opts.hub: live-event hub of this choyxona; opts.tokenPrefix marks which choyxona a session token belongs to;
 // opts.tenant(): the choyxona's platform record (code, name, paid_until); opts.plan(): its plan (sections, staff limit);
 // opts.file: its database file.
-function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () => null, branches = () => [], file = null, telegram = null } = {}) {
+function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () => null, branches = () => [], file = null, telegram = null, secret = NO_BOX } = {}) {
   const events = hub;
   // Shared devices (the staff-list screen) get tokens of their own: "d<choyxona>_…".
   const devicePrefix = tokenPrefix.replace(/^t/, 'd');
@@ -220,6 +221,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       throw new HttpError(401, "Login yoki parol noto'g'ri");
     }
     failures.delete(key);
+    // Set before the boss could look passwords up: the copy is made at the first right login.
+    if (!user.pass_enc) q('UPDATE users SET pass_enc = ? WHERE id = ?').run(secret.seal(password), user.id);
     return user;
   }
 
@@ -305,6 +308,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       throw new HttpError(401, "PIN noto'g'ri");
     }
     pinFailures.delete(key);
+    if (!user.pin_enc) q('UPDATE users SET pin_enc = ? WHERE id = ?').run(secret.seal(String(body.pin)), user.id);
     const res = startSession(user, 'pin_login', device);
     work.deviceIn(user, device);
     return res;
@@ -323,7 +327,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   }
 
   function setOwnPin({ user, body }) {
-    q('UPDATE users SET pin_hash = ? WHERE id = ?').run(pinHash(user.role, body.pin), user.id);
+    q('UPDATE users SET pin_hash = ?, pin_enc = ? WHERE id = ?').run(pinHash(user.role, body.pin), secret.seal(String(body.pin)), user.id);
     audit(user, 'pin_change');
     return { ok: true };
   }
@@ -478,7 +482,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const pw = str(body.new_password, 'Yangi parol', { required: true });
     if (pw.length < 4) throw new HttpError(400, "Parol kamida 4 ta belgi bo'lsin");
     if (!verifyPassword(old, user.pass_hash)) throw new HttpError(400, "Eski parol noto'g'ri");
-    q('UPDATE users SET pass_hash = ? WHERE id = ?').run(hashPassword(pw), user.id);
+    q('UPDATE users SET pass_hash = ?, pass_enc = ? WHERE id = ?').run(hashPassword(pw), secret.seal(pw), user.id);
     audit(user, 'password_change');
     return { ok: true };
   }
@@ -680,16 +684,18 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       username = base;
       for (let n = 2; q('SELECT 1 FROM users WHERE username = ?').get(username); n++) username = `${base}${n}`;
     }
-    const password = str(body.password, 'Parol') || newToken();
+    const typed = str(body.password, 'Parol');
+    const password = typed || newToken();
     if (password.length < 4) throw new HttpError(400, "Parol kamida 4 ta belgi bo'lsin");
     if (q('SELECT 1 FROM users WHERE username = ?').get(username)) throw new HttpError(409, 'Bu login band');
     const pin = body.pin ? pinHash(role, body.pin) : null;
     const position = str(body.position, 'Lavozim nomi', { max: 40 });
     const delivery = !noApp && role === 'waiter' && body.delivery ? 1 : 0;
-    const id = q(`INSERT INTO users (name, username, pass_hash, role, phone, salary, pin_hash, perm_print, perm_close, app, position, delivery, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    const id = q(`INSERT INTO users (name, username, pass_hash, role, phone, salary, pin_hash, perm_print, perm_close, app, position, delivery, created_at, pin_enc, pass_enc)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       name, username, hashPassword(password), role, str(body.phone, 'Telefon', { max: 30 }), int(body.salary, 'Maosh'), pin,
-      permInput(body.perm_print), permInput(body.perm_close), noApp ? 0 : 1, position, delivery, now()
+      permInput(body.perm_print), permInput(body.perm_close), noApp ? 0 : 1, position, delivery, now(),
+      pin ? secret.seal(String(body.pin)) : null, typed ? secret.seal(typed) : null
     ).lastInsertRowid;
     audit(user, 'user_create', `${name} (${noApp ? position || 'dasturga kirmaydi' : ROLE_NAMES[role]})`);
     return publicUser(q('SELECT * FROM users WHERE id = ?').get(id));
@@ -730,9 +736,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     if (body.password) {
       const pw = str(body.password, 'Parol');
       if (pw.length < 4) throw new HttpError(400, "Parol kamida 4 ta belgi bo'lsin");
-      q('UPDATE users SET pass_hash = ? WHERE id = ?').run(hashPassword(pw), target.id);
+      q('UPDATE users SET pass_hash = ?, pass_enc = ? WHERE id = ?').run(hashPassword(pw), secret.seal(pw), target.id);
     }
-    if (body.pin) q('UPDATE users SET pin_hash = ? WHERE id = ?').run(pinHash(role, body.pin), target.id);
+    if (body.pin) q('UPDATE users SET pin_hash = ?, pin_enc = ? WHERE id = ?').run(pinHash(role, body.pin), secret.seal(String(body.pin)), target.id);
     if (body.delivery !== undefined || role !== 'waiter') q('UPDATE users SET delivery = ? WHERE id = ?').run(role === 'waiter' && app && (body.delivery === undefined ? target.delivery : body.delivery) ? 1 : 0, target.id);
     if (body.perm_print !== undefined) q('UPDATE users SET perm_print = ? WHERE id = ?').run(permInput(body.perm_print), target.id);
     if (body.perm_close !== undefined) q('UPDATE users SET perm_close = ? WHERE id = ?').run(permInput(body.perm_close), target.id);
@@ -744,6 +750,16 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return publicUser(q('SELECT * FROM users WHERE id = ?').get(target.id));
   }
 
+  // The boss looks up a worker's PIN and password (only the boss; every look is written to the history).
+  function userSecret({ user, params }) {
+    const target = q('SELECT * FROM users WHERE id = ?').get(params.id);
+    if (!target) throw new HttpError(404, 'Xodim topilmadi');
+    const pin = target.pin_hash ? secret.open(target.pin_enc) : null;
+    const password = target.app === 0 ? null : secret.open(target.pass_enc);
+    audit(user, 'secret_view', target.name);
+    return { pin, password, has_pin: !!target.pin_hash, has_password: target.app !== 0, username: target.username };
+  }
+
   // ---------- Rooms ----------
   function waiterRoomIds(userId) {
     return q('SELECT room_id FROM room_waiters WHERE user_id = ?').all(userId).map((r) => r.room_id);
@@ -751,10 +767,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   function listRooms({ user, query }) {
     let rooms = q("SELECT * FROM rooms WHERE type != 'soboy' AND (active = 1 OR ? = 1) ORDER BY CAST(number AS INTEGER), number").all(query.all ? 1 : 0);
-    if (user.role === 'waiter' && !query.all) {
-      const mine = new Set(waiterRoomIds(user.id));
-      rooms = rooms.filter((r) => mine.has(r.id));
-    }
+    // A waiter sees every room: their own to work in; the others greyed out, only to look at (who has it, how much).
+    const mineIds = user.role === 'waiter' && !query.all ? new Set(waiterRoomIds(user.id)) : null;
     const waiters = q("SELECT rw.room_id, u.id, u.name FROM room_waiters rw JOIN users u ON u.id = rw.user_id WHERE u.active = 1").all();
     const openOrders = q("SELECT o.*, u.name waiter_name FROM orders o JOIN users u ON u.id = o.waiter_id WHERE o.status = 'open'").all();
     const counts = q(`SELECT i.order_id, i.status, COUNT(*) c, SUM(i.price * i.qty) s FROM order_items i
@@ -774,8 +788,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
         summary = { id: order.id, guests: order.guests, opened_at: order.opened_at, waiter_id: order.waiter_id,
           waiter_name: order.waiter_name, bill_requested: order.bill_requested, printed: order.print_count, subtotal, items: st };
       }
+      const mine = !mineIds || mineIds.has(r.id) || (order && order.waiter_id === user.id);
       return { ...r, waiters: waiters.filter((w) => w.room_id === r.id).map(({ id, name }) => ({ id, name })),
-        order: summary, reservations: resv.filter((x) => x.room_id === r.id) };
+        order: summary, reservations: resv.filter((x) => x.room_id === r.id), mine: !!mine };
     });
   }
 
@@ -1060,10 +1075,21 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     };
   }
 
+  // A waiter may look at a room check that is not theirs (read only: everything else still asks assertOrderAccess).
   function getOrder({ user, params }) {
     const o = orderDetails(params.id);
-    assertOrderAccess(user, o);
+    try {
+      assertOrderAccess(user, o);
+    } catch (e) {
+      if (user.role !== 'waiter' || o.takeaway || o.status !== 'open') throw e;
+      return { ...o, readonly: true };
+    }
     return o;
+  }
+
+  // Takeaway is for the cashier, the boss and couriers; a plain waiter works only in rooms (fast food: everyone).
+  function canTakeaway(user) {
+    return user.role !== 'waiter' || !!user.delivery || businessType() === 'fastfood';
   }
 
   function openOrder({ user, body }) {
@@ -1071,6 +1097,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const room = q('SELECT * FROM rooms WHERE id = ? AND active = 1').get(roomId);
     if (!room) throw new HttpError(404, 'Xona topilmadi');
     if (room.type === 'soboy') {
+      if (!canTakeaway(user)) throw new HttpError(403, "Olib ketish faqat kassir va dostavchik uchun");
       // Delivery: the customer's name, phone and address; the delivery charge is a line on the check (no kitchen).
       const dv = body.delivery && typeof body.delivery === 'object' ? {
         name: str(body.delivery.name, 'Mijoz ismi', { max: 60 }),
@@ -1511,13 +1538,30 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   }
 
   // Printing a bill is recorded, so the boss sees how many times each check was printed.
-  function printOrder({ user, params }) {
+  // What a bill printed elsewhere needs to look the same: the business's name, address, logo and the check settings.
+  function receiptSettings() {
+    const s = settings();
+    const out = {};
+    for (const k of Object.keys(s)) if (k.startsWith('receipt_') || ['name', 'address', 'phone', 'logo', 'service_type'].includes(k)) out[k] = s[k];
+    const t = tenant();
+    out.code = t ? t.code : '';
+    return out;
+  }
+
+  function printOrder({ user, params, body }) {
     const o = getOrderRow(params.id);
     if (!perms(user).print) throw new HttpError(403, "Chek chiqarish huquqingiz yo'q");
     assertOrderAccess(user, o);
     q('UPDATE orders SET print_count = print_count + 1 WHERE id = ?').run(o.id);
     audit(user, 'check_print', `#${o.id} (${o.print_count + 1}-marta)`);
-    return orderDetails(o.id);
+    const out = orderDetails(o.id);
+    // A printer set for bills (Kassa): the bill goes there through the server, whichever device asked for it.
+    const to = body && body.here ? null : print.billTarget();
+    if (to) {
+      print.job('bill', { order_id: o.id, to: to.to, at: now(), by: user.name, order: out, shop: receiptSettings() });
+      return { ...out, sent_to: { name: to.name, online: to.online } };
+    }
+    return out;
   }
 
   function cancelOrder({ user, params, body }) {
@@ -2060,7 +2104,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     // The device itself may only switch on a printer set up before 1.17 (once); the rest is the boss's, in Settings.
     ['PUT', '/api/device/printer', 'device', ({ device, body }) => {
       if (!body.on || device.printer || device.print_seen) throw new HttpError(403, "Printerni boshliq Sozlamalar → Printerlar bo'limida sozlaydi");
-      return print.setConfig({ device, body: { on: true, all: false, cats: [] } });
+      return print.setConfig({ device, body: { on: true, all: false, cats: 'all' } });
     }],
     ['GET', '/api/device/agent-jobs', 'device', print.agentJobs],
     ['POST', '/api/device/agent-report', 'device', print.agentReport],
@@ -2099,6 +2143,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['GET', '/api/users', MANAGERS, listUsers],
     ['POST', '/api/users', MANAGERS, createUser],
     ['PUT', '/api/users/:id', MANAGERS, updateUser],
+    ['GET', '/api/users/:id/secret', ['owner'], userSecret],
     ['GET', '/api/rooms', ALL, listRooms],
     ['POST', '/api/rooms', MANAGERS, createRoom],
     ['PUT', '/api/rooms/:id', MANAGERS, updateRoom],

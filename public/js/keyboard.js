@@ -63,6 +63,7 @@ const Keyboard = {
       this.el.addEventListener('click', (e) => { const b = e.target.closest('[data-k]'); if (b) this.press(b.dataset.k); });
       document.body.appendChild(this.el);
     }
+    this.el.classList.remove('off');
     this.el.classList.toggle('numeric', this.numeric(this.target));
     this.el.innerHTML = this.html();
     document.body.classList.add('kb-open');
@@ -87,7 +88,8 @@ const Keyboard = {
   hide() {
     this.release();
     this.target = null;
-    if (this.el) this.el.innerHTML = '';
+    // Emptied and marked off: an empty bar with the number-pad layout (padding, border) must not stay on screen.
+    if (this.el) { this.el.innerHTML = ''; this.el.classList.remove('numeric'); this.el.classList.add('off'); }
     document.body.classList.remove('kb-open');
     document.documentElement.style.setProperty('--kb-h', '0px');
   },

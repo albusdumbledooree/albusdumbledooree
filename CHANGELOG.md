@@ -2,6 +2,25 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.24.0 — Printer vazifalari, boshqa xonalarni ko'rish, PIN ko'rish
+- **Printerlar** (Sozlamalar → Printerlar): har printerda ikki belgi — **"Mijoz cheki (hisob)"** va **"Buyurtma qog'ozlari"**
+  (qaysi bo'limlar chiqishi tanlanadi, "Hamma bo'limlar" ham bor). Kassa printeriga ham bo'lim biriktirsa bo'ladi.
+  Urilgan taom, otkaz va o'chirilgan chek qog'ozi faqat o'sha taom bo'limi biriktirilgan printerga chiqadi.
+  Endi bo'lim tanlanmasa — hech narsa chiqmaydi (avval "hammasi" edi; eski sozlamalar "Hamma bo'limlar" bo'lib qoldi).
+- **"Chek" istalgan qurilmadan kassaga**: mijoz cheki printeri belgilangan bo'lsa, ofitsant telefonidan, planshetdan yoki
+  ikkinchi kompyuterdan bosilgan chek server orqali kassa printeridan chiqadi (boshqa qurilmalarda printer sozlash shart emas).
+  Kassa printeri o'chiq bo'lsa ogohlantirish chiqadi, chek u yoqilganda chiqadi. FLOWI Printer dasturi ham mijoz chekini chiqaradi.
+- Ogohlantirishlar: hech qaysi printerga chiqmaydigan bo'lim, ikki printerga chiqadigan bo'lim, bir nechta kassa printeri.
+- **Ofitsant hamma xonalarni ko'radi**: o'zinikilar odatdagidek, boshqalarniki xira — kim ochgani va summasi ko'rinadi.
+  Boshqa ofitsantning chekini faqat ko'radi, hech narsa ura olmaydi; bo'sh begona xonani bossa "Sizga biriktirilmagan" chiqadi.
+- **Oddiy ofitsantda "Olib ketish" yo'q** — faqat kassir, boshliq va dostavchikda (fast foodda hammada).
+- **Boshliq xodim PIN va parolini ko'radi** (Xodimlar → PIN ustiga bosish, faqat egasi). Har ko'rish tarixga yoziladi.
+  Shifrlangan nusxa serverdagi maxfiy kalit bilan saqlanadi. Eski PIN xodim keyingi safar kirganda ko'rinadi.
+  Xodim oynasida **"Yangi PIN yaratish"** tugmasi.
+- Ekran klaviaturasi yopilganda pastda qolib ketadigan kulrang yo'lak tuzatildi.
+- Menyu kartochkalari eski kompyuterlarda (Windows 7, Chrome 109) oq bo'lib qolardi — endi hamma joyda rangli, bir xil.
+- Bo'lim tanlash tugmalari orqasidagi ortiqcha kulrang fon olib tashlandi.
+
 ## 1.23.4 — Chek o'chirilganda oshxonaga qog'oz
 - Butun chek o'chirilganda buyurtma printerlariga **"BEKOR QILINDI — BUTUN CHEK O'CHIRILDI"** qog'ozi chiqadi:
   xona, chek raqami, taomlar (har printerga o'z bo'limi — oshxonaga oshxona taomlari, shashlikchiga shashlik), sababi va kim o'chirgani.

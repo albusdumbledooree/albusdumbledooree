@@ -398,6 +398,9 @@ function migrate(db) {
   // NULL = the default for the role; 1/0 = set by the boss per person.
   if (!cols.includes('perm_print')) db.exec('ALTER TABLE users ADD COLUMN perm_print INTEGER');
   if (!cols.includes('perm_close')) db.exec('ALTER TABLE users ADD COLUMN perm_close INTEGER');
+  // An encrypted copy of the PIN and password, for the boss to look up (server/secret.js).
+  if (!cols.includes('pin_enc')) db.exec('ALTER TABLE users ADD COLUMN pin_enc TEXT');
+  if (!cols.includes('pass_enc')) db.exec('ALTER TABLE users ADD COLUMN pass_enc TEXT');
   const colsOf = (t) => db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name);
   const addCol = (t, c, def) => { if (!colsOf(t).includes(c)) db.exec(`ALTER TABLE ${t} ADD COLUMN ${c} ${def}`); };
   // Rooms grouped into sections named by the boss ("1-qavat", "Hovli").
@@ -721,6 +724,13 @@ CREATE INDEX IF NOT EXISTS idx_work_day ON work_log(day, user_id);
   addCol('devices', 'print_cats', "TEXT NOT NULL DEFAULT ''");
   addCol('devices', 'print_upto', 'INTEGER NOT NULL DEFAULT 0');
   addCol('devices', 'print_seen', 'INTEGER');
+  /* Each printer has two jobs, chosen by the boss: the guest's bill (Kassa) and order tickets (by section).
+     Before, "no section ticked" meant every section; now it says "all" in words and an empty list means none. */
+  if (!colsOf('devices').includes('print_bill')) {
+    addCol('devices', 'print_bill', 'INTEGER NOT NULL DEFAULT 0');
+    addCol('devices', 'print_orders', 'INTEGER NOT NULL DEFAULT 1');
+    db.exec("UPDATE devices SET print_cats = 'all' WHERE print_cats IN ('', '[]')");
+  }
   db.exec(`CREATE TABLE IF NOT EXISTS print_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     kind TEXT NOT NULL,
@@ -753,6 +763,11 @@ CREATE INDEX IF NOT EXISTS idx_work_day ON work_log(day, user_id);
     seen_at INTEGER,
     created_at INTEGER NOT NULL
   )`);
+  if (!colsOf('printers').includes('bill')) {
+    addCol('printers', 'bill', 'INTEGER NOT NULL DEFAULT 0');
+    addCol('printers', 'orders', 'INTEGER NOT NULL DEFAULT 1');
+    db.exec("UPDATE printers SET cats = 'all' WHERE cats IN ('', '[]')");
+  }
   addCol('transactions', 'fixed_month', 'TEXT');
   // A deleted check (the guest left): who deleted it and what was on it; it stays in the reports.
   addCol('orders', 'cancelled_by', 'INTEGER');

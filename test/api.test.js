@@ -49,8 +49,12 @@ test('full order flow: waiter -> kitchen -> waiter -> cashier -> report', async 
   const chef = await login('oshpaz', '1234');
   const cashier = await login('kassir', 'kassir123');
 
-  const rooms = (await call('GET', '/api/rooms', waiter)).data;
-  assert.equal(rooms.length, 4, 'waiter sees only assigned rooms');
+  const allRooms = (await call('GET', '/api/rooms', waiter)).data;
+  const rooms = allRooms.filter((r) => r.mine);
+  assert.equal(rooms.length, 4, 'four rooms are the waiter\'s own');
+  assert.ok(allRooms.length > rooms.length, 'the other rooms are listed too (greyed out)');
+  const other = allRooms.find((r) => !r.mine);
+  assert.equal((await call('POST', '/api/orders', waiter, { room_id: other.id })).status, 403, 'nothing can be written in another waiter\'s room');
 
   const menu = (await call('GET', '/api/menu', waiter)).data;
   const shorva = menu.dishes.find((d) => d.name === "Sho'rva");
@@ -113,7 +117,7 @@ test('stop-list and roles', async () => {
   assert.equal((await call('POST', `/api/dishes/${manti.id}/availability`, chef, { available: false })).status, 200);
   assert.equal((await call('POST', `/api/dishes/${manti.id}/availability`, waiter, { available: true })).status, 403);
 
-  const rooms = (await call('GET', '/api/rooms', waiter)).data;
+  const rooms = (await call('GET', '/api/rooms', waiter)).data.filter((r) => r.mine);
   const order = (await call('POST', '/api/orders', waiter, { room_id: rooms[0].id })).data;
   const r = await call('POST', `/api/orders/${order.id}/items`, waiter, { items: [{ dish_id: manti.id, qty: 1 }] });
   assert.equal(r.status, 409);
@@ -319,7 +323,7 @@ test('platform owner switches sections off per choyxona', async () => {
 });
 
 async function freeRoom(token) {
-  return (await call('GET', '/api/rooms', token)).data.find((r) => !r.order);
+  return (await call('GET', '/api/rooms', token)).data.find((r) => r.mine && !r.order);
 }
 async function dish(token, name) {
   return (await call('GET', '/api/menu', token)).data.dishes.find((d) => d.name.startsWith(name));
@@ -373,7 +377,7 @@ test('permissions: print and close per worker; waiter cancels only with the boss
   const bob = users.find((u) => u.username === 'bobur');
   assert.deepEqual(bob.perms, { print: true, close: false });
 
-  const room = (await call('GET', '/api/rooms', waiter)).data.find((r) => !r.order);
+  const room = (await call('GET', '/api/rooms', waiter)).data.find((r) => r.mine && !r.order);
   const o = (await call('POST', '/api/orders', waiter, { room_id: room.id, guests: 2 })).data;
   const added = (await call('POST', `/api/orders/${o.id}/items`, waiter, { items: [{ dish_id: (await dish(waiter, "Sho'rva")).id, qty: 1 }] })).data;
   const item = added.items[0];
@@ -403,6 +407,10 @@ test('takeaway: many open checks, no service charge, kept off the room list', as
   assert.ok(tw.room_id);
   assert.ok(!(await call('GET', '/api/rooms?all=1', cashier)).data.some((r) => r.id === tw.room_id));
 
+  // A plain waiter works only in rooms; a courier (waiter + deliveries) writes takeaway checks.
+  assert.equal((await call('POST', '/api/orders', waiter, { room_id: tw.room_id })).status, 403);
+  const jasurId = (await call('GET', '/api/me', waiter)).data.user.id;
+  await call('PUT', `/api/users/${jasurId}`, cashier, { delivery: true });
   const a = (await call('POST', '/api/orders', waiter, { room_id: tw.room_id, label: 'Aziz' })).data;
   const b = (await call('POST', '/api/orders', cashier, { room_id: tw.room_id })).data;
   assert.notEqual(a.id, b.id);
@@ -415,6 +423,43 @@ test('takeaway: many open checks, no service charge, kept off the room list', as
   const closed = (await call('POST', `/api/orders/${a.id}/close`, cashier, { paid_cash: 16000 })).data;
   assert.equal(closed.total, 16000);
   await call('POST', `/api/orders/${b.id}/cancel`, cashier, {});
+  await call('PUT', `/api/users/${jasurId}`, cashier, { delivery: false });
+});
+
+test('a waiter looks at another waiter\'s room check (read only); the boss looks up PINs', async () => {
+  const boss = await login('ega', 'ega123');
+  const jasur = await login('jasur', '1234');
+  const bobur = await login('bobur', '1234');
+  const theirs = (await call('GET', '/api/rooms', bobur)).data.find((r) => r.mine && !r.order);
+  assert.ok(!(await call('GET', '/api/rooms', jasur)).data.find((r) => r.id === theirs.id).mine);
+  const o = (await call('POST', '/api/orders', bobur, { room_id: theirs.id, guests: 2 })).data;
+  await call('POST', `/api/orders/${o.id}/items`, bobur, { items: [{ dish_id: (await dish(bobur, 'Patir')).id, qty: 1 }] });
+  const tile = (await call('GET', '/api/rooms', jasur)).data.find((r) => r.id === theirs.id);
+  assert.equal(tile.order.waiter_name.length > 0, true, 'whose room it is');
+  assert.equal(tile.order.subtotal, 8000);
+  const seen = await call('GET', `/api/orders/${o.id}`, jasur);
+  assert.equal(seen.status, 200);
+  assert.equal(seen.data.readonly, true);
+  assert.equal((await call('GET', `/api/orders/${o.id}`, bobur)).data.readonly, undefined);
+  assert.equal((await call('POST', `/api/orders/${o.id}/items`, jasur, { items: [{ dish_id: (await dish(jasur, 'Patir')).id, qty: 1 }] })).status, 403);
+  assert.equal((await call('POST', `/api/orders/${o.id}/request-bill`, jasur)).status, 403);
+  assert.equal((await call('PUT', `/api/orders/${o.id}`, jasur, { guests: 5 })).status, 403);
+  await call('POST', `/api/orders/${o.id}/close`, boss, { paid_cash: 1e6 });
+
+  // PIN look-up: only the boss; a PIN set from now on is kept, an old one becomes known at the worker's next PIN login.
+  const users = (await call('GET', '/api/users', boss)).data;
+  const bob = users.find((u) => u.username === 'bobur');
+  const admin = await login('admin', 'admin123');
+  assert.equal((await call('GET', `/api/users/${bob.id}/secret`, admin)).status, 403);
+  assert.equal((await call('GET', `/api/users/${bob.id}/secret`, bobur)).status, 403);
+  await call('PUT', `/api/users/${bob.id}`, boss, { pin: '5821' });
+  const sec = (await call('GET', `/api/users/${bob.id}/secret`, boss)).data;
+  assert.equal(sec.pin, '5821');
+  assert.ok(!JSON.stringify((await call('GET', '/api/users', boss)).data).includes('5821'), 'never in the list itself');
+  await call('PUT', `/api/users/${bob.id}`, boss, { pin: '1234' });
+  assert.equal((await call('GET', `/api/users/${bob.id}/secret`, boss)).data.pin, '1234');
+  const hist = (await call('GET', '/api/audit', boss)).data;
+  assert.ok((hist.rows || hist).some((a) => a.action === 'secret_view'), 'every look is in the history');
 });
 
 test('kitchen modes: notify skips accepting and does not block closing', async () => {
@@ -1859,7 +1904,7 @@ test('order printers: kitchen dishes only, chosen sections, catch-up after being
   assert.equal(cfg.on, false); assert.ok(cfg.categories.length > 0);
   const devs = (await call('GET', '/api/devices', boss)).data;
   const kid = devs.find((d) => d.name === 'Oshxona').id; const bid = devs.find((d) => d.name === 'Kabobxona').id;
-  assert.equal((await call('PUT', `/api/devices/${kid}/printer`, boss, { on: true, all: false, cats: [] })).status, 200);
+  assert.equal((await call('PUT', `/api/devices/${kid}/printer`, boss, { on: true, all: false, cats: 'all' })).status, 200);
   await call('PUT', `/api/devices/${bid}/printer`, boss, { on: true, all: false, cats: [kebabCat.id] });
   assert.equal((await call('PUT', '/api/device/printer', kitchen, { on: false })).status, 403, 'staff at the device cannot switch it off');
   let st = (await call('GET', '/api/printers', boss)).data;
@@ -1901,6 +1946,51 @@ test('order printers: kitchen dishes only, chosen sections, catch-up after being
   const again = (await call('GET', '/api/device/print-jobs', kitchen)).data.jobs;
   assert.equal(again.length, 1); assert.equal(again[0].reprint, true);
   assert.ok((await call('GET', '/api/device/print-recent', kitchen)).data.length >= 2);
+
+  await call('POST', '/api/device/print-ack', kitchen, { upto: (await call('GET', '/api/device/print-jobs', kitchen)).data.last });
+  await call('POST', '/api/device/print-ack', kebab, { upto: (await call('GET', '/api/device/print-jobs', kebab)).data.last });
+
+  // No bill printer yet: the bill is printed where it was asked for.
+  assert.equal((await call('POST', `/api/orders/${o.id}/print`, boss)).data.sent_to, undefined);
+  // The Kassa computer: guest bills only, never order tickets.
+  await call('PUT', `/api/devices/${bid}/printer`, boss, { on: true, all: false, cats: [kebabCat.id], bill: true, orders: false });
+  const o3 = (await call('POST', '/api/orders', boss, { room_id: (await call('GET', '/api/rooms', boss)).data[1].id })).data;
+  await call('POST', `/api/orders/${o3.id}/items`, boss, { items: [{ dish_id: cook.id, qty: 1 }, { dish_id: kebabDish.id, qty: 2 }] });
+  assert.equal((await call('GET', '/api/device/print-jobs', kebab)).data.jobs.length, 0, 'no order tickets on the Kassa printer');
+  const kj = (await call('GET', '/api/device/print-jobs', kitchen)).data;
+  assert.equal(kj.jobs.length, 1);
+  await call('POST', '/api/device/print-ack', kitchen, { upto: kj.last });
+  // A bill asked on any device (here: a waiter's phone) comes out on the Kassa printer, once.
+  const asked = (await call('POST', `/api/orders/${o3.id}/print`, boss)).data;
+  assert.equal(asked.sent_to.name, 'Kabobxona');
+  assert.equal(asked.sent_to.online, true);
+  const bj = (await call('GET', '/api/device/print-jobs', kebab)).data;
+  assert.equal(bj.jobs.length, 1);
+  assert.equal(bj.jobs[0].kind, 'bill');
+  assert.equal(bj.jobs[0].order.id, o3.id);
+  assert.equal(bj.jobs[0].order.total > 0, true);
+  assert.ok(bj.jobs[0].shop.name);
+  await call('POST', '/api/device/print-ack', kebab, { upto: bj.last });
+  assert.equal((await call('GET', '/api/device/print-jobs', kitchen)).data.jobs.length, 0, 'the bill is not a kitchen ticket');
+  // A cancelled dish: the slip goes only where the dish was printed (the kitchen), not to the Kassa.
+  const cookLine = (await call('GET', `/api/orders/${o3.id}`, boss)).data.items.find((i) => i.dish_id === cook.id);
+  await call('POST', `/api/items/${cookLine.id}/cancel`, boss, { qty: 1, reason: 'xato' });
+  assert.equal((await call('GET', '/api/device/print-jobs', kebab)).data.jobs.length, 0);
+  const ck = (await call('GET', '/api/device/print-jobs', kitchen)).data;
+  assert.equal(ck.jobs.length, 1); assert.equal(ck.jobs[0].cancel, true);
+  await call('POST', '/api/device/print-ack', kitchen, { upto: ck.last });
+  // The settings name a section that no printer takes.
+  await call('PUT', `/api/devices/${kid}/printer`, boss, { on: true, all: false, cats: [cook.category_id] });
+  const setup = (await call('GET', '/api/printers/setup', boss)).data;
+  assert.ok(setup.warnings.none.length > 0 && !setup.warnings.none.includes(menu.categories.find((c) => c.id === cook.category_id).name));
+  assert.deepEqual(setup.warnings.bill, ['Kabobxona']);
+  // An empty list now means "none" (not "all"): the kitchen printer gets nothing.
+  await call('PUT', `/api/devices/${kid}/printer`, boss, { on: true, all: false, cats: [] });
+  const o4 = (await call('POST', '/api/orders', boss, { room_id: (await call('GET', '/api/rooms', boss)).data[2].id })).data;
+  await call('POST', `/api/orders/${o4.id}/items`, boss, { items: [{ dish_id: cook.id, qty: 1 }] });
+  assert.equal((await call('GET', '/api/device/print-jobs', kitchen)).data.jobs.length, 0);
+  await call('PUT', `/api/devices/${kid}/printer`, boss, { on: true, all: false, cats: 'all' });
+  for (const x of [o3, o4]) await call('POST', `/api/orders/${x.id}/close`, boss, { paid_cash: 1e7 });
 
   // Switched off by the boss: no more tickets, and no longer listed.
   await call('PUT', `/api/devices/${bid}/printer`, boss, { on: false });

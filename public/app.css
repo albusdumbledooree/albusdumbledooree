@@ -377,6 +377,15 @@ tr.clickable:hover td { background: var(--panel-2); }
 :root[data-theme="dark"] .tile.st-ready { background: #102a1a; }
 :root[data-theme="dark"] .tile.st-bill { background: #221b3b; border-color: #4b3a8a; }
 :root[data-theme="dark"] .tile.st-reserved { background: #13233f; border-color: #2c4a80; }
+.pin-eye { border: 0; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 700; }
+.pin-eye.shown .pin-val { font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+.pin-gen-row { display: flex; gap: 6px; }
+.pin-gen-row input { flex: 1; min-width: 0; }
+.tile.other { opacity: .5; filter: grayscale(.8); }
+.tile.other .plus { background: transparent; }
+.menu-area.ro-area { display: flex; align-items: center; justify-content: center; min-height: 360px; }
+.ro-area .empty { max-width: 460px; }
+.ro-note { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--panel-2); color: var(--muted); font-weight: 600; font-size: 13.5px; }
 .tile.add { border: 2px dashed var(--primary); align-items: center; justify-content: center; gap: 8px; color: var(--primary); font-weight: 700; background: var(--primary-soft); }
 .tile.add::before { display: none; }
 .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-top: 16px; }
@@ -441,8 +450,9 @@ tr.clickable:hover td { background: var(--panel-2); }
 .dishes { display: grid; grid-template-columns: repeat(auto-fill, minmax(138px, 1fr)); gap: 8px; }
 /* Dish tile: the section colour as an edge and a light tint; name on top, price at the bottom right. */
 .dish {
-  position: relative; border: 1px solid color-mix(in srgb, var(--cc, #94a3b8) 35%, var(--line)); border-left: 6px solid var(--cc, #94a3b8);
-  border-radius: 8px; padding: 8px 10px; background: color-mix(in srgb, var(--cc, #94a3b8) 12%, var(--panel)); cursor: pointer;
+  /* The tint and edge come as plain rgba() from the script (--cc-bg, --cc-line): old browsers (Windows 7, Chrome 109) have no color-mix(). */
+  position: relative; border: 1px solid var(--cc-line, var(--line)); border-left: 6px solid var(--cc, #94a3b8);
+  border-radius: 8px; padding: 8px 10px; background-color: var(--panel); background-image: linear-gradient(var(--cc-bg, transparent), var(--cc-bg, transparent)); cursor: pointer;
   text-align: left; font: inherit; color: var(--text); display: flex; flex-direction: column; gap: 2px; min-height: 84px; touch-action: manipulation;
 }
 .dish:active { transform: scale(.97); }
@@ -633,9 +643,9 @@ table.att .today { background: var(--primary-soft); }
 .plan-cols > .plan-col { padding: 14px; margin: 0; }
 .plan-cols { align-items: start; }
 .plan-col .ph3 { margin-top: 0; }
-.chip.plan-start { background: color-mix(in srgb, #64748b 16%, transparent); color: #475569; }
-.chip.plan-biznes { background: color-mix(in srgb, #2563eb 16%, transparent); color: #1d4ed8; }
-.chip.plan-pro { background: color-mix(in srgb, #9333ea 16%, transparent); color: #7e22ce; }
+.chip.plan-start { background: rgba(100, 116, 139, .16); color: #475569; }
+.chip.plan-biznes { background: rgba(37, 99, 235, .16); color: #1d4ed8; }
+.chip.plan-pro { background: rgba(147, 51, 234, .16); color: #7e22ce; }
 @media (max-width: 600px) {
   .ptop { padding: 0 12px; }
   .pmain { padding: 14px 12px; }
@@ -651,7 +661,7 @@ table.att .today { background: var(--primary-soft); }
 /* ---------- On-screen keyboard (touch terminals) ---------- */
 :root { --kb-h: 0px; }
 .osk { position: fixed; left: 0; right: 0; bottom: 0; z-index: 300; background: #d5d9e0; border-top: 1px solid #b8bec8; box-shadow: 0 -8px 24px rgba(0,0,0,.18); }
-.osk:empty { display: none; }
+.osk:empty, .osk.off { display: none !important; }
 .osk .k { border: 0; border-radius: 8px; background: #fff; color: #111827; font: inherit; font-size: 20px; font-weight: 600; min-height: 52px; cursor: pointer;
   box-shadow: 0 1px 0 #9aa1ad; display: grid; place-items: center; padding: 0 6px; touch-action: manipulation; user-select: none; }
 .osk .k:active { background: #c7d6fb; transform: translateY(1px); }
@@ -805,6 +815,8 @@ details.upcoming summary { cursor: pointer; font-weight: 650; color: var(--muted
 .green-text { color: var(--green); }
 .orange-text { color: var(--orange); }
 .cat-pick { display: flex; flex-wrap: wrap; gap: 8px; }
+/* A chip that is a checkbox (sections to pick): not the status pill of a room tile. */
+.cat-pick .pill { display: inline-block; padding: 0; background: none; border-radius: 999px; font-size: 14px; font-weight: 600; color: var(--text); }
 .pill input { display: none; }
 .pill span { display: inline-block; padding: 9px 14px; border-radius: 999px; border: 1px solid var(--line); cursor: pointer; font-weight: 600; }
 .pill input:checked + span { background: var(--primary); border-color: var(--primary); color: #fff; }
@@ -998,6 +1010,22 @@ details.upcoming summary { cursor: pointer; font-weight: 650; color: var(--muted
 .pr-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--red); flex: none; }
 .pr-dot.on { background: var(--green); }
 .pr-cats { gap: 6px; }
+.pr-cats.all .pill:not(.pr-all) span { opacity: .55; }
+.pr-cats .pill input:disabled + span { cursor: default; }
+.pr-all span { border-style: dashed; }
+.pr-body > .btn { align-self: flex-start; }
+.pr-roles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.pr-role { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); cursor: pointer; min-width: 0; }
+.pr-role input { width: 20px; height: 20px; margin: 2px 0 0; flex: none; accent-color: var(--primary); }
+.pr-role .ic { color: var(--muted); flex: none; display: inline-flex; }
+.pr-role > span:last-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pr-role:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+.pr-role:has(input:checked) .ic { color: var(--primary); }
+.pr-warn { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--panel-2); margin-top: 8px; font-size: 14px; }
+.pr-warn > svg { flex: none; margin-top: 1px; color: var(--muted); }
+.pr-warn.red { background: #fdecec; color: #991b1b; }
+.pr-warn.red > svg { color: #dc2626; }
+:root[data-theme="dark"] .pr-warn.red { background: #3a1616; color: #fecaca; }
 .pr-agent .card-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .pr-agent .card-head h2 { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .pr-net { border: 1px dashed var(--line); border-radius: var(--radius); padding: 12px; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
@@ -1009,6 +1037,7 @@ details.upcoming summary { cursor: pointer; font-weight: 650; color: var(--muted
 @media (max-width: 600px) {
   .pr-row { padding: 10px; }
   .pr-body > select { max-width: none; }
+  .pr-roles { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ---------- Platform → Versions ---------- */

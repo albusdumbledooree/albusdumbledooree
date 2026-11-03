@@ -13,7 +13,7 @@
  * The boss names each printer (Oshxona, Shashlikchi) and chooses its sections in Settings → Printerlar.
  */
 const { HttpError, str, int } = require('./util');
-const { ticket } = require('./escpos');
+const { ticket, bill } = require('./escpos');
 const MIN = 60 * 1000;
 const CATCH_UP = 3 * 60 * MIN; // missed tickets older than this are not printed any more
 const ONLINE = 90 * 1000; // a printer that asked within this time is "on"
@@ -32,26 +32,55 @@ function createPrint(db, { now, events, audit, settings, newToken, devicePrefix 
     events.publish('order_print', {}, { roles: ['device'] });
   }
 
-  const catsOf = (d) => { try { return JSON.parse(d.print_cats || '[]').map(Number).filter(Boolean); } catch { return []; } };
-  // What this printer prints of a ticket: kitchen dishes only unless "everything", and only its sections if chosen.
+  // A printer's sections: null = every section ('all'; '' on a device never set up), a list = only those (empty = none).
+  const catsOf = (d) => {
+    const v = d.print_cats;
+    if (v === 'all' || v === '' || v == null) return null;
+    try { return JSON.parse(v).map(Number).filter(Boolean); } catch { return null; }
+  };
+  const catsText = (cats) => (cats === null ? 'all' : JSON.stringify(cats));
+  /* What one printer prints of a job (d: { key, bill, orders, print_all, print_cats }):
+     - the guest's bill: only the one bill printer it was sent to;
+     - order tickets (new dishes, cancellations, a deleted check, a reprint): only the dishes of its sections. */
   function forDevice(d, data) {
+    if (data.kind === 'bill') return d.bill && data.to === d.key ? data : null;
+    if (d.orders === 0 || d.orders === false) return null;
     const cats = catsOf(d);
-    const items = (data.items || []).filter((i) => (d.print_all || i.cook !== false) && (!cats.length || cats.includes(Number(i.category_id))));
+    const items = (data.items || []).filter((i) => (d.print_all || i.cook !== false) && (cats === null || cats.includes(Number(i.category_id))));
     return items.length ? { ...data, items } : null;
+  }
+  const devView = (d) => ({ key: `d${d.id}`, bill: !!d.print_bill, orders: d.print_orders ?? 1, print_all: d.print_all, print_cats: d.print_cats });
+  const prnView = (p) => ({ key: `p${p.id}`, bill: !!p.bill, orders: p.orders ?? 1, print_all: p.print_all, print_cats: p.cats });
+
+  /* The bill printer a guest's bill goes to: one only (so it never comes out twice), an online one first.
+     null: no printer is set for bills — the bill is printed by the device where it was asked for, as before. */
+  function billTarget() {
+    const list = [];
+    for (const d of q('SELECT * FROM devices WHERE agent = 0 AND printer = 1 AND print_bill = 1 ORDER BY id').all()) {
+      list.push({ to: `d${d.id}`, name: d.name, online: d.print_seen > now() - ONLINE });
+    }
+    if (agentOn()) {
+      for (const p of q('SELECT p.*, d.print_seen FROM printers p JOIN devices d ON d.id = p.device_id WHERE p.on_ = 1 AND p.bill = 1 AND d.agent = 1 ORDER BY p.id').all()) {
+        list.push({ to: `p${p.id}`, name: p.label || p.sys_name || p.ip, online: p.print_seen > now() - ONLINE && !(p.error_at > (p.printed_at || 0)) });
+      }
+    }
+    return list.find((x) => x.online) || list[0] || null;
   }
 
   // ---------- The printer device ----------
   function config({ device }) {
-    return { on: !!device.printer, all: !!device.print_all, cats: catsOf(device),
+    return { on: !!device.printer, all: !!device.print_all, cats: catsOf(device), bill: !!device.print_bill, orders: (device.print_orders ?? 1) === 1,
       categories: q('SELECT id, name FROM categories ORDER BY sort, name').all() };
   }
   function setConfig({ device, body }) {
     const on = body.on ? 1 : 0;
-    const cats = Array.isArray(body.cats) ? [...new Set(body.cats.map(Number).filter((x) => Number.isInteger(x) && x > 0))].slice(0, 100) : catsOf(device);
+    const cats = body.cats === undefined ? catsOf(device) : catsInput(body.cats);
     // Switched on now: start from the next ticket (not yesterday's pile).
     const upto = on && !device.printer ? maxId() : device.print_upto || 0;
-    q('UPDATE devices SET printer = ?, print_all = ?, print_cats = ?, print_upto = ?, print_seen = ? WHERE id = ?')
-      .run(on, body.all ? 1 : 0, JSON.stringify(cats), upto, on ? now() : null, device.id);
+    const bill = body.bill === undefined ? device.print_bill || 0 : body.bill ? 1 : 0;
+    const orders = body.orders === undefined ? device.print_orders ?? 1 : body.orders ? 1 : 0;
+    q('UPDATE devices SET printer = ?, print_all = ?, print_cats = ?, print_upto = ?, print_seen = ?, print_bill = ?, print_orders = ? WHERE id = ?')
+      .run(on, body.all ? 1 : 0, catsText(cats), upto, on ? now() : null, bill, orders, device.id);
     audit(null, 'printer_set', `${device.name}: ${on ? 'yoqildi' : "o'chirildi"}`);
     events.publish('printers');
     return config({ device: q('SELECT * FROM devices WHERE id = ?').get(device.id) });
@@ -66,7 +95,7 @@ function createPrint(db, { now, events, audit, settings, newToken, devicePrefix 
     const jobs = [];
     for (const r of rows) {
       if (r.printer_id) continue;
-      const x = forDevice(device, JSON.parse(r.data));
+      const x = forDevice(devView(device), JSON.parse(r.data));
       if (x) jobs.push({ id: r.id, late: now() - r.created_at > 2 * MIN, ...x });
     }
     // Nothing for this printer in the rest: move past them.
@@ -81,7 +110,7 @@ function createPrint(db, { now, events, audit, settings, newToken, devicePrefix 
   // The last tickets of this printer, to print one again by hand.
   function recent({ device }) {
     return q('SELECT * FROM print_jobs WHERE printer_id IS NULL ORDER BY id DESC LIMIT 40').all()
-      .map((r) => { const x = forDevice(device, JSON.parse(r.data)); return x && { id: r.id, at: r.created_at, ...x }; }).filter(Boolean).slice(0, 15);
+      .map((r) => { const x = forDevice(devView(device), JSON.parse(r.data)); return x && { id: r.id, at: r.created_at, ...x }; }).filter(Boolean).slice(0, 15);
   }
 
   // ---------- Several printers on one computer: the FLOWI Printer program ----------
@@ -127,10 +156,11 @@ function createPrint(db, { now, events, audit, settings, newToken, devicePrefix 
       let skipTo = null;
       for (const r of rows) {
         const data = JSON.parse(r.data);
-        const x = r.printer_id ? data : forDevice({ print_all: p.print_all, print_cats: p.cats }, data);
+        const x = r.printer_id ? data : forDevice(prnView(p), data);
         if (!x) { skipTo = r.id; continue; }
+        const draw = x.kind === 'bill' ? bill : ticket;
         out.push({ printer_id: p.id, upto: r.id, kind: p.kind, target: p.kind === 'net' ? p.ip : p.sys_name, port: p.port || 9100,
-          data: ticket({ ...x, late: now() - r.created_at > 2 * MIN }, { width: width(p), label: p.label }).toString('base64') });
+          data: draw({ ...x, late: now() - r.created_at > 2 * MIN }, { width: width(p), label: p.label }).toString('base64') });
         skipTo = null;
         break; // one ticket per printer per round: printed in order, each acknowledged
       }
@@ -159,26 +189,43 @@ function createPrint(db, { now, events, audit, settings, newToken, devicePrefix 
       id: d.id, name: d.name, online: d.print_seen > now() - ONLINE, seen: d.print_seen || null, version: d.agent_version || '',
       printers: q('SELECT * FROM printers WHERE device_id = ? ORDER BY kind DESC, id').all(d.id).map((p) => ({
         id: p.id, kind: p.kind, sys_name: p.sys_name, port_name: p.port_name, ip: p.ip, port: p.port, label: p.label, on: !!p.on_, all: !!p.print_all,
-        cats: catsOf({ print_cats: p.cats }), paper: p.paper || 80, error: p.error_at > (p.printed_at || 0) ? p.error : '',
+        cats: catsOf({ print_cats: p.cats }), bill: !!p.bill, orders: (p.orders ?? 1) === 1, paper: p.paper || 80, error: p.error_at > (p.printed_at || 0) ? p.error : '',
         present: p.kind === 'net' || p.seen_at > now() - 5 * MIN,
       })),
     }));
     const browsers = q('SELECT * FROM devices WHERE agent = 0 ORDER BY name').all().map((d) => ({
-      id: d.id, name: d.name, on: !!d.printer, all: !!d.print_all, cats: catsOf(d), online: d.print_seen > now() - ONLINE, seen: d.last_seen || null,
+      id: d.id, name: d.name, on: !!d.printer, all: !!d.print_all, cats: catsOf(d), bill: !!d.print_bill, orders: (d.print_orders ?? 1) === 1, online: d.print_seen > now() - ONLINE, seen: d.last_seen || null,
     }));
-    return { enabled: agentOn(), agents, browsers, categories: cats };
+    return { enabled: agentOn(), agents, browsers, categories: cats, warnings: warnings(agents, browsers, cats) };
   }
-  const catsInput = (v) => (Array.isArray(v) ? [...new Set(v.map(Number).filter((x) => Number.isInteger(x) && x > 0))].slice(0, 100) : null);
+  // What the boss should know: a section no printer takes, a section on two printers, bills with no printer.
+  function warnings(agents, browsers, cats) {
+    const live = [...browsers.filter((d) => d.on).map((d) => ({ ...d, label: d.name })),
+      ...(agentOn() ? agents.flatMap((a) => a.printers.filter((p) => p.on).map((p) => ({ ...p, label: p.label || p.sys_name || p.ip }))) : [])];
+    const takers = (c) => live.filter((p) => p.orders && (p.cats === null || p.cats.includes(c.id)));
+    return {
+      none: live.length ? cats.filter((c) => !takers(c).length).map((c) => c.name) : [],
+      twice: cats.map((c) => ({ name: c.name, printers: takers(c).map((p) => p.label) })).filter((x) => x.printers.length > 1),
+      bill: live.filter((p) => p.bill).map((p) => p.label),
+      any: live.length > 0,
+    };
+  }
+  // 'all' (or nothing sent) = every section; a list = only those; an empty list = none.
+  function catsInput(v) {
+    if (v === 'all' || v == null) return null;
+    if (!Array.isArray(v)) throw new HttpError(400, "Bo'limlar noto'g'ri");
+    return [...new Set(v.map(Number).filter((x) => Number.isInteger(x) && x > 0))].slice(0, 100);
+  }
   function savePrinter({ user, params, body }) {
     const p = printerRow(params.id);
     const on = body.on === undefined ? p.on_ : body.on ? 1 : 0;
-    const cats = catsInput(body.cats);
+    const cats = body.cats === undefined ? p.cats : catsText(catsInput(body.cats));
     const paper = body.paper === undefined ? p.paper || 80 : Number(body.paper) === 58 ? 58 : 80;
     // Switched on now: start from the next ticket.
     const upto = on && !p.on_ ? maxId() : p.upto;
-    q('UPDATE printers SET label = ?, on_ = ?, print_all = ?, cats = ?, paper = ?, upto = ?, ip = ?, port = ? WHERE id = ?').run(
+    q('UPDATE printers SET label = ?, on_ = ?, print_all = ?, cats = ?, paper = ?, upto = ?, bill = ?, orders = ?, ip = ?, port = ? WHERE id = ?').run(
       body.label !== undefined ? str(body.label, 'Nomi', { max: 40 }) : p.label, on, body.all === undefined ? p.print_all : body.all ? 1 : 0,
-      cats ? JSON.stringify(cats) : p.cats, paper, upto,
+      cats, paper, upto, body.bill === undefined ? p.bill || 0 : body.bill ? 1 : 0, body.orders === undefined ? p.orders ?? 1 : body.orders ? 1 : 0,
       p.kind === 'net' && body.ip !== undefined ? ipInput(body.ip) : p.ip, p.kind === 'net' && body.port !== undefined ? portInput(body.port) : p.port, p.id);
     audit(user, 'printer_set', `${body.label || p.label || p.sys_name || p.ip}: ${on ? 'yoqildi' : "o'chirildi"}`);
     events.publish('printers');
@@ -196,7 +243,7 @@ function createPrint(db, { now, events, audit, settings, newToken, devicePrefix 
     if (!d) throw new HttpError(404, 'Printer dasturi o\'rnatilgan kompyuter topilmadi');
     const ip = ipInput(body.ip); const port = portInput(body.port);
     const id = Number(q("INSERT INTO printers (device_id, kind, ip, port, label, on_, cats, upto, created_at) VALUES (?, 'net', ?, ?, ?, 1, ?, ?, ?)")
-      .run(d.id, ip, port, str(body.label, 'Nomi', { max: 40 }) || ip, JSON.stringify(catsInput(body.cats) || []), maxId(), now()).lastInsertRowid);
+      .run(d.id, ip, port, str(body.label, 'Nomi', { max: 40 }) || ip, catsText(catsInput(body.cats)), maxId(), now()).lastInsertRowid);
     audit(user, 'printer_add', `${ip}:${port}`);
     events.publish('printers');
     return { id, ...setup() };
@@ -234,7 +281,7 @@ function createPrint(db, { now, events, audit, settings, newToken, devicePrefix 
   function setBrowser({ user, params, body }) {
     const d = q('SELECT * FROM devices WHERE id = ? AND agent = 0').get(params.id);
     if (!d) throw new HttpError(404, 'Qurilma topilmadi');
-    setConfig({ device: d, body: { on: body.on, all: body.all, cats: body.cats } });
+    setConfig({ device: d, body: { on: body.on, all: body.all, cats: body.cats, bill: body.bill, orders: body.orders } });
     audit(user, 'printer_set', `${d.name}: ${body.on ? 'yoqildi' : "o'chirildi"}`);
     return setup();
   }
@@ -250,7 +297,7 @@ function createPrint(db, { now, events, audit, settings, newToken, devicePrefix 
     return [...browsers, ...agents];
   }
 
-  return { job, config, setConfig, pending, ack, recent, status, agentReport, agentJobs, agentAck, setup, savePrinter, addNet, removePrinter, testPrinter, newAgent, removeAgent, setBrowser };
+  return { job, billTarget, config, setConfig, pending, ack, recent, status, agentReport, agentJobs, agentAck, setup, savePrinter, addNet, removePrinter, testPrinter, newAgent, removeAgent, setBrowser };
 }
 
 module.exports = { createPrint };

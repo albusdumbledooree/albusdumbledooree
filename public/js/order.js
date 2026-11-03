@@ -4,6 +4,9 @@
 const Carts = {}; // context key -> { lines: [{dish_id, name, price, qty, note}], guests, label }
 const UI = { category: 'all', search: '', drawer: false, section: store('cp_section') || '' };
 
+// Takeaway checks: the cashier, the boss, couriers; a plain waiter only works in rooms (fast food: everyone).
+function canTakeaway() { return App.user.role !== 'waiter' || !!App.user.delivery || App.biz === 'fastfood'; }
+
 function emptyState(ic, text) { return `<div class="empty">${icon(ic, 56)}<div>${text}</div></div>`; }
 
 // ---------- Rooms ----------
@@ -28,11 +31,13 @@ function roomTile(r) {
   const st = roomState(r);
   const cooking = o ? o.items.new + o.items.cooking : 0;
   const resv = r.reservations[0];
-  return `<button class="tile st-${st}" data-room="${r.id}">
-    <span class="t-top"><span class="no">${esc(r.number)}</span>${o ? `<span class="amt">${num(o.subtotal)}</span>` : `<span class="plus">${icon('plus', 20)}</span>`}</span>
+  // Another waiter's room: greyed out, with whose it is and the sum, only to look at.
+  const other = r.mine === false;
+  return `<button class="tile st-${st} ${other ? 'other' : ''}" data-room="${r.id}" ${other ? `data-other="${o ? 1 : 0}" title="${esc(t('Sizga biriktirilmagan'))}"` : ''}>
+    <span class="t-top"><span class="no">${esc(r.number)}</span>${o ? `<span class="amt">${num(o.subtotal)}</span>` : `<span class="plus">${icon(other ? 'lock' : 'plus', other ? 16 : 20)}</span>`}</span>
     <span class="nm">${esc(r.name)}</span>
     <span class="meta">${o
-      ? `${App.user.role !== 'waiter' ? `<span>${icon('user-round', 14)} ${esc(o.waiter_name.split(' ').pop())}</span>` : ''}<span>${icon('clock', 14)} <b data-since="${o.opened_at}"></b></span><span>${icon('users', 14)} ${o.guests}</span>`
+      ? `${App.user.role !== 'waiter' || other ? `<span>${icon('user-round', 14)} ${esc(o.waiter_name.split(' ').pop())}</span>` : ''}<span>${icon('clock', 14)} <b data-since="${o.opened_at}"></b></span><span>${icon('users', 14)} ${o.guests}</span>`
       : `<span>${icon(ROOM_TYPE_ICONS[r.type] || 'door-open', 14)} ${roomTypeName(r.type)}</span><span>${icon('users', 14)} ${r.capacity}</span>`}
       ${cooking ? `<span class="hot">${icon('flame', 14)} ${cooking}</span>` : ''}</span>
     ${tileFoot(st, st === 'ready' ? ` · ${o.items.ready}` : st === 'reserved' ? ` · ${fmtTime(resv.starts_at)}` : '')}
@@ -75,10 +80,11 @@ Views.rooms = {
     const sections = roomSections(rooms);
     const sec = sections.includes(UI.section) ? UI.section : '';
     const fast = App.biz === 'fastfood';
-    const mode = UI.roomsMode === 'takeaway' || (!UI.roomsMode && (fast || !rooms.length)) ? 'takeaway' : 'hall';
+    const tw = canTakeaway();
+    const mode = tw && (UI.roomsMode === 'takeaway' || (!UI.roomsMode && (fast || !rooms.length))) ? 'takeaway' : 'hall';
     const modes = `<div class="modes">
       ${rooms.length ? `<button class="mode ${mode === 'hall' ? 'active' : ''}" data-mode="hall">${icon(fast ? 'utensils' : 'house', 20)} ${fast ? t('Stollar') : t('Zal')}<span class="cnt">${busy}/${rooms.length}</span></button>` : ''}
-      <button class="mode ${mode === 'takeaway' ? 'active' : ''}" data-mode="takeaway">${icon('shopping-bag', 20)} ${fast ? t('Ochiq buyurtmalar') : t('Olib ketish')}<span class="cnt">${takeaway.orders.length}</span></button>
+      ${tw ? `<button class="mode ${mode === 'takeaway' ? 'active' : ''}" data-mode="takeaway">${icon('shopping-bag', 20)} ${fast ? t('Ochiq buyurtmalar') : t('Olib ketish')}<span class="cnt">${takeaway.orders.length}</span></button>` : ''}
       ${moduleOn('reservations') && can('owner', 'admin', 'cashier') ? `<a class="mode" href="#/reservations">${icon('calendar', 20)} ${t('Bronlar')}<span class="cnt">${rooms.reduce((n, r) => n + r.reservations.length, 0)}</span></a>` : ''}
       <span class="grow"></span>
       ${quickMoneyHtml()}
@@ -108,7 +114,10 @@ Views.rooms = {
   bind(root, data) {
     bindQuickMoney(root);
     fixedDueNotice(root.querySelector('#fixed-due'));
-    root.querySelectorAll('[data-room]').forEach((b) => b.onclick = () => { location.hash = `#/room/${b.dataset.room}`; });
+    root.querySelectorAll('[data-room]').forEach((b) => b.onclick = () => {
+      if (b.dataset.other === '0') return toast(t("Bu xona sizga biriktirilmagan"), 'warn');
+      location.hash = `#/room/${b.dataset.room}`;
+    });
     root.querySelectorAll('[data-section]').forEach((b) => b.onclick = () => { UI.section = b.dataset.section; store('cp_section', UI.section || null); renderView(data); });
     root.querySelectorAll('[data-mode]').forEach((b) => b.onclick = () => { UI.roomsMode = b.dataset.mode; store('cp_rooms_mode', UI.roomsMode); renderView(data); });
     root.querySelectorAll('[data-order]').forEach((b) => b.onclick = () => { location.hash = `#/order/${b.dataset.order}`; });
@@ -171,19 +180,19 @@ function canCancelItem(i) {
   return App.user.role === 'waiter' && App.settings.waiter_cancel;
 }
 
-function lineHtml(i) {
+function lineHtml(i, ro = false) {
   const timer = i.status === 'new' || i.status === 'cooking' ? `<span class="timer">${icon('timer', 13)} <b data-eta="${i.eta_at}"></b></span>` : '';
   return `<div class="line ${i.status}">
     <span class="q">${i.qty}×</span><span class="n">${esc(i.name)}</span><span class="p">${money(i.price * i.qty)}</span>
     <span class="sub"><span class="chip ${i.status}">${statusName(i.status)}</span>${timer}
       ${i.note ? `<span>${icon('sticky-note', 13)} ${esc(i.note)}</span>` : ''}${i.cancel_reason ? `<span>(${esc(i.cancel_reason)})</span>` : ''}
       <span class="grow"></span>
-      ${i.status === 'ready' ? `<button class="btn ok sm" data-serve="${i.id}">${icon('hand', 16)} ${t('Oldim')}</button>` : ''}
-      ${canCancelItem(i) ? `<button class="icon-btn ghost danger" data-cancel-item="${i.id}" data-st="${i.status}" title="${esc(t('Bekor qilish'))}">${icon('x', 18)}</button>` : ''}</span>
+      ${i.status === 'ready' && !ro ? `<button class="btn ok sm" data-serve="${i.id}">${icon('hand', 16)} ${t('Oldim')}</button>` : ''}
+      ${canCancelItem(i) && !ro ? `<button class="icon-btn ghost danger" data-cancel-item="${i.id}" data-st="${i.status}" title="${esc(t('Bekor qilish'))}">${icon('x', 18)}</button>` : ''}</span>
   </div>`;
 }
 
-function checkPane({ order, room, cart, takeaway }) {
+function checkPane({ order, room, cart, takeaway, readonly: ro }) {
   const items = order ? order.items : [];
   const subtotalPending = cart.lines.reduce((s, c) => s + c.price * c.qty, 0);
   const guests = order ? order.guests : cart.guests || 1;
@@ -198,7 +207,7 @@ function checkPane({ order, room, cart, takeaway }) {
        <input id="cp-label" placeholder="${esc(t('Mijoz ismi (ixtiyoriy)'))}" value="${esc(order ? order.label : cart.label)}" style="min-height:36px;margin-top:4px;padding:6px 10px"></div>`
     : `<span class="avatar">${esc(room.number)}</span><div class="grow"><b>${esc(room.name)}</b>
        <span class="small muted">${order ? `${icon('user-round', 13)} ${esc(order.waiter.name)} · ${icon('clock', 13)} ${fmtTime(order.opened_at)}` : t("Bo'sh")}</span></div>
-       <span class="guests" title="${esc(t('Mehmonlar soni'))}"><button data-g="-1">−</button><span>${icon('users', 16)} ${guests}</span><button data-g="1">+</button></span>`;
+       ${ro ? `<span class="guests">${icon('users', 16)} ${guests}</span>` : `<span class="guests" title="${esc(t('Mehmonlar soni'))}"><button data-g="-1">−</button><span>${icon('users', 16)} ${guests}</span><button data-g="1">+</button></span>`}`;
   const sent = batches(items.filter((i) => i.status !== 'cancelled'));
   const cancelled = items.filter((i) => i.status === 'cancelled');
   const total = order ? order.total : 0;
@@ -207,8 +216,8 @@ function checkPane({ order, room, cart, takeaway }) {
   return `<aside class="checkpane ${UI.drawer ? 'open' : ''}" id="checkpane">
     <div class="cp-head">${head}<button class="icon-btn ghost fab-close" id="cp-close" style="display:none">${icon('x')}</button></div>
     <div class="cp-body">
-      ${sent.map((b, n) => `<div class="batch-title">${icon('send', 13)} ${t('{0}-yuborish', n + 1)} · ${fmtTime(b.at)}</div>${b.items.map(lineHtml).join('')}`).join('')}
-      ${cancelled.length ? `<div class="batch-title">${icon('ban', 13)} ${t('Bekor qilingan')}</div>${cancelled.map(lineHtml).join('')}` : ''}
+      ${sent.map((b, n) => `<div class="batch-title">${icon('send', 13)} ${t('{0}-yuborish', n + 1)} · ${fmtTime(b.at)}</div>${b.items.map((i) => lineHtml(i, ro)).join('')}`).join('')}
+      ${cancelled.length ? `<div class="batch-title">${icon('ban', 13)} ${t('Bekor qilingan')}</div>${cancelled.map((i) => lineHtml(i, ro)).join('')}` : ''}
       ${cart.lines.length ? `<div class="batch-title" style="color:var(--primary)">${icon('circle-plus', 13)} ${t('Yangi (yuborilmagan)')}</div>
         ${cart.lines.map((c, idx) => `<div class="line pending"><span class="q">${c.qty}×</span><span class="n">${esc(c.name)}</span><span class="p">${money(c.price * c.qty)}</span>
           <span class="sub">${c.note ? `<span>${icon('sticky-note', 13)} ${esc(c.note)}</span>` : ''}<span class="grow"></span>
@@ -222,7 +231,8 @@ function checkPane({ order, room, cart, takeaway }) {
         ${order.service_amount ? `<span>${esc(serviceLabel(order))}</span><span class="right">${money(order.service_amount)}</span>` : ''}
         <span class="total">${t('Jami')}</span><span class="total right">${money(total)}</span>
         ${share ? `<span class="share">${t('{0} kishi — har biriga', order.guests)}</span><span class="share right">${money(share)}</span>` : ''}</div>` : ''}
-      ${cart.lines.length
+      ${ro ? `<div class="ro-note">${icon('lock', 16)} ${t("Bu xona sizga biriktirilmagan — faqat ko'rish")}</div>`
+        : cart.lines.length
         ? `<button class="btn primary lg block" id="send" style="margin-top:12px">${icon('send', 20)} ${t('Yuborish')} · ${money(subtotalPending)}</button>`
         : order ? `<div class="order-actions">
           ${App.user.role === 'waiter' || can('owner', 'admin') ? `<button class="btn ${order.bill_requested ? '' : 'warn'}" id="req-bill" ${order.bill_requested ? 'disabled' : ''}>${icon('receipt', 18)} ${order.bill_requested ? t("So'raldi") : t('Hisob')}</button>` : ''}
@@ -241,7 +251,7 @@ const OrderView = {
     let room = null; let order = null;
     if (kind === 'room') {
       room = rooms.find((r) => r.id === Number(params[0]));
-      if (!room) throw new Error(t('Xona topilmadi yoki sizga biriktirilmagan'));
+      if (!room || (room.mine === false && !room.order)) throw new Error(t('Xona topilmadi yoki sizga biriktirilmagan'));
       if (room.order) order = await GET(`/api/orders/${room.order.id}`);
     } else if (kind === 'order') {
       order = await GET(`/api/orders/${params[0]}`);
@@ -249,7 +259,8 @@ const OrderView = {
       room = order.room;
       if (!order.takeaway) { location.replace(`#/room/${order.room_id}`); return null; }
     }
-    return { menu, room, order, rooms, kind, key: ctxKey(params, kind), takeaway: kind === 'soboy' || (order && order.takeaway) };
+    if (kind === 'soboy' && !canTakeaway()) throw new Error(t("Olib ketish faqat kassir va dostavchik uchun"));
+    return { menu, room, order, rooms, kind, key: ctxKey(params, kind), takeaway: kind === 'soboy' || (order && order.takeaway), readonly: !!(order && order.readonly) };
   },
   render(d) {
     const { menu, key } = d;
@@ -261,7 +272,7 @@ const OrderView = {
     return `<div class="order">
       ${checkPane({ ...d, cart })}
       ${UI.drawer ? '<div class="drawer-back" id="drawer-back"></div>' : ''}
-      <section class="menu-area">
+      ${d.readonly ? `<section class="menu-area ro-area">${emptyState('lock', `${t('Bu xona sizga biriktirilmagan')}<br><span class="small muted">${t("Chekni faqat ko'rishingiz mumkin. Taom urish uchun xona sizga biriktirilishi kerak.")}</span><br><button class="btn" id="back" style="margin-top:14px">${icon('arrow-left', 18)} ${t('Orqaga')}</button>`)}</section>` : `<section class="menu-area">
         ${catSide(menu)}
         <div class="dish-area">
           <div class="menu-bar"><button class="btn" id="back">${icon('arrow-left', 18)} ${t('Orqaga')}</button>
@@ -272,7 +283,7 @@ const OrderView = {
             sub: `${x.needs_kitchen && kitchenOn ? `${icon('timer', 12)} ${x.eta_minutes} ${t('daq')}` : ''}${x.stock != null ? ` ${icon('package', 12)} ${x.stock}` : ''}`,
           })).join('') || emptyState('search', t('Taom topilmadi'))}</div>
         </div>
-      </section>
+      </section>`}
       <button class="fab-check" id="fab">${icon('receipt', 22)}<span class="grow">${t('Chek')}${pendingCount ? ` · ${t('{0} ta yangi', pendingCount)}` : ''}</span><b>${money(d.order ? d.order.total : cart.lines.reduce((s, c) => s + c.price * c.qty, 0))}</b></button>
     </div>`;
   },
@@ -289,6 +300,7 @@ const OrderView = {
     const back = root.querySelector('#drawer-back');
     if (back) back.onclick = () => { UI.drawer = false; rerender(); };
     root.querySelector('#back').onclick = () => { UI.drawer = false; location.hash = '#/rooms'; };
+    if (d.readonly) return;
     root.querySelectorAll('[data-cat]').forEach((b) => b.onclick = () => { UI.category = b.dataset.cat; rerender(); });
     const search = root.querySelector('#dish-search');
     search.oninput = () => { UI.search = search.value; rerender(); };

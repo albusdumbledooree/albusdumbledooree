@@ -1189,13 +1189,16 @@ Views.staff = {
         <td colspan="3"><span class="chip">${t('Dasturga kirmaydi')}</span></td>
         <td class="actions">${u.active ? '' : `<span class="chip">${t('Bloklangan')}</span>`} ${icon('chevron-right', 18)}</td></tr>` : `<tr style="${u.active ? '' : 'opacity:.5'}" class="${canEditRole(u.role) ? 'clickable' : ''}" data-edit="${u.id}">
         <td><div class="row" style="flex-wrap:nowrap"><span class="avatar ${u.role}">${esc(initials(u.name))}</span><div><b>${esc(u.name)}</b><br><span class="small muted">${icon(u.delivery ? 'truck' : ROLE_ICONS[u.role], 13)} ${esc(u.position && u.app !== 0 ? u.position : roleName(u.role))}</span></div></div></td>
-        <td>${u.has_pin ? `<span class="chip green">${icon('key-round', 14)} PIN</span>` : `<span class="chip red">${icon('key-round', 14)} ${t("PIN yo'q")}</span>`}</td>
+        <td>${u.has_pin ? (App.user.role === 'owner'
+          ? `<button type="button" class="chip green pin-eye" data-eye="${u.id}" title="${esc(t("PIN va parolni ko'rish"))}">${icon('key-round', 14)} <span class="pin-val">••••</span> ${icon('eye', 14)}</button>`
+          : `<span class="chip green">${icon('key-round', 14)} PIN</span>`) : `<span class="chip red">${icon('key-round', 14)} ${t("PIN yo'q")}</span>`}</td>
         <td>${u.perms.print ? `<span class="chip" title="${esc(t('Chek chiqaradi'))}">${icon('printer', 14)}</span>` : ''} ${u.perms.close ? `<span class="chip" title="${esc(t('Chek yopadi'))}">${icon('wallet', 14)}</span>` : ''}</td>
         <td class="small muted">${u.role === 'waiter' && !sellsAtCounter() ? (u.rooms.map((r) => esc(r.number)).join(', ') || '—') : ''}</td>
         <td class="actions">${u.active ? '' : `<span class="chip">${t('Bloklangan')}</span>`} ${canEditRole(u.role) ? icon('chevron-right', 18) : ''}</td></tr>`).join('')}
       </table></div></div>
       <p class="small muted" style="margin-top:12px">${icon('info', 14)} ${t("Dasturga kirmaydigan xodimlarni ham qo'shing (tandirchi, idishchi, qorovul…) — ularning maoshi ham xarajatga va sof foydaga kiradi. Ular tarif limitiga kirmaydi.")}
-        ${sellsAtCounter() ? '' : `<br>${icon('info', 14)} ${t("Ofitsantni xonaga biriktirish: Sozlamalar → Xonalar.")}`}</p>`;
+        ${sellsAtCounter() ? '' : `<br>${icon('info', 14)} ${t("Ofitsantni xonaga biriktirish: Sozlamalar → Xonalar.")}`}
+        ${App.user.role === 'owner' ? `<br>${icon('eye', 14)} ${t("PIN ustiga bossangiz, PIN va parol ko'rinadi (faqat sizga). Eski PIN xodim keyingi safar kirganda yoki yangi PIN qo'yilganda ko'rinadi.")}` : ''}</p>`;
   },
   bind(root, { users }) {
     const permSel = (name, val, def) => `<select name="${name}"><option value="" ${val === null ? 'selected' : ''}>${t('Lavozim bo\'yicha')} (${def ? t('Ha') : t("Yo'q")})</option>
@@ -1223,7 +1226,8 @@ Views.staff = {
             <datalist id="job-titles">${JOB_TITLES().map((x) => `<option value="${esc(x)}">`).join('')}</datalist></label>
           <label class="field">${t('Lavozim')}<select name="role">${roles.map((r) => `<option value="${r}" ${!curType && role === r ? 'selected' : ''}>${roleName(r)}</option>`).join('')}
             ${types.length ? `<optgroup label="${esc(t('Sizning lavozimlaringiz'))}">${types.map((ty) => `<option value="type:${ty.i}" ${curType && curType.i === ty.i ? 'selected' : ''}>${esc(ty.name)} (${esc(typeBase(ty))})</option>`).join('')}</optgroup>` : ''}</select></label>
-          <label class="field" id="pin-f"><span id="pin-label"></span><input name="pin" inputmode="numeric" autocomplete="off" placeholder="${u.id ? esc(t("O'zgartirish uchun yozing")) : ''}"></label>
+          <label class="field" id="pin-f"><span id="pin-label"></span><span class="pin-gen-row"><input name="pin" inputmode="numeric" autocomplete="off" placeholder="${u.id ? esc(t("O'zgartirish uchun yozing")) : ''}">
+            <button type="button" class="btn" id="pin-gen" title="${esc(t('Yangi PIN yaratish'))}">${icon('refresh-cw', 18)}</button></span></label>
           <label class="field">${t('Telefon')}<input name="phone" type="tel" value="${esc(u.phone || '')}"></label></div>
           ${withPay ? `<h3 style="margin:14px 0 8px">${icon('hand-coins', 18)} ${t('Maosh')}</h3><div class="form-grid">
             <label class="field">${t('Maosh turi')}<select name="pay_type">${Object.entries(PAY_TYPES()).map(([k, v]) => `<option value="${k}" ${k === 'monthly' ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
@@ -1279,11 +1283,32 @@ Views.staff = {
         sync();
       });
       form.role.onchange = sync; sync();
+      // A new random PIN, shown in the field (4 digits; a boss password gets 6).
+      form.querySelector('#pin-gen').onclick = () => {
+        const n = boss(baseRole(form.role.value)) ? 6 : 4;
+        const a = new Uint32Array(n);
+        crypto.getRandomValues(a);
+        form.pin.value = [...a].map((x) => x % 10).join('');
+      };
     };
     root.querySelector('#add').onclick = () => edit();
     const tb = root.querySelector('#types');
     if (tb) tb.onclick = () => staffTypesDialog();
     root.querySelectorAll('tr.clickable[data-edit]').forEach((b) => b.onclick = () => edit(users.find((u) => u.id === Number(b.dataset.edit))));
+    // The boss looks up a PIN (and password, when known) right in the list; a second tap hides it again.
+    root.querySelectorAll('[data-eye]').forEach((b) => b.onclick = async (e) => {
+      e.stopPropagation();
+      const v = b.querySelector('.pin-val');
+      if (b.classList.contains('shown')) { v.textContent = '••••'; b.classList.remove('shown'); return; }
+      try {
+        const r = await GET(`/api/users/${b.dataset.eye}/secret`);
+        const parts = [r.pin ? r.pin : t("Noma'lum")];
+        if (r.password && r.password !== r.pin) parts.push(`${t('Parol')}: ${r.password}`);
+        v.textContent = parts.join(' · ');
+        b.title = r.pin ? '' : t("Bu PIN avvalroq qo'yilgan. Xodim keyingi safar kirganda yoki yangi PIN qo'ysangiz ko'rinadi.");
+        b.classList.add('shown');
+      } catch (err) { toastError(err); }
+    });
   },
 };
 
@@ -1327,6 +1352,7 @@ const AUDIT_NAMES = () => ({
   guest_approve: t('QR buyurtmani tasdiqladi'), guest_reject: t('QR buyurtmani rad etdi'), qr_renew: t('QR kodni yangiladi'), work_in: t('Ishga keldi'), work_out: t('Ishni tugatdi'), work_ask: t('Ishga keldi (kassir tasdig\'i so\'raldi)'), work_confirm: t('Ishga kelganini tasdiqladi'),
   work_reject: t('Ishga kelganini rad etdi'), work_close: t('Ish vaqtini yopdi'), geo_outside: t('Ish joyidan tashqarida'),
   fixed_add: t("Doimiy xarajat qo'shdi"), fixed_edit: t('Doimiy xarajatni tahrirladi'), fixed_remove: t('Doimiy xarajatni olib tashladi'), fixed_pay: t("Doimiy xarajatni to'ladi"),
+  secret_view: t("Xodim PIN/parolini ko'rdi"),
 });
 const SETTINGS_TABS = () => [
   ['general', 'store', t('Muassasa'), ['owner', 'admin']],

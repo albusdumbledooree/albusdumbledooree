@@ -86,4 +86,62 @@ function ticket(job, { width = 48, label = '' } = {}) {
   return Buffer.from(b);
 }
 
-module.exports = { ticket, encode, wrap };
+const sum = (n) => `${String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}`;
+const dt = (ts) => { const d = new Date(ts); return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()} ${hm(ts)}`; };
+
+// The guest's bill (sent to the Kassa printer): job.order is the check, job.shop the business's name and check texts.
+function bill(job, { width = 48 } = {}) {
+  const o = job.order || {}; const s = job.shop || {};
+  const b = [];
+  const raw = (...x) => b.push(...x);
+  const text = (t) => b.push(...encode(t), 0x0a);
+  const bold = (on) => raw(ESC, 0x45, on ? 1 : 0);
+  const big = (on) => raw(GS, 0x21, on ? 0x11 : 0x00);
+  const tall = (on) => raw(GS, 0x21, on ? 0x01 : 0x00);
+  const align = (n) => raw(ESC, 0x61, n);
+  // "left ........ right" in one row (the left side wraps above when it is long).
+  const pair = (l, r, w = width) => {
+    const right = String(r);
+    const rows = wrap(l, Math.max(8, w - right.length - 1));
+    rows.slice(0, -1).forEach((x) => text(x));
+    const last = rows[rows.length - 1];
+    text(`${last}${' '.repeat(Math.max(1, w - last.length - right.length))}${right}`);
+  };
+  raw(ESC, 0x40); raw(ESC, 0x74, 17);
+  align(1);
+  if (job.late) { bold(true); text(`KECHIKIB CHIQDI (${hm(job.at)})`); bold(false); }
+  bold(true); tall(true);
+  for (const r of wrap(s.name || '', width)) text(r);
+  tall(false); bold(false);
+  if (s.address) for (const r of wrap(s.address, width)) text(r);
+  if (s.phone) text(s.phone);
+  align(0);
+  text('-'.repeat(width));
+  const place = o.delivery ? `Yetkazish #${o.id}` : o.takeaway ? `Olib ketish #${o.id}` : (o.room && o.room.name) || '';
+  pair(`Chek #${o.id}${o.status !== 'closed' ? ' (hisob)' : ''}`, place);
+  if (o.waiter && !o.takeaway) pair(`Ofitsant: ${o.waiter.name}`, `Mehmon: ${o.guests}`);
+  text(`Ochildi: ${dt(o.opened_at)}`);
+  if (o.closed_at) text(`Yopildi: ${dt(o.closed_at)}`);
+  text('-'.repeat(width));
+  for (const i of (o.items || []).filter((x) => x.status !== 'cancelled')) {
+    for (const r of wrap(i.name, width)) text(r);
+    pair(`  ${i.qty} x ${sum(i.price)}`, sum(i.qty * i.price));
+  }
+  text('-'.repeat(width));
+  pair('Taomlar', sum(o.subtotal));
+  if (o.service_amount) pair(o.service_type === 'per_guest' ? `Xizmat haqi (${o.guests} kishi)` : `Xizmat haqi ${o.service_pct}%`, sum(o.service_amount));
+  if (o.discount) pair('Chegirma', `-${sum(o.discount)}`);
+  bold(true); big(true);
+  pair('JAMI', sum(o.total), Math.floor(width / 2));
+  big(false); bold(false);
+  if (o.guests > 1 && !o.takeaway && s.receipt_per_person !== false) pair(`${o.guests} kishi - har biriga`, sum(Math.round(o.total / o.guests)));
+  for (const m of ['cash', 'card', 'transfer']) if (o.status === 'closed' && o[`paid_${m}`]) pair({ cash: 'Naqd', card: 'Karta', transfer: "O'tkazma" }[m], sum(o[`paid_${m}`]));
+  text('-'.repeat(width));
+  if (o.cashier) text(`Kassir: ${o.cashier.name}`);
+  if (s.receipt_footer) { align(1); for (const line of String(s.receipt_footer).split('\n')) for (const r of wrap(line, width)) text(r); align(0); }
+  raw(ESC, 0x64, 4);
+  raw(GS, 0x56, 0x42, 0x00);
+  return Buffer.from(b);
+}
+
+module.exports = { ticket, bill, encode, wrap };

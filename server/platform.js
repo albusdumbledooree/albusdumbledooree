@@ -16,6 +16,7 @@ const { createApi, MODULES, BUSINESS_TYPES, SHOP_TYPES } = require('./api');
 const { createHub } = require('./events');
 const { snapshot, listTenantBackups, stampNow } = require('./backup');
 const { createLeads } = require('./leads');
+const { createSecretBox } = require('./secret');
 const { verifyInput } = require('./seo');
 const { hashPassword, verifyPassword, newToken, HttpError, str, int } = require('./util');
 
@@ -79,6 +80,7 @@ const DEFAULT_TERMS = { branch_price: 149000, yearly_months: 10, grace_days: 3, 
 function createPlatform(dataDir) {
   fs.mkdirSync(path.join(dataDir, 'tenants'), { recursive: true });
   const pdb = new DatabaseSync(path.join(dataDir, 'platform.db'));
+  const secret = createSecretBox(dataDir);
   pdb.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
   pdb.exec(SCHEMA);
   const tcols = pdb.prepare('PRAGMA table_info(tenants)').all().map((c) => c.name);
@@ -140,7 +142,7 @@ function createPlatform(dataDir) {
     const db = open(file);
     const hub = createHub();
     ctx = { id, db, hub, row, file };
-    ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row, plan: () => planFor(ctx.row), branches: () => branchesOf(id), file, telegram: telegramFor(id) });
+    ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row, plan: () => planFor(ctx.row), branches: () => branchesOf(id), file, telegram: telegramFor(id), secret });
     contexts.set(id, ctx);
     return ctx;
   }

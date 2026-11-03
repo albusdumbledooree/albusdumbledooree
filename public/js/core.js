@@ -119,9 +119,18 @@ function catColor(menu, id) {
   if (i < 0) return '#94a3b8';
   return menu.categories[i].color || CAT_COLORS[i % CAT_COLORS.length];
 }
+// A colour (#abc / #aabbcc) with transparency, as rgba() that every browser understands.
+function rgba(hex, a) {
+  let h = String(hex || '').trim().replace('#', '');
+  if (/^[0-9a-f]{3}$/i.test(h)) h = h.split('').map((c) => c + c).join('');
+  if (!/^[0-9a-f]{6}$/i.test(h)) h = '94a3b8';
+  const n = parseInt(h, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
 // opts.qty: how many are already on the check; opts.sub: small line (time, stock, size).
 function dishTile(menu, x, opts = {}) {
-  return `<button class="dish ${x.available ? '' : 'out'}" style="--cc:${catColor(menu, x.category_id)}" data-dish="${x.id}" ${x.available ? '' : 'disabled'}>
+  const cc = catColor(menu, x.category_id);
+  return `<button class="dish ${x.available ? '' : 'out'}" style="--cc:${esc(cc)};--cc-bg:${rgba(cc, 0.12)};--cc-line:${rgba(cc, 0.35)}" data-dish="${x.id}" ${x.available ? '' : 'disabled'}>
     ${opts.qty ? `<span class="qty">${opts.qty}</span>` : ''}<span class="nm">${esc(x.name)}</span>
     ${opts.sub ? `<span class="sub">${opts.sub}</span>` : ''}
     <span class="pr" data-out="${esc(t('TUGADI'))}">${num(x.price)}</span></button>`;
@@ -587,25 +596,31 @@ function serviceLabel(o) {
 function perPerson(o) { return o.guests > 1 ? Math.round(o.total / o.guests) : 0; }
 
 // Prints the bill; the server checks the permission and counts the print.
+// With a Kassa printer set (Settings → Printerlar → "Mijoz cheki"), the bill goes there through the server,
+// whichever device asked; without one it is printed here, as before.
 async function printCheck(orderId) {
-  try { printReceipt(await POST(`/api/orders/${orderId}/print`)); } catch (e) { toastError(e); }
+  try {
+    const r = await POST(`/api/orders/${orderId}/print`);
+    if (!r.sent_to) return printReceipt(r);
+    if (r.sent_to.online) toast(t('Chek {0} printeriga yuborildi', r.sent_to.name), 'ok');
+    else toast(t("{0} printeri hozir ulanmagan — chek u yoqilganda chiqadi", r.sent_to.name), 'warn', 8000);
+  } catch (e) { toastError(e); }
 }
 
 // Logo at the top of the check: a separate check logo if the boss uploaded one, otherwise the main logo.
-function receiptLogo() {
-  const s = App.settings;
-  const code = (App.tenant && App.tenant.code) || (App.info && App.info.code);
+function receiptLogo(s = App.settings) {
+  const code = s.code || (App.tenant && App.tenant.code) || (App.info && App.info.code);
   const id = s.receipt_logo_id || s.logo;
   return s.receipt_logo !== false && id && code ? `<img class="logo" src="/media/${esc(code)}/${id}" alt="">` : '';
 }
 
-function printReceipt(o) {
-  const s = App.settings;
+// s: the business's name and check settings (a bill printed for another device brings its own).
+function printReceipt(o, s = App.settings) {
   const live = o.items.filter((i) => i.status !== 'cancelled');
   const lines = live.map((i) => `<tr><td>${esc(i.name)}<br><small>${i.qty} × ${money(i.price)}</small></td><td class="r">${money(i.qty * i.price)}</td></tr>`).join('');
   const share = perPerson(o);
   printDoc(`${t('Chek')} #${o.id}`, `
-    ${receiptLogo()}
+    ${receiptLogo(s)}
     <h1>${esc(s.name)}</h1>${s.address ? `<div class="c">${esc(s.address)}</div>` : ''}${s.phone ? `<div class="c">${esc(s.phone)}</div>` : ''}
     <hr><div>${t('Chek')}: #${o.id}${o.status !== 'closed' ? ` (${t('hisob')})` : ''}</div><div>${esc(placeName(o))}</div>
     ${o.takeaway && sellsAtCounter() ? `<div class="c huge">№ ${o.id}</div>` : `<div>${roleName('waiter')}: ${esc(o.waiter.name)}</div><div>${t('Mehmonlar')}: ${o.guests}</div>`}
@@ -666,7 +681,7 @@ const OrderPrinter = {
     try {
       this.cfg = await this.dev('GET', '/api/device/printer');
       // Devices switched on before 1.17 kept the switch only in the browser: it moves to the server once.
-      if (!this.cfg.on && store('cp_kprint') && !store('cp_kprint_srv')) this.cfg = await this.dev('PUT', '/api/device/printer', { on: true, all: false, cats: [] });
+      if (!this.cfg.on && store('cp_kprint') && !store('cp_kprint_srv')) this.cfg = await this.dev('PUT', '/api/device/printer', { on: true, all: false, cats: 'all' });
       store('cp_kprint_srv', 1);
       store('cp_kprint', this.cfg.on ? true : null);
     } catch { /* offline: keep the last known state */ }
@@ -690,7 +705,10 @@ const OrderPrinter = {
     this.busy = true;
     try {
       const r = await this.dev('GET', '/api/device/print-jobs');
-      for (const j of r.jobs) { printKitchenTicket(j); await new Promise((ok) => setTimeout(ok, 800)); }
+      for (const j of r.jobs) {
+        if (j.kind === 'bill') printReceipt(j.order, { ...(App.settings || {}), ...j.shop }); else printKitchenTicket(j);
+        await new Promise((ok) => setTimeout(ok, 800));
+      }
       if (r.jobs.length) await this.dev('POST', '/api/device/print-ack', { upto: r.last });
     } catch { /* the next pull tries again */ }
     this.busy = false;
