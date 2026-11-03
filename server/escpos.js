@@ -62,6 +62,7 @@ function ticket(job, { width = 48, label = '' } = {}) {
   align(1);
   if (job.test) { big(true); text('SINOV'); big(false); }
   if (job.cancel) { big(true); inverse(true); text(' BEKOR QILINDI '); inverse(false); big(false); }
+  if (job.deleted) { bold(true); text("BUTUN CHEK O'CHIRILDI"); bold(false); if (job.reason) for (const r of wrap(`Sabab: ${job.reason}`, width)) text(r); }
   if (job.reprint) { bold(true); inverse(true); text(' QAYTA CHOP ETILDI '); inverse(false); bold(false); }
   if (job.late) { bold(true); text(`KECHIKIB CHIQDI (${hm(job.at)})`); bold(false); }
   big(true); bold(true);

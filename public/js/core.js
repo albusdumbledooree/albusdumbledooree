@@ -628,7 +628,7 @@ function printReceipt(o) {
 
 // Kitchen ticket: big place name, dishes and notes — no prices.
 function printKitchenTicket(tk) {
-  printDoc(`${t('Buyurtma')} #${tk.order_id}`, `${tk.cancel ? `<div class="c huge inv">${t('BEKOR QILINDI')}</div>` : ''}${tk.reprint ? `<div class="c big inv">${t('QAYTA CHOP ETILDI')}</div>` : ''}${tk.late ? `<div class="c big">${t('KECHIKIB CHIQDI')} (${fmtTime(tk.at)})</div>` : ''}<div class="c huge">${esc(tk.room)}</div>
+  printDoc(`${t('Buyurtma')} #${tk.order_id}`, `${tk.cancel ? `<div class="c huge inv">${t('BEKOR QILINDI')}</div>` : ''}${tk.deleted ? `<div class="c big">${t("BUTUN CHEK O'CHIRILDI")}</div>${tk.reason ? `<div class="c">${t('Sabab')}: ${esc(tk.reason)}</div>` : ''}` : ''}${tk.reprint ? `<div class="c big inv">${t('QAYTA CHOP ETILDI')}</div>` : ''}${tk.late ? `<div class="c big">${t('KECHIKIB CHIQDI')} (${fmtTime(tk.at)})</div>` : ''}<div class="c huge">${esc(tk.room)}</div>
     <div class="c">${t('Chek')} #${tk.order_id} · ${esc(tk.waiter || '')}${tk.by && tk.by !== tk.waiter ? ` (${esc(tk.by)})` : ''} · ${fmtTime(tk.at || Date.now())}</div><hr>
     <table>${tk.items.map((i) => `<tr class="big"><td>${i.qty} ×</td><td>${esc(i.name)}${i.note ? `<br><small>* ${esc(i.note)}</small>` : ''}</td></tr>`).join('')}</table><hr>`, 'kitchen');
 }

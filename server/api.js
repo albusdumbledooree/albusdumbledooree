@@ -1542,8 +1542,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     }
     const reason = str(body.reason, 'Sabab', { max: 200, required: live > 0 });
     let what = '';
+    let items = [];
     tx(() => {
-      const items = q("SELECT * FROM order_items WHERE order_id = ? AND status != 'cancelled'").all(o.id);
+      items = q("SELECT * FROM order_items WHERE order_id = ? AND status != 'cancelled'").all(o.id);
       what = items.map((i) => `${i.name}×${i.qty}`).join(', ').slice(0, 300);
       q('UPDATE orders SET cancelled_by = ?, cancel_total = ? WHERE id = ?').run(user.id, items.reduce((s, i) => s + i.price * i.qty, 0), o.id);
       for (const it of items) {
@@ -1555,6 +1556,24 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     audit(user, 'order_cancel', `#${o.id} ${reason}${what ? ` — ${what}` : ''}`);
     events.publish('rooms');
     events.publish('kitchen');
+    // The kitchen must know at once: a "CHEK O'CHIRILDI" slip on the order printers (each its own sections)
+    // and an alert on the kitchen screen for dishes still being made. Dishes already served are marked so.
+    if (items.length) {
+      const room = q('SELECT name FROM rooms WHERE id = ?').get(o.room_id);
+      const place = placeName(o, room || { name: '' });
+      const waiter = q('SELECT name FROM users WHERE id = ?').get(o.waiter_id);
+      const dishOf = (id) => (id ? q('SELECT category_id, needs_kitchen FROM dishes WHERE id = ?').get(id) : null);
+      print.job('cancel', { cancel: true, deleted: true, reason, order_id: o.id, room: place, waiter: waiter && waiter.name, by: user.name, at: now(),
+        items: items.map((it) => {
+          const dish = dishOf(it.dish_id);
+          return { name: it.name, qty: it.qty, note: it.status === 'served' ? 'berilgan edi' : it.status === 'ready' ? 'tayyor edi' : '',
+            cook: dish ? dish.needs_kitchen === 1 : !!it.needs_kitchen, category_id: dish ? dish.category_id : null };
+        }) });
+      const cooking = items.filter((it) => it.needs_kitchen && ['new', 'cooking', 'ready'].includes(it.status));
+      if (cooking.length) {
+        events.publish('kitchen_cancel', { name: cooking.map((it) => `${it.name} × ${it.qty}`).join(', '), qty: '', room: place, whole: true }, { roles: KITCHEN });
+      }
+    }
     return { ok: true };
   }
 

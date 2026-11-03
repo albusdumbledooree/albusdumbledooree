@@ -332,6 +332,11 @@ Live.on('kitchen_new', (d) => {
 });
 Live.on('kitchen_cancel', (d) => {
   if (App.user.role !== 'chef') return;
+  if (d.whole) {
+    Voice.say(t("Diqqat! {0}. Butun chek o'chirildi.", d.room), 'alert');
+    toast(t("Chek o'chirildi ({0}): {1}", d.room, d.name), 'error', 15000);
+    return;
+  }
   Voice.say(t('Diqqat! {0}. {1} bekor qilindi.', d.room, d.name), 'alert');
   toast(t('Bekor qilindi: {0} × {1} ({2})', d.name, d.qty, d.room), 'error', 10000);
 });

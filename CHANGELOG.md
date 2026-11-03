@@ -2,6 +2,13 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.23.4 — Chek o'chirilganda oshxonaga qog'oz
+- Butun chek o'chirilganda buyurtma printerlariga **"BEKOR QILINDI — BUTUN CHEK O'CHIRILDI"** qog'ozi chiqadi:
+  xona, chek raqami, taomlar (har printerga o'z bo'limi — oshxonaga oshxona taomlari, shashlikchiga shashlik), sababi va kim o'chirgani.
+  Berilgan yoki tayyor bo'lgan taomlar "berilgan edi" / "tayyor edi" deb belgilanadi.
+- Oshxona ekranida ovozli ogohlantirish: "Diqqat! … Butun chek o'chirildi."
+- Avvalgidek: buyurtma urilganda va bitta taom bekor qilinganda (otkaz) ham qog'oz chiqadi.
+
 ## 1.23.3 — Ish oynasida lavozim nomi
 - Ish oynasida (xodimni tanlash, PIN), xodim tanlash ro'yxatlarida va ish vaqti jurnalida endi xodimning lavozimi
   ("Dostavchik", "Katta ofitsant") ko'rinadi, asosiy huquqi ("Ofitsant") emas.

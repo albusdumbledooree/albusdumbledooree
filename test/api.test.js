@@ -2284,3 +2284,43 @@ test('courier (dostavchik): own staff types, a delivery with phone, address and 
   // Changing their type to a plain waiter takes the deliveries off.
   assert.equal((await call('PUT', `/api/users/${c.id}`, boss, { role: 'waiter', position: '', delivery: false })).data.delivery, 0);
 });
+
+test('a deleted check prints "BUTUN CHEK O\'CHIRILDI" on the order printers, each with its own dishes', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  await call('POST', '/api/platform/tenants', admin, { name: 'Ochir choyxona', code: 'ochir', owner_name: 'Ega', owner_username: 'ega', owner_password: 'ega12345', plan: 'biznes', sample: true, kitchen_mode: 'off' });
+  const boss = await login('ega', 'ega12345', 'ochir');
+  const reg = async (name) => (await call('POST', '/api/device/register', null, { code: 'ochir', username: 'ega', password: 'ega12345', name })).data.device_token;
+  const kitchen = await reg('Oshxona'); const kebab = await reg('Kabobxona');
+  const menu = (await call('GET', '/api/menu', boss)).data;
+  const kebabCat = menu.categories.find((c) => /kabob/i.test(c.name));
+  const cook = menu.dishes.find((d) => d.needs_kitchen && d.category_id !== kebabCat.id);
+  const tea = menu.dishes.find((d) => !d.needs_kitchen);
+  const kebabDish = menu.dishes.find((d) => d.category_id === kebabCat.id);
+  const devs = (await call('GET', '/api/devices', boss)).data;
+  const others = menu.categories.filter((c) => c.id !== kebabCat.id).map((c) => c.id);
+  await call('PUT', `/api/devices/${devs.find((d) => d.name === 'Oshxona').id}/printer`, boss, { on: true, all: false, cats: others });
+  await call('PUT', `/api/devices/${devs.find((d) => d.name === 'Kabobxona').id}/printer`, boss, { on: true, all: false, cats: [kebabCat.id] });
+  const room = (await call('GET', '/api/rooms', boss)).data[0];
+  const o = (await call('POST', '/api/orders', boss, { room_id: room.id })).data;
+  const added = (await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: cook.id, qty: 2 }, { dish_id: tea.id, qty: 1 }, { dish_id: kebabDish.id, qty: 4 }] })).data;
+  // The order printed; acknowledged. The kebabs were served already.
+  for (const dev of [kitchen, kebab]) { const j = (await call('GET', '/api/device/print-jobs', dev)).data; await call('POST', '/api/device/print-ack', dev, { upto: j.last }); }
+  const kb = added.items.find((i) => i.dish_id === kebabDish.id);
+  await call('POST', `/api/items/${kb.id}/serve`, boss);
+  // The guest left: the check is deleted.
+  assert.equal((await call('POST', `/api/orders/${o.id}/cancel`, boss, { reason: 'Mijoz chiqib ketdi' })).status, 200);
+  const k = (await call('GET', '/api/device/print-jobs', kitchen)).data.jobs;
+  assert.equal(k.length, 1, JSON.stringify(k.map((j) => [j.kind, j.items.map((i) => i.name)])));
+  assert.equal(k[0].cancel, true); assert.equal(k[0].deleted, true); assert.equal(k[0].reason, 'Mijoz chiqib ketdi');
+  assert.deepEqual(k[0].items.map((i) => [i.name, i.qty]), [[cook.name, 2]], 'the kitchen gets its own dish, not the tea');
+  const b = (await call('GET', '/api/device/print-jobs', kebab)).data.jobs;
+  assert.deepEqual(b[0].items.map((i) => [i.name, i.qty, i.note]), [[kebabDish.name, 4, 'berilgan edi']]);
+  // The same slip for a printer of the FLOWI Printer program: ESC/POS with the big words.
+  const { ticket } = require('../server/escpos');
+  const text = ticket(k[0]).toString('latin1');
+  assert.ok(text.includes('BEKOR QILINDI') && text.includes("BUTUN CHEK O'CHIRILDI") && text.includes('Sabab: Mijoz chiqib ketdi'));
+  // An empty check (nothing ordered) prints nothing.
+  const o2 = (await call('POST', '/api/orders', boss, { room_id: room.id })).data;
+  await call('POST', `/api/orders/${o2.id}/cancel`, boss, { reason: '' });
+  assert.equal((await call('GET', '/api/device/print-jobs', kitchen)).data.jobs.length, 1);
+});
