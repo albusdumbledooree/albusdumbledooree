@@ -2463,3 +2463,65 @@ test('checks report: filters (type, payment, waiter, hall, room, discount), cost
   assert.ok(csv.includes('Tannarx') && csv.includes(`"${a.id}"`) && !csv.includes(`"${b.id}";"Ochiq"`));
   await call('POST', `/api/orders/${b.id}/close`, boss, { paid_cash: 1e6 });
 });
+
+test('boss panel: today in numbers for the boss, no money for an admin without reports, closed to staff', async () => {
+  const boss = await login('ega', 'ega123');
+  const admin = await login('admin', 'admin12345');
+  const waiter = await login('jasur', '1234');
+  const o = (await call('POST', '/api/orders', boss, { room_id: (await freeRoom(boss)).id, guests: 1 })).data;
+  await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: (await dish(boss, 'Patir')).id, qty: 2 }] });
+  const p = (await call('GET', '/api/panel', boss)).data;
+  assert.equal(p.money, true);
+  assert.ok(p.sales.today >= 0 && p.open.count >= 1 && p.open.total >= 16000);
+  assert.ok(p.counts.dishes > 0 && p.counts.categories > 0 && p.counts.rooms > 0 && p.counts.staff > 0);
+  assert.equal(typeof p.counts.shift_open, 'boolean');
+  assert.equal((await call('GET', '/api/panel', waiter)).status, 403);
+  await call('PUT', '/api/settings', boss, { perm_admin_reports: false });
+  const a = (await call('GET', '/api/panel', admin)).data;
+  assert.equal(a.sales, null); assert.equal(a.expense, null); assert.equal(a.open.total, null);
+  await call('POST', `/api/orders/${o.id}/close`, boss, { paid_cash: 1e6 });
+});
+
+test('modifiers: groups on dishes, price changes, required and one-of rules, shown on the kitchen ticket and the check', async () => {
+  const boss = await login('ega', 'ega123');
+  const jasur = await login('jasur', '1234');
+  const osh = await dish(boss, 'Osh');
+  const spicy = (await call('POST', '/api/modifiers', boss, { name: 'Achchiqligi', multi: false, required: true,
+    options: [{ name: 'Achchiq', price: 0 }, { name: 'Achchiqmas', price: 0 }], dishes: [osh.id] })).data;
+  const extra = (await call('POST', '/api/modifiers', boss, { name: "Qo'shimcha", multi: true, required: false,
+    options: [{ name: '+Pishloq', price: 5000 }, { name: '+Tuxum', price: 3000 }] })).data;
+  assert.equal((await call('POST', '/api/modifiers', boss, { name: 'Bo\'sh', options: [] })).status, 400);
+  assert.equal((await call('POST', '/api/modifiers', jasur, { name: 'X', options: [{ name: 'a' }] })).status, 403);
+  await call('PUT', `/api/dishes/${osh.id}`, boss, { modifiers: [spicy.id, extra.id] });
+  const menu = (await call('GET', '/api/menu', jasur)).data;
+  assert.deepEqual(menu.dishes.find((d) => d.id === osh.id).mods, [spicy.id, extra.id]);
+  assert.equal(menu.modifiers.length >= 2, true);
+
+  const room = (await call('GET', '/api/rooms', jasur)).data.find((r) => r.mine && !r.order);
+  const o = (await call('POST', '/api/orders', jasur, { room_id: room.id, guests: 1 })).data;
+  const [hot, mild] = spicy.options; const [cheese, egg] = extra.options;
+  // Required group not answered; two of a one-of group; an option of another dish's group.
+  assert.equal((await call('POST', `/api/orders/${o.id}/items`, jasur, { items: [{ dish_id: osh.id, qty: 1, mods: [] }] })).status, 400);
+  assert.equal((await call('POST', `/api/orders/${o.id}/items`, jasur, { items: [{ dish_id: osh.id, qty: 1, mods: [hot.id, mild.id] }] })).status, 400);
+  const patir = await dish(boss, 'Patir');
+  assert.equal((await call('POST', `/api/orders/${o.id}/items`, jasur, { items: [{ dish_id: patir.id, qty: 1, mods: [cheese.id] }] })).status, 400);
+  const r = (await call('POST', `/api/orders/${o.id}/items`, jasur, { items: [{ dish_id: osh.id, qty: 2, mods: [hot.id, cheese.id, egg.id] }] })).data;
+  const line = r.items.find((i) => i.dish_id === osh.id);
+  assert.equal(line.price, osh.price + 8000, 'the price follows the choice');
+  assert.deepEqual(JSON.parse(line.mods).map((m) => m.name), ['Achchiq', '+Pishloq', '+Tuxum']);
+  assert.equal(r.subtotal, (osh.price + 8000) * 2);
+  // A guest's QR order (no choices sent) still goes in.
+  const g = (await call('POST', `/api/orders/${o.id}/items`, jasur, { items: [{ dish_id: osh.id, qty: 1 }] })).data;
+  assert.equal(g.items.filter((i) => i.dish_id === osh.id).length, 2);
+  // The kitchen sees it.
+  const k = (await call('GET', '/api/kitchen', boss)).data.items.find((i) => i.id === line.id);
+  assert.ok(k.mods.includes('Achchiq'));
+  // An option renamed later: the check keeps what was chosen then.
+  await call('PUT', `/api/modifiers/${spicy.id}`, boss, { name: 'Achchiqligi', required: true, options: [{ id: hot.id, name: 'Juda achchiq', price: 0 }, { id: mild.id, name: 'Achchiqmas', price: 0 }] });
+  assert.ok((await call('GET', `/api/orders/${o.id}`, boss)).data.items.find((i) => i.id === line.id).mods.includes('"Achchiq"'));
+  // Deleted group: no longer asked.
+  await call('DELETE', `/api/modifiers/${extra.id}`, boss);
+  assert.deepEqual((await call('GET', '/api/menu', boss)).data.dishes.find((d) => d.id === osh.id).mods, [spicy.id]);
+  await call('DELETE', `/api/modifiers/${spicy.id}`, boss);
+  await call('POST', `/api/orders/${o.id}/cancel`, boss, { reason: 'test' });
+});

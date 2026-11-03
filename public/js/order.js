@@ -183,7 +183,7 @@ function canCancelItem(i) {
 function lineHtml(i, ro = false) {
   const timer = i.status === 'new' || i.status === 'cooking' ? `<span class="timer">${icon('timer', 13)} <b data-eta="${i.eta_at}"></b></span>` : '';
   return `<div class="line ${i.status}">
-    <span class="q">${i.qty}×</span><span class="n">${esc(i.name)}</span><span class="p">${money(i.price * i.qty)}</span>
+    <span class="q">${i.qty}×</span><span class="n">${esc(i.name)}${modsText(i) ? `<span class="mods">+ ${esc(modsText(i))}</span>` : ''}</span><span class="p">${money(i.price * i.qty)}</span>
     <span class="sub"><span class="chip ${i.status}">${statusName(i.status)}</span>${timer}
       ${i.note ? `<span>${icon('sticky-note', 13)} ${esc(i.note)}</span>` : ''}${i.cancel_reason ? `<span>(${esc(i.cancel_reason)})</span>` : ''}
       <span class="grow"></span>
@@ -219,7 +219,7 @@ function checkPane({ order, room, cart, takeaway, readonly: ro }) {
       ${sent.map((b, n) => `<div class="batch-title">${icon('send', 13)} ${t('{0}-yuborish', n + 1)} · ${fmtTime(b.at)}</div>${b.items.map((i) => lineHtml(i, ro)).join('')}`).join('')}
       ${cancelled.length ? `<div class="batch-title">${icon('ban', 13)} ${t('Bekor qilingan')}</div>${cancelled.map((i) => lineHtml(i, ro)).join('')}` : ''}
       ${cart.lines.length ? `<div class="batch-title" style="color:var(--primary)">${icon('circle-plus', 13)} ${t('Yangi (yuborilmagan)')}</div>
-        ${cart.lines.map((c, idx) => `<div class="line pending"><span class="q">${c.qty}×</span><span class="n">${esc(c.name)}</span><span class="p">${money(c.price * c.qty)}</span>
+        ${cart.lines.map((c, idx) => `<div class="line pending"><span class="q">${c.qty}×</span><span class="n">${esc(c.name)}${c.modsText ? `<span class="mods">+ ${esc(c.modsText)}</span>` : ''}</span><span class="p">${money(c.price * c.qty)}</span>
           <span class="sub">${c.note ? `<span>${icon('sticky-note', 13)} ${esc(c.note)}</span>` : ''}<span class="grow"></span>
             <button class="icon-btn ghost" data-note="${idx}" title="${esc(t('Izoh'))}">${icon('sticky-note', 18)}</button>
             <span class="stepper"><button data-dec="${idx}">${icon('minus', 16)}</button><span>${c.qty}</span><button data-inc="${idx}">${icon('plus', 16)}</button></span></span></div>`).join('')}` : ''}
@@ -304,10 +304,14 @@ const OrderView = {
     root.querySelectorAll('[data-cat]').forEach((b) => b.onclick = () => { UI.category = b.dataset.cat; rerender(); });
     const search = root.querySelector('#dish-search');
     search.oninput = () => { UI.search = search.value; rerender(); };
-    root.querySelectorAll('[data-dish]').forEach((b) => b.onclick = () => {
+    root.querySelectorAll('[data-dish]').forEach((b) => b.onclick = async () => {
       const x = menu.dishes.find((y) => y.id === Number(b.dataset.dish));
-      const line = cart.lines.find((c) => c.dish_id === x.id && !c.note);
-      if (line) line.qty += 1; else cart.lines.push({ dish_id: x.id, name: x.name, price: x.price, qty: 1, note: '' });
+      // A dish with choices (achchiq / achchiqmas, +pishloq) asks for them first; the same choice adds to the same line.
+      const m = await pickMods(menu, x);
+      if (!m) return;
+      const key = m.ids.join(',');
+      const line = cart.lines.find((c) => c.dish_id === x.id && !c.note && (c.mods || []).join(',') === key);
+      if (line) line.qty += 1; else cart.lines.push({ dish_id: x.id, name: x.name, price: m.price, qty: 1, note: '', mods: m.ids, modsText: m.text });
       rerender();
     });
     pane.querySelectorAll('[data-inc]').forEach((b) => b.onclick = () => { cart.lines[b.dataset.inc].qty += 1; rerender(); });
@@ -378,7 +382,7 @@ function confirmSend(d, cart) {
   openModal({
     title: `${icon('send')} ${t('Buyurtmani tasdiqlang')}`,
     body: `<p class="muted">${esc(d.takeaway ? t('Olib ketish') : d.room.name)}${!d.order && !d.takeaway ? ` · ${icon('users', 14)} ${cart.guests || 1}` : ''}</p>
-      <div>${cart.lines.map((c) => `<div class="line"><span class="q">${c.qty}×</span><span class="n">${esc(c.name)}</span><span class="p">${money(c.price * c.qty)}</span>
+      <div>${cart.lines.map((c) => `<div class="line"><span class="q">${c.qty}×</span><span class="n">${esc(c.name)}${c.modsText ? `<span class="mods">+ ${esc(c.modsText)}</span>` : ''}</span><span class="p">${money(c.price * c.qty)}</span>
         ${c.note ? `<span class="sub">${icon('sticky-note', 13)} ${esc(c.note)}</span>` : ''}</div>`).join('')}</div>
       <div class="sum-rows" style="margin-top:12px"><span class="total">${t('Jami')}</span><span class="total right">${money(total)}</span></div>
       <p class="small muted" style="margin-top:10px">${icon('info', 14)} ${t("Yuborilgandan keyin taomni faqat ruxsat bilan bekor qilish mumkin.")}</p>`,
@@ -388,7 +392,7 @@ function confirmSend(d, cart) {
         const room_id = d.takeaway ? (await GET('/api/takeaway')).room_id : d.room.id;
         o = await POST('/api/orders', { room_id, guests: cart.guests || 1, label: cart.label || '', ...(cart.delivery ? { delivery: cart.delivery } : {}) });
       }
-      await POST(`/api/orders/${o.id}/items`, { items: cart.lines.map(({ dish_id, qty, note }) => ({ dish_id, qty, note })) });
+      await POST(`/api/orders/${o.id}/items`, { items: cart.lines.map(({ dish_id, qty, note, mods }) => ({ dish_id, qty, note, ...(mods ? { mods } : {}) })) });
       cart.lines = [];
       toast(App.kitchenMode === 'off' ? t('Buyurtma qabul qilindi') : t('Buyurtma oshxonaga yuborildi'), 'ok');
       UI.drawer = false;

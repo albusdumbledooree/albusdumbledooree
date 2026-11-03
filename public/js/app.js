@@ -16,8 +16,8 @@ function navOrder(role) {
   // "Bugun" (tasks of the day) is a door shop's page; a seller in a shop has no dishes to take from the kitchen.
   const home = isShop() ? ['pos'] : App.biz === 'fastfood' ? ['pos', 'rooms'] : ['rooms'];
   return {
-    owner: [...home, 'kitchen', 'history', 'reservations', 'menuadmin', 'staff', 'settings', 'money'],
-    admin: [...home, 'kitchen', 'history', 'reservations', 'menuadmin', 'staff', 'settings', 'money'],
+    owner: [...home, 'panel', 'kitchen', 'history', 'reservations', 'menuadmin', 'staff', 'settings', 'money'],
+    admin: [...home, 'panel', 'kitchen', 'history', 'reservations', 'menuadmin', 'staff', 'settings', 'money'],
     cashier: [...home, 'history', 'reservations', 'stoplist', 'settings', 'money'],
     waiter: [...home, ...(isShop() ? [] : ['ready']), 'settings'],
     chef: ['kitchen', 'stoplist', 'inventory', 'settings'],

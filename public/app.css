@@ -997,6 +997,55 @@ details.upcoming summary { cursor: pointer; font-weight: 650; color: var(--muted
 }
 .sb-item.sb-warn { color: var(--red); font-weight: 700; }
 
+/* ---------- Modifiers ---------- */
+.line .n .mods, .mods { display: block; font-size: 12.5px; font-weight: 650; color: var(--primary); line-height: 1.3; }
+.mods-note { color: var(--primary) !important; font-weight: 700; }
+.mod-group { margin-bottom: 14px; }
+.mod-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.mod-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.mod-opt input { display: none; }
+.mod-opt span { display: inline-flex; align-items: center; gap: 6px; min-height: 46px; padding: 8px 16px; border-radius: 12px; border: 1.5px solid var(--line);
+  background: var(--panel); font-weight: 650; cursor: pointer; }
+.mod-opt span small { color: var(--muted); font-weight: 700; }
+.mod-opt input:checked + span { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+.mod-opt input:checked + span small { color: var(--primary); }
+.mod-total { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid var(--line); font-size: 16px; }
+.mod-total b { font-size: 20px; }
+.mg-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.mg-row:last-child { border-bottom: 0; }
+.opt-row { display: grid; grid-template-columns: minmax(0, 1fr) 140px auto; gap: 8px; margin-bottom: 8px; }
+.mg-dishes { max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
+.mg-dishes h4 { margin: 8px 0 4px; font-size: 13px; color: var(--muted); }
+.mg-dishes .check { font-size: 14px; padding: 3px 0; }
+
+/* ---------- Boss panel ---------- */
+.pn-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 16px; }
+.pn-kpis .card { margin: 0; }
+.pn-kpi { display: flex; align-items: center; gap: 14px; padding: 16px 18px; }
+.pn-kpi > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pn-kpi b { font-size: clamp(18px, 1.75vw, 24px); font-weight: 850; line-height: 1.15; white-space: nowrap; }
+.pn-ic { display: grid; place-items: center; width: 50px; height: 50px; border-radius: 14px; background: var(--primary-soft); color: var(--primary); flex: none; }
+.pn-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); gap: 14px; align-items: start; }
+.pn-groups .card { margin: 0; }
+.pn-group { padding: 0 0 10px; overflow: hidden; --pc: #64748b; }
+.pn-group h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; padding: 14px 16px; background: var(--pc); color: #fff; font-size: 18px; }
+.pn-link { display: flex; align-items: center; gap: 10px; width: calc(100% - 20px); margin: 0 10px 8px; padding: 12px 12px; border: 0; border-radius: 12px; background: var(--panel-2);
+  font: inherit; font-weight: 700; font-size: 15px; color: var(--text); cursor: pointer; text-align: left; }
+.pn-link:hover { filter: brightness(.97); }
+.pn-link > svg:first-child, .pn-link > svg:last-child { color: var(--pc); flex: none; }
+.pn-badge { min-width: 30px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); font-size: 13px; text-align: center; white-space: nowrap; }
+.pn-badge.warn { background: var(--orange-soft); border-color: transparent; color: var(--orange); }
+.pn-badge.red { background: var(--red-soft, #fdecec); border-color: transparent; color: var(--red); }
+@media (max-width: 760px) {
+  .pn-kpis { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-bottom: 12px; }
+  .pn-kpi { flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px; }
+  .pn-ic { width: 36px; height: 36px; border-radius: 10px; }
+  .pn-ic svg { width: 19px; height: 19px; }
+  .pn-kpi b { font-size: 18px; white-space: normal; }
+  .pn-groups { gap: 10px; }
+}
+.pn-pink { --pc: #db2777; } .pn-green { --pc: #16a34a; } .pn-orange { --pc: #ea8a00; } .pn-blue { --pc: #2563eb; } .pn-slate { --pc: #64748b; }
+
 /* ---------- Settings → the check's look ---------- */
 .rc-card { grid-column: 1 / -1; }
 .rc-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 28px; align-items: start; }

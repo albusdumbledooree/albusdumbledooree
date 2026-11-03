@@ -865,11 +865,85 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   function menu() {
     const load = kitchenLoad();
     const categories = q('SELECT * FROM categories ORDER BY sort, name').all();
+    const links = new Map();
+    for (const r of q('SELECT dm.dish_id, dm.group_id FROM dish_modifiers dm JOIN modifier_groups g ON g.id = dm.group_id WHERE g.active = 1 ORDER BY g.sort, g.id').all()) {
+      if (!links.has(r.dish_id)) links.set(r.dish_id, []);
+      links.get(r.dish_id).push(r.group_id);
+    }
     const dishes = q(`SELECT d.* FROM dishes d LEFT JOIN categories c ON c.id = d.category_id
       WHERE d.active = 1 ORDER BY COALESCE(c.sort, 9999), d.name`).all().map((d) => ({
-      ...d, eta_minutes: d.needs_kitchen ? d.prep_minutes + load.extra_minutes : 0,
+      ...d, eta_minutes: d.needs_kitchen ? d.prep_minutes + load.extra_minutes : 0, mods: links.get(d.id) || [],
     }));
-    return { categories, dishes, load };
+    return { categories, dishes, load, modifiers: modifierGroups() };
+  }
+
+  // ---------- Modifiers ----------
+  // The chosen modifiers of a check line as one short text ("Achchiq, +Pishloq").
+  function modsText(v) {
+    if (!v) return '';
+    try { return JSON.parse(v).map((m) => m.name).join(', '); } catch { return ''; }
+  }
+  function modifierGroups() {
+    const opts = q('SELECT * FROM modifier_options WHERE active = 1 ORDER BY sort, id').all();
+    return q('SELECT * FROM modifier_groups WHERE active = 1 ORDER BY sort, id').all()
+      .map((g) => ({ ...g, multi: !!g.multi, required: !!g.required, options: opts.filter((o) => o.group_id === g.id).map(({ id, name, price }) => ({ id, name, price })) }));
+  }
+  function saveModifierGroup({ user, params, body }) {
+    const name = str(body.name, 'Nomi', { required: true, max: 60 });
+    const list = Array.isArray(body.options) ? body.options.slice(0, 40) : [];
+    const options = list.map((o) => ({ id: Number(o && o.id) || null, name: str(o && o.name, 'Variant', { max: 60 }), price: int(o && o.price, 'Narx farqi', { min: -10_000_000, max: 10_000_000 }) }))
+      .filter((o) => o.name);
+    if (!options.length) throw new HttpError(400, 'Kamida bitta variant yozing');
+    const multi = body.multi ? 1 : 0; const required = body.required ? 1 : 0;
+    let id = params.id ? Number(params.id) : null;
+    tx(() => {
+      if (id) {
+        if (!q('UPDATE modifier_groups SET name = ?, multi = ?, required = ? WHERE id = ? AND active = 1').run(name, multi, required, id).changes) throw new HttpError(404, 'Topilmadi');
+      } else {
+        id = Number(q('INSERT INTO modifier_groups (name, multi, required, sort) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM modifier_groups))').run(name, multi, required).lastInsertRowid);
+      }
+      // Options kept by id (so a renamed one stays the same), the rest switched off; old checks keep their own copy.
+      const keep = [];
+      options.forEach((o, i) => {
+        const ex = o.id && q('SELECT id FROM modifier_options WHERE id = ? AND group_id = ?').get(o.id, id);
+        if (ex) { q('UPDATE modifier_options SET name = ?, price = ?, sort = ?, active = 1 WHERE id = ?').run(o.name, o.price, i, ex.id); keep.push(ex.id); }
+        else keep.push(Number(q('INSERT INTO modifier_options (group_id, name, price, sort) VALUES (?, ?, ?, ?)').run(id, o.name, o.price, i).lastInsertRowid));
+      });
+      q(`UPDATE modifier_options SET active = 0 WHERE group_id = ? AND id NOT IN (${keep.map(() => '?').join(',')})`).run(id, ...keep);
+      if (Array.isArray(body.dishes)) {
+        q('DELETE FROM dish_modifiers WHERE group_id = ?').run(id);
+        for (const d of body.dishes.slice(0, 2000)) if (q('SELECT 1 FROM dishes WHERE id = ? AND active = 1').get(Number(d))) q('INSERT OR IGNORE INTO dish_modifiers (dish_id, group_id) VALUES (?, ?)').run(Number(d), id);
+      }
+    });
+    audit(user, 'modifier_save', name);
+    events.publish('menu');
+    return modifierGroups().find((g) => g.id === id);
+  }
+  function deleteModifierGroup({ user, params }) {
+    const g = q('SELECT * FROM modifier_groups WHERE id = ? AND active = 1').get(params.id);
+    if (!g) throw new HttpError(404, 'Topilmadi');
+    q('UPDATE modifier_groups SET active = 0 WHERE id = ?').run(g.id);
+    q('DELETE FROM dish_modifiers WHERE group_id = ?').run(g.id);
+    audit(user, 'modifier_delete', g.name);
+    events.publish('menu');
+    return { ok: true };
+  }
+  /* The choices for one line: only the dish's own groups; one per one-of group; a required group must be answered
+     (when the device sends choices at all — a guest's QR order without them goes as is). Returns [{ group, name, price }]. */
+  function modsFor(d, ids) {
+    if (ids === undefined || ids === null) return [];
+    if (!Array.isArray(ids)) throw new HttpError(400, "Qo'shimchalar noto'g'ri");
+    const groups = q(`SELECT g.* FROM dish_modifiers dm JOIN modifier_groups g ON g.id = dm.group_id WHERE dm.dish_id = ? AND g.active = 1 ORDER BY g.sort, g.id`).all(d.id);
+    const chosen = [...new Set(ids.map(Number))].map((id) => q('SELECT * FROM modifier_options WHERE id = ? AND active = 1').get(id));
+    if (chosen.some((o) => !o || !groups.some((g) => g.id === o.group_id))) throw new HttpError(400, `"${d.name}" uchun bunday tanlov yo'q`);
+    const out = [];
+    for (const g of groups) {
+      const mine = chosen.filter((o) => o.group_id === g.id);
+      if (g.required && !mine.length) throw new HttpError(400, `"${d.name}": ${g.name} tanlanmagan`);
+      if (!g.multi && mine.length > 1) throw new HttpError(400, `"${d.name}": ${g.name} — faqat bittasi`);
+      for (const o of mine.sort((a, b) => a.sort - b.sort || a.id - b.id)) out.push({ group: g.name, name: o.name, price: o.price });
+    }
+    return out;
   }
 
   function saveCategory({ user, params, body }) {
@@ -942,6 +1016,11 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
         material, side, supplier_id, min_stock, available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(d.category_id, d.name, d.price, d.cost,
         d.prep_minutes, d.unit, d.needs_kitchen, d.icon, d.stock, d.barcode, d.size, d.color, d.photo, d.description, d.material, d.side, d.supplier_id, d.min_stock,
         d.stock === 0 ? 0 : 1).lastInsertRowid;
+    }
+    // The dish's modifier groups, when the form sends them.
+    if (Array.isArray(body.modifiers)) {
+      q('DELETE FROM dish_modifiers WHERE dish_id = ?').run(id);
+      for (const g of body.modifiers.slice(0, 30)) if (q('SELECT 1 FROM modifier_groups WHERE id = ? AND active = 1').get(Number(g))) q('INSERT OR IGNORE INTO dish_modifiers (dish_id, group_id) VALUES (?, ?)').run(id, Number(g));
     }
     audit(user, prev.id ? 'dish_update' : 'dish_create', d.name);
     events.publish('menu');
@@ -1185,13 +1264,16 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       }
       const kitchen = d.needs_kitchen === 1 && mode !== 'off';
       const status = !kitchen ? 'served' : mode === 'notify' ? 'cooking' : 'new';
-      const id = q(`INSERT INTO order_items (order_id, dish_id, name, price, cost, qty, note, status, needs_kitchen, prep_minutes, created_at, eta_at, served_at, accepted_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-        o.id, d.id, d.name, d.price, d.cost, qty, str(it.note, 'Izoh', { max: 200 }), status, kitchen ? 1 : 0,
+      const mods = modsFor(d, it.mods);
+      const price = Math.max(0, d.price + mods.reduce((a, m) => a + m.price, 0));
+      const modsText = mods.map((m) => m.name).join(', ');
+      const id = q(`INSERT INTO order_items (order_id, dish_id, name, price, cost, qty, note, status, needs_kitchen, prep_minutes, created_at, eta_at, served_at, accepted_at, mods)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        o.id, d.id, d.name, price, d.cost, qty, str(it.note, 'Izoh', { max: 200 }), status, kitchen ? 1 : 0,
         d.prep_minutes, t, kitchen ? t + (d.prep_minutes + (mode === 'full' ? load.extra_minutes : 0)) * MIN : null,
-        kitchen ? null : t, status === 'cooking' ? t : null
+        kitchen ? null : t, status === 'cooking' ? t : null, mods.length ? JSON.stringify(mods) : ''
       ).lastInsertRowid;
-      out.push({ id, name: d.name, qty, kitchen, note: str(it.note, 'Izoh', { max: 200 }), dish_id: d.id, category_id: d.category_id, cook: d.needs_kitchen === 1 });
+      out.push({ id, name: d.name, qty, kitchen, note: str(it.note, 'Izoh', { max: 200 }), mods: modsText, dish_id: d.id, category_id: d.category_id, cook: d.needs_kitchen === 1 });
     }
     q('UPDATE orders SET bill_requested = 0 WHERE id = ?').run(o.id);
     return out;
@@ -1208,7 +1290,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     }
     // Every order (waiter's or cashier's) goes to the computers chosen as order printers.
     print.job('new', { order_id: o.id, room: room.name, waiter: waiter && waiter.name, by: user.name, at: t,
-      items: added.map((a) => ({ name: a.name, qty: a.qty, note: a.note, cook: a.cook, category_id: a.category_id })) });
+      items: added.map((a) => ({ name: a.name, qty: a.qty, note: a.note, mods: a.mods, cook: a.cook, category_id: a.category_id })) });
     events.publish('rooms');
     if (added.some((a) => !a.kitchen)) events.publish('menu');
   }
@@ -1304,7 +1386,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const waiter = q('SELECT name FROM users WHERE id = ?').get(it.waiter_id);
     const dish = it.dish_id ? q('SELECT category_id, needs_kitchen FROM dishes WHERE id = ?').get(it.dish_id) : null;
     print.job('cancel', { cancel: true, order_id: it.order_id, room: it.room_name, waiter: waiter && waiter.name, by: user.name, at: now(),
-      items: [{ name: it.name, qty, note: reason, cook: dish ? dish.needs_kitchen === 1 : !!it.needs_kitchen, category_id: dish ? dish.category_id : null }] });
+      items: [{ name: it.name, qty, note: reason, mods: modsText(it.mods), cook: dish ? dish.needs_kitchen === 1 : !!it.needs_kitchen, category_id: dish ? dish.category_id : null }] });
     return orderDetails(it.order_id);
   }
 
@@ -1328,7 +1410,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const room = q('SELECT name FROM rooms WHERE id = ?').get(o.room_id);
     const waiter = q('SELECT name FROM users WHERE id = ?').get(o.waiter_id);
     print.job('reprint', { reprint: true, order_id: o.id, room: placeName(o, room), waiter: waiter && waiter.name, by: user.name, at: now(),
-      items: items.map((i) => ({ name: i.name, qty: i.qty, note: i.note, cook: i.needs_kitchen !== 0, category_id: i.category_id })) });
+      items: items.map((i) => ({ name: i.name, qty: i.qty, note: i.note, mods: modsText(i.mods), cook: i.needs_kitchen !== 0, category_id: i.category_id })) });
     audit(user, 'kitchen_reprint', `#${o.id}`);
     return { ok: true, printers: print.status() };
   }
@@ -1618,7 +1700,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       print.job('cancel', { cancel: true, deleted: true, reason, order_id: o.id, room: place, waiter: waiter && waiter.name, by: user.name, at: now(),
         items: items.map((it) => {
           const dish = dishOf(it.dish_id);
-          return { name: it.name, qty: it.qty, note: it.status === 'served' ? 'berilgan edi' : it.status === 'ready' ? 'tayyor edi' : '',
+          return { name: it.name, qty: it.qty, mods: modsText(it.mods), note: it.status === 'served' ? 'berilgan edi' : it.status === 'ready' ? 'tayyor edi' : '',
             cook: dish ? dish.needs_kitchen === 1 : !!it.needs_kitchen, category_id: dish ? dish.category_id : null };
         }) });
       const cooking = items.filter((it) => it.needs_kitchen && ['new', 'cooking', 'ready'].includes(it.status));
@@ -1737,6 +1819,41 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const csv = '\ufeff' + [head, ...lines].map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
     return { __file: { name: `cheklar_${dt(Date.now()).slice(0, 10)}.csv`, type: 'text/csv; charset=utf-8', body: csv } };
   }
+
+  /* ---------- The boss's panel ----------
+     Today in four numbers (sales against yesterday by this time, open checks, expenses, the stop list)
+     and the counters on the panel's links. Money only for those who may see reports. */
+  function panel({ user }) {
+    const day = new Date(); day.setHours(0, 0, 0, 0);
+    const from = day.getTime(); const t = now(); const DAY = 24 * 60 * MIN;
+    const money = moneyAccess(user).reports;
+    const sum = (a, b) => q("SELECT COALESCE(SUM(total), 0) s, COUNT(*) c FROM orders WHERE status = 'closed' AND closed_at >= ? AND closed_at < ?").get(a, b);
+    const today = sum(from, t + 1); const yday = sum(from - DAY, t - DAY + 1);
+    const open = q("SELECT * FROM orders WHERE status = 'open'").all();
+    const openSum = open.reduce((a, o) => a + totals(o, q('SELECT price, qty, status FROM order_items WHERE order_id = ?').all(o.id)).total, 0);
+    const exp = q("SELECT category, SUM(amount) s FROM transactions WHERE type = 'expense' AND created_at >= ? GROUP BY category ORDER BY s DESC").all(from);
+    const one = (sql, ...a) => q(sql).get(...a).c;
+    return {
+      money,
+      sales: money ? { today: today.s, checks: today.c, yesterday: yday.s, pct: yday.s ? Math.round(((today.s - yday.s) * 100) / yday.s) : null } : null,
+      open: { count: open.length, total: money ? openSum : null },
+      expense: money ? { total: exp.reduce((a, x) => a + x.s, 0), top: exp.slice(0, 2).map((x) => x.category) } : null,
+      counts: {
+        dishes: one('SELECT COUNT(*) c FROM dishes'), categories: one('SELECT COUNT(*) c FROM categories'),
+        stop: one('SELECT COUNT(*) c FROM dishes WHERE available = 0'),
+        checks: today.c + open.length, deleted: one("SELECT COUNT(*) c FROM orders WHERE status = 'cancelled' AND closed_at >= ?", from),
+        otkaz: one("SELECT COUNT(DISTINCT order_id) c FROM order_items WHERE status = 'cancelled' AND COALESCE(cancelled_at, created_at) >= ?", from),
+        reservations: one("SELECT COUNT(*) c FROM reservations WHERE status = 'active' AND starts_at >= ? AND starts_at < ?", from, from + DAY),
+        staff: one('SELECT COUNT(*) c FROM users WHERE active = 1'),
+        at_work: one("SELECT COUNT(DISTINCT user_id) c FROM work_log WHERE out_at IS NULL AND status != 'rejected' AND day = ?", localDay(day)),
+        rooms: one("SELECT COUNT(*) c FROM rooms WHERE type != 'soboy' AND active = 1"),
+        devices: one('SELECT COUNT(*) c FROM devices WHERE agent = 0'),
+        debtors: one('SELECT COUNT(*) c FROM customers WHERE debt > 0 AND active = 1'),
+        shift_open: !!q('SELECT 1 FROM shifts WHERE closed_at IS NULL').get(),
+      },
+    };
+  }
+  const localDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
   // ---------- Kitchen ----------
   // Kitchen and waiter lists show takeaway checks as "Olib ketish #12 · Aziz".
@@ -2202,6 +2319,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['PUT', '/api/categories/:id', MANAGERS, saveCategory],
     ['DELETE', '/api/categories/:id', MANAGERS, deleteCategory],
     ['POST', '/api/dishes', MANAGERS, saveDish],
+    ['POST', '/api/modifiers', MANAGERS, saveModifierGroup],
+    ['PUT', '/api/modifiers/:id', MANAGERS, saveModifierGroup],
+    ['DELETE', '/api/modifiers/:id', MANAGERS, deleteModifierGroup],
     ['PUT', '/api/dishes/:id', MANAGERS, saveDish],
     ['DELETE', '/api/dishes/:id', MANAGERS, deleteDish],
     ['POST', '/api/dishes/:id/availability', STOPLIST, setAvailability],
@@ -2328,6 +2448,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['POST', '/api/attendance', MANAGERS, payroll.setAttendance],
     ['POST', '/api/attendance/pay', MANAGERS, payDaily],
     ['GET', '/api/checks', MONEY, listChecks],
+    ['GET', '/api/panel', MANAGERS, panel],
     ['GET', '/api/checks/export', MONEY, exportChecks],
   ].map(([method, pattern, roles, handler]) => {
     const keys = [];

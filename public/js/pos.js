@@ -7,12 +7,15 @@ const PosCart = { lines: [], label: '' };
 
 function posTotal() { return PosCart.lines.reduce((s, c) => s + c.price * c.qty, 0); }
 
-function posAdd(x, qty = 1) {
+// m: the dish's chosen modifiers ({ ids, text, price }); the same choice adds to the same line.
+function posAdd(x, qty = 1, m = null) {
   if (!x.available) return toast(t('"{0}" tugagan', x.name), 'warn');
-  const line = PosCart.lines.find((c) => c.dish_id === x.id);
-  const want = (line ? line.qty : 0) + qty;
-  if (x.stock != null && want > x.stock) return toast(t('"{0}" dan faqat {1} ta qoldi', x.name, x.stock), 'warn');
-  if (line) line.qty = want; else PosCart.lines.push({ dish_id: x.id, name: x.name, price: x.price, qty, variant: variantOf(x) });
+  const key = m ? m.ids.join(',') : '';
+  const line = PosCart.lines.find((c) => c.dish_id === x.id && (c.mods || []).join(',') === key);
+  const same = PosCart.lines.filter((c) => c.dish_id === x.id).reduce((a, c) => a + c.qty, 0);
+  if (x.stock != null && same + qty > x.stock) return toast(t('"{0}" dan faqat {1} ta qoldi', x.name, x.stock), 'warn');
+  if (line) line.qty += qty;
+  else PosCart.lines.push({ dish_id: x.id, name: x.name, price: m ? m.price : x.price, qty, variant: m && m.text ? `+ ${m.text}` : variantOf(x), mods: m ? m.ids : undefined });
 }
 
 function productSub(x) {
@@ -121,9 +124,19 @@ Views.pos = {
     if (back) back.onclick = () => { UI.drawer = false; rerender(); };
     root.querySelectorAll('[data-cat]').forEach((b) => b.onclick = () => { UI.category = b.dataset.cat; rerender(); });
     root.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => { const f = UI.posFilter; f[b.dataset.f] = f[b.dataset.f] === b.dataset.v ? '' : b.dataset.v; rerender(); });
-    root.querySelectorAll('[data-dish]').forEach((b) => b.onclick = () => { posAdd(menu.dishes.find((x) => x.id === Number(b.dataset.dish))); rerender(); });
+    root.querySelectorAll('[data-dish]').forEach((b) => b.onclick = async () => {
+      const x = menu.dishes.find((y) => y.id === Number(b.dataset.dish));
+      if (!(x.mods || []).length) { posAdd(x); rerender(); return; }
+      const m = await pickMods(menu, x);
+      if (m) { posAdd(x, 1, m); rerender(); }
+    });
     const dish = (c) => menu.dishes.find((x) => x.id === c.dish_id) || {};
-    root.querySelectorAll('[data-inc]').forEach((b) => b.onclick = () => { posAdd(dish(PosCart.lines[b.dataset.inc])); rerender(); });
+    // "+" on a line adds one more of that very line (with its own choices).
+    root.querySelectorAll('[data-inc]').forEach((b) => b.onclick = () => {
+      const c = PosCart.lines[b.dataset.inc];
+      const m = c.mods ? { ids: c.mods, text: (c.variant || '').replace(/^\+ /, ''), price: c.price } : null;
+      posAdd(dish(c), 1, m); rerender();
+    });
     root.querySelectorAll('[data-dec]').forEach((b) => b.onclick = () => {
       const c = PosCart.lines[b.dataset.dec];
       c.qty -= 1;
@@ -177,7 +190,7 @@ async function posPayment() {
       const services = getServices();
       if (services.some((s) => !s.date)) { toast(t('Xizmat sanasini tanlang'), 'warn'); return false; }
       const r = await POST('/api/sales', {
-        items: PosCart.lines.map(({ dish_id, qty }) => ({ dish_id, qty })), label: PosCart.label,
+        items: PosCart.lines.map(({ dish_id, qty, mods }) => ({ dish_id, qty, ...(mods ? { mods } : {}) })), label: PosCart.label,
         services, phone: (adv ? x.adv_phone : x.svc_phone) || '', debt_due: x.debt_due || '',
         ...(adv ? { advance: true, customer_name: x.adv_name.trim(), discount: Number(x.discount) || 0,
           paid_cash: Number(x.paid_cash) || 0, paid_card: Number(x.paid_card) || 0, paid_transfer: Number(x.paid_transfer) || 0 } : staffPay.on ? { staff_id: Number(x.staff_id) } : {

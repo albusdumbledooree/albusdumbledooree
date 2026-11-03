@@ -184,7 +184,7 @@ function ckDetail(o) {
   const items = o.items.map((i, n) => {
     const off = i.status === 'cancelled';
     return `<tr class="${off ? 'ck-off' : ''}"><td>${n + 1}</td><td class="ck-hide-sm">${fmtTime(i.created_at)}</td>
-      <td><span class="${off ? 'strike' : ''}">${esc(i.name)}</span><span class="ck-show-sm small muted"> · ${fmtTime(i.created_at)}</span>${off ? ` <span class="chip red ck-otkaz">${t('OTKAZ')}</span>` : ''}${i.refunded_qty ? ` <span class="chip orange">${t('qaytarilgan')}: ${i.refunded_qty}</span>` : ''}
+      <td><span class="${off ? 'strike' : ''}">${esc(i.name)}</span>${modsText(i) ? `<span class="small muted"> + ${esc(modsText(i))}</span>` : ''}<span class="ck-show-sm small muted"> · ${fmtTime(i.created_at)}</span>${off ? ` <span class="chip red ck-otkaz">${t('OTKAZ')}</span>` : ''}${i.refunded_qty ? ` <span class="chip orange">${t('qaytarilgan')}: ${i.refunded_qty}</span>` : ''}
         ${off && (i.cancel_reason || i.cancelled_by_name) ? `<br><span class="small muted">${esc(i.cancel_reason || '')}${i.cancelled_by_name ? ` · ${esc(i.cancelled_by_name)}` : ''}${i.cancelled_at ? ` · ${fmtTime(i.cancelled_at)}` : ''}</span>` : ''}
         ${i.note ? `<br><span class="small muted">${icon('sticky-note', 12)} ${esc(i.note)}</span>` : ''}</td>
       <td class="right">${i.qty}</td><td class="right num ck-hide-sm">${num(i.price)}</td><td class="right num">${off ? '—' : num(i.price * i.qty)}</td></tr>`;
@@ -1102,6 +1102,7 @@ Views.menuadmin = {
     return `<div class="page-head"><h1>${W('Menyu')}</h1>
       <input type="search" id="menu-search" placeholder="${esc(shop ? t('Shtrix-kod yoki nomi') : t('Qidirish'))}" value="${esc(UI.menuSearch || '')}" style="max-width:240px">
       ${shop ? `<button class="btn ok" id="mol-keldi">${icon('package-plus', 18)} ${t('Mol keldi')}</button><button class="btn" id="mol-import">${icon('file-spreadsheet', 18)} Excel</button><button class="btn" id="mol-labels">${icon('scan-barcode', 18)} ${t('Yorliq')}</button>` : ''}
+      ${shop ? '' : `<button class="btn" id="mods-btn">${icon('list', 18)} ${t("Qo'shimcha tanlovlar")}</button>`}
       <button class="btn" id="add-cat">${icon('plus', 18)} ${t("Bo'lim")}</button><button class="btn primary" id="add-dish">${icon('plus', 18)} ${W('Taom')}</button></div>
       ${shop && low.length ? `<div class="notice">${icon('triangle-alert', 18)} ${t('Kam qolgan: {0}', low.map((d) => `${esc(d.name)}${d.size ? ` ${esc(d.size)}` : ''} (${d.stock})`).join(', '))}</div>` : ''}
       ${groups.filter((g) => (g.c.id && !q) || g.ds.length).map(({ c, ds }) => `<div class="card"><div class="card-head"><h2>${c.id ? `<i class="cat-dot" style="background:${catColor({ categories }, c.id)}"></i>` : ''}${esc(c.icon)} ${esc(c.name)}</h2>
@@ -1115,7 +1116,9 @@ Views.menuadmin = {
             <button class="icon-btn" data-edit="${d.id}">${icon('pencil', 18)}</button><button class="icon-btn danger" data-del="${d.id}">${icon('trash-2', 18)}</button></td></tr>`).join('')}
         </table></div>` : `<p class="muted">${W("Bu bo'limda taom yo'q")}</p>`}</div>`).join('')}`;
   },
-  bind(root, { categories, dishes, suppliers = [] }) {
+  bind(root, { categories, dishes, suppliers = [], modifiers = [] }) {
+    const mb = root.querySelector('#mods-btn');
+    if (mb) mb.onclick = () => modifiersDialog(modifiers, categories, dishes);
     const ms = root.querySelector('#menu-search');
     ms.oninput = () => { UI.menuSearch = ms.value; renderView(currentData); };
     root.querySelectorAll('[data-receive]').forEach((b) => b.onclick = () => (isDoors() ? purchaseDialog(Number(b.dataset.receive)) : receiveDialog(dishes.find((d) => d.id === Number(b.dataset.receive)))));
@@ -1167,6 +1170,9 @@ Views.menuadmin = {
         <label class="field">${t('Belgi (emoji)')}<input name="icon" value="${esc(d.icon || (shop ? '📦' : '🍽️'))}"></label>
         <label class="field">${t("Qoldiq (bo'sh = cheksiz)")}<input type="number" name="stock" min="0" value="${d.stock ?? ''}"></label></div>
         ${shop ? '<input type="hidden" name="needs_kitchen" value="">' : `<label class="check" style="margin-top:14px"><input type="checkbox" name="needs_kitchen" ${d.needs_kitchen === 0 ? '' : 'checked'}> ${icon('chef-hat', 18)} ${t('Oshxonada tayyorlanadi')}</label>`}
+        ${!shop && modifiers.length ? `<h3 style="margin:18px 0 8px">${icon('list', 18)} ${t("Qo'shimcha tanlovlar")}</h3>
+          <div class="cat-pick">${modifiers.map((g) => `<label class="pill"><input type="checkbox" data-mg value="${g.id}" ${(d.mods || []).includes(g.id) ? 'checked' : ''}><span>${esc(g.name)}</span></label>`).join('')}</div>
+          <p class="small muted">${t("Belgilangan guruhlar taom bosilganda so'raladi (masalan: achchiqligi, qo'shimcha).")}</p>` : ''}
         ${!shop && moduleOn('qrmenu') ? `<h3 style="margin:18px 0 8px">${icon('qr-code', 18)} ${t('QR-menyu uchun')}</h3>
         <div class="dish-photo-edit"><div class="dish-photo" id="dp-prev">${d.photo ? `<img src="${dishPhoto(d.photo)}" alt="">` : esc(d.icon || '🍽️')}</div>
           <div class="stack" style="gap:8px"><input type="hidden" name="photo" value="${d.photo || ''}">
@@ -1200,6 +1206,7 @@ Views.menuadmin = {
         if ('min_stock' in x) x.min_stock = x.min_stock === '' ? null : Number(x.min_stock);
         if ('supplier_id' in x) x.supplier_id = x.supplier_id ? Number(x.supplier_id) : null;
         if (shop) { x.needs_kitchen = false; x.prep_minutes = 0; }
+        if (!shop && modifiers.length) x.modifiers = [...f.querySelectorAll('[data-mg]:checked')].map((e) => Number(e.value));
         if (d.id) await PUT(`/api/dishes/${d.id}`, x); else await POST('/api/dishes', x);
         toast(t('Saqlandi'), 'ok'); refreshView();
       } }],
@@ -1424,6 +1431,60 @@ function staffTypesDialog() {
   bindRows();
 }
 
+// ---------- Menu → modifiers: groups of choices shared by dishes ----------
+function modifiersDialog(groups, categories, dishes) {
+  openModal({
+    title: `${icon('list')} ${t("Qo'shimcha tanlovlar")}`, size: 'wide',
+    body: `<p class="small muted" style="margin-top:0">${t("Masalan: \"Achchiqligi\" — achchiq / o'rtacha / achchiqmas; \"Qo'shimcha\" — +pishloq, +tuxum. Har bir variant narxni o'zgartirishi mumkin. Tanlov oshxona qog'ozi, oshxona ekrani, chek va hisobotda ko'rinadi.")}</p>
+      ${groups.length ? groups.map((g) => `<div class="mg-row"><div class="grow"><b>${esc(g.name)}</b><br><span class="small muted">${g.multi ? t('bir nechtasi') : t('bittasi')} · ${g.required ? t('majburiy') : t('ixtiyoriy')} · ${g.options.map((o) => esc(o.name) + (o.price ? ` (${o.price > 0 ? '+' : '−'}${num(Math.abs(o.price))})` : '')).join(', ')}</span>
+          <br><span class="small muted">${icon('utensils', 12)} ${t('{0} ta taomda', dishes.filter((d) => (d.mods || []).includes(g.id)).length)}</span></div>
+        <button type="button" class="icon-btn" data-mg-edit="${g.id}">${icon('pencil', 18)}</button><button type="button" class="icon-btn danger" data-mg-del="${g.id}">${icon('trash-2', 18)}</button></div>`).join('')
+        : `<p class="muted">${t("Hali guruh yo'q")}</p>`}
+      <button type="button" class="btn primary" id="mg-add" style="margin-top:12px">${icon('plus', 18)} ${t('Yangi guruh')}</button>`,
+    onMount: (f) => {
+      f.querySelector('#mg-add').onclick = () => modifierGroupDialog({}, categories, dishes);
+      f.querySelectorAll('[data-mg-edit]').forEach((b) => b.onclick = () => modifierGroupDialog(groups.find((g) => g.id === Number(b.dataset.mgEdit)), categories, dishes));
+      f.querySelectorAll('[data-mg-del]').forEach((b) => b.onclick = async () => {
+        const g = groups.find((x) => x.id === Number(b.dataset.mgDel));
+        if (!(await confirmModal(t("O'chirish"), t('"{0}" guruhi o\'chirilsinmi? Eski cheklardagi yozuvlar qoladi.', g.name), t("O'chirish")))) return;
+        try { await DEL(`/api/modifiers/${g.id}`); toast(t("O'chirildi"), 'ok'); refreshView(); } catch (e) { toastError(e); }
+      });
+    },
+  });
+}
+function modifierGroupDialog(g, categories, dishes) {
+  const opt = (o = { name: '', price: 0 }) => `<div class="opt-row" data-oid="${o.id || ''}"><input data-on placeholder="${esc(t('Variant nomi'))}" value="${esc(o.name)}" maxlength="60">
+    <input type="number" data-op step="500" value="${o.price || 0}" title="${esc(t('Narx farqi'))}"><button type="button" class="icon-btn danger" data-orm>${icon('trash-2', 16)}</button></div>`;
+  const linked = new Set(dishes.filter((d) => (d.mods || []).includes(g.id)).map((d) => d.id));
+  const byCat = [...categories, { id: null, name: t("Bo'limsiz") }].map((c) => ({ c, ds: dishes.filter((d) => (d.category_id ?? null) === c.id) })).filter((x) => x.ds.length);
+  const form = openModal({
+    title: `${icon('list')} ${g.id ? esc(g.name) : t('Yangi guruh')}`, size: 'wide',
+    body: `<div class="form-grid"><label class="field">${t('Guruh nomi')}<input name="name" value="${esc(g.name || '')}" placeholder="${esc(t('Masalan: Achchiqligi'))}" required maxlength="60"></label>
+        <div class="field">${t('Nechtasini tanlash mumkin')}<div class="seg" id="mg-multi"><button type="button" data-m="0" class="${g.multi ? '' : 'active'}">${t('Bittasi')}</button><button type="button" data-m="1" class="${g.multi ? 'active' : ''}">${t('Bir nechtasi')}</button></div></div></div>
+      <label class="check" style="margin-top:10px"><input type="checkbox" name="required" ${g.required ? 'checked' : ''}> ${t('Majburiy (tanlamasdan qo\'shib bo\'lmaydi)')}</label>
+      <h3 style="margin:16px 0 8px">${t('Variantlar')} <span class="small muted">(${t('nomi va narx farqi, so\'m')})</span></h3>
+      <div id="opt-rows">${(g.options && g.options.length ? g.options : [{ name: '', price: 0 }]).map(opt).join('')}</div>
+      <button type="button" class="btn sm" id="opt-add">${icon('plus', 16)} ${t("Variant qo'shish")}</button>
+      <h3 style="margin:16px 0 8px">${t('Qaysi taomlarda')}</h3>
+      <div class="mg-dishes">${byCat.map(({ c, ds }) => `<h4>${esc(c.name)}</h4>${ds.map((d) => `<label class="check"><input type="checkbox" data-md value="${d.id}" ${linked.has(d.id) ? 'checked' : ''}> ${esc(d.name)}</label>`).join('')}`).join('')}</div>`,
+    actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: 'primary', icon: 'check', onClick: async (f) => {
+      const options = [...f.querySelectorAll('.opt-row')].map((r) => ({ id: Number(r.dataset.oid) || undefined, name: r.querySelector('[data-on]').value.trim(), price: Number(r.querySelector('[data-op]').value) || 0 })).filter((o) => o.name);
+      if (!f.name.value.trim()) { toast(t('Guruh nomini yozing'), 'warn'); return false; }
+      if (!options.length) { toast(t('Kamida bitta variant yozing'), 'warn'); return false; }
+      const body = { name: f.name.value.trim(), multi: f.querySelector('#mg-multi .active').dataset.m === '1', required: f.required.checked, options,
+        dishes: [...f.querySelectorAll('[data-md]:checked')].map((x) => Number(x.value)) };
+      if (g.id) await PUT(`/api/modifiers/${g.id}`, body); else await POST('/api/modifiers', body);
+      toast(t('Saqlandi'), 'ok'); refreshView();
+      return undefined;
+    } }],
+  });
+  const rows = form.querySelector('#opt-rows');
+  const bindRm = () => rows.querySelectorAll('[data-orm]').forEach((b) => b.onclick = () => { if (rows.children.length > 1) b.closest('.opt-row').remove(); });
+  form.querySelector('#opt-add').onclick = () => { rows.insertAdjacentHTML('beforeend', opt()); bindRm(); rows.lastElementChild.querySelector('input').focus(); };
+  form.querySelectorAll('#mg-multi [data-m]').forEach((b) => b.onclick = () => form.querySelectorAll('#mg-multi [data-m]').forEach((x) => x.classList.toggle('active', x === b)));
+  bindRm();
+}
+
 // ---------- Settings → Ko'rinish → Chek: the check's look with a live preview ----------
 function sampleCheck() {
   const it = (name, qty, price, cat, sort) => ({ name, qty, price, status: 'served', category_name: cat, category_sort: sort });
@@ -1484,7 +1545,7 @@ const AUDIT_NAMES = () => ({
   guest_approve: t('QR buyurtmani tasdiqladi'), guest_reject: t('QR buyurtmani rad etdi'), qr_renew: t('QR kodni yangiladi'), work_in: t('Ishga keldi'), work_out: t('Ishni tugatdi'), work_ask: t('Ishga keldi (kassir tasdig\'i so\'raldi)'), work_confirm: t('Ishga kelganini tasdiqladi'),
   work_reject: t('Ishga kelganini rad etdi'), work_close: t('Ish vaqtini yopdi'), geo_outside: t('Ish joyidan tashqarida'),
   fixed_add: t("Doimiy xarajat qo'shdi"), fixed_edit: t('Doimiy xarajatni tahrirladi'), fixed_remove: t('Doimiy xarajatni olib tashladi'), fixed_pay: t("Doimiy xarajatni to'ladi"),
-  secret_view: t("Xodim PIN/parolini ko'rdi"),
+  secret_view: t("Xodim PIN/parolini ko'rdi"), modifier_save: t("Qo'shimcha tanlovni saqladi"), modifier_delete: t("Qo'shimcha tanlovni o'chirdi"),
 });
 const SETTINGS_TABS = () => [
   ['general', 'store', t('Muassasa'), ['owner', 'admin']],
@@ -2152,3 +2213,78 @@ async function installApp() {
     actions: [{ label: t('Yopish') }],
   });
 }
+
+/* ---------- Boss panel: today in four numbers and every part of the program in five coloured groups ----------
+   Each link carries a live counter (dishes, open checks, deleted today, people at work…). Owner and admin. */
+Views.panel = {
+  title: () => t('Panel'), icon: () => 'layout-grid', roles: ['owner', 'admin'], refreshOn: ['rooms', 'finance', 'menu', 'stoplist'],
+  on: () => !isShop(),
+  async load() { return GET('/api/panel'); },
+  links(d) {
+    const c = d.counts;
+    const tab = (k) => () => { UI.settingsTab = k; location.hash = '#/settings'; };
+    const has = (k) => SETTINGS_TABS().some(([x, , , roles, mod]) => x === k && roles.includes(App.user.role) && moduleOn(mod));
+    const hist = (status) => () => { Object.assign(UI.hist, { status, period: 'today', method: '', waiter: '', section: '', room: '', discount: '', q: '', open: null }); location.hash = '#/history'; };
+    const go = (v) => () => { location.hash = `#/${v}`; };
+    const L = (ok, ic, label, act, badge = null, cls = '') => (ok ? { ic, label, act, badge, cls } : null);
+    return [
+      ['pink', 'utensils', W('Menyu'), [
+        L(viewOn('menuadmin'), 'utensils', W('Taomlar'), go('menuadmin'), c.dishes),
+        L(viewOn('menuadmin'), 'layers', t("Bo'limlar"), go('menuadmin'), c.categories),
+        L(viewOn('stoplist') || viewOn('menuadmin'), 'ban', t('Stop-list'), go(viewOn('stoplist') ? 'stoplist' : 'menuadmin'), c.stop, c.stop ? 'warn' : ''),
+        L(has('qr'), 'qr-code', t('QR-menyu'), tab('qr')),
+        L(has('printers'), 'printer', t('Printerlar'), tab('printers')),
+      ]],
+      ['green', 'chart-column', t('Moliya'), [
+        L(viewOn('reports'), 'chart-column', t('Hisobot'), go('reports')),
+        L(viewOn('finance'), 'arrow-right-left', t('Kirim-chiqim'), go('finance')),
+        L(moduleOn('finance'), 'wallet', t('Smena'), go('rooms'), c.shift_open ? t('ochiq') : t('yopiq')),
+        L(viewOn('pnl'), 'trending-up', t('Sof foyda'), go('pnl')),
+        L(viewOn('customers'), 'notebook-pen', t('Qarzlar'), go('customers'), c.debtors || null, c.debtors ? 'warn' : ''),
+      ]],
+      ['orange', 'receipt', t('Cheklar'), [
+        L(viewOn('history'), 'receipt', t('Bugungi cheklar'), hist('all'), c.checks),
+        L(viewOn('history'), 'clock', t('Ochiq cheklar'), hist('open'), c.checks ? d.open.count : 0),
+        L(viewOn('history'), 'trash-2', t("O'chirilgan"), hist('cancelled'), c.deleted, c.deleted ? 'red' : ''),
+        L(viewOn('reports'), 'triangle-alert', t('Otkazlar'), () => { UI.rep = { ...(UI.rep || {}), tab: 'deleted' }; location.hash = '#/reports'; }, c.otkaz, c.otkaz ? 'red' : ''),
+        L(viewOn('reservations'), 'calendar', t('Bronlar'), go('reservations'), c.reservations),
+      ]],
+      ['blue', 'users', t('Xodimlar'), [
+        L(viewOn('staff'), 'users', t('Xodimlar'), go('staff'), c.staff),
+        L(viewOn('staff'), 'user-round', t('Lavozimlar'), () => { location.hash = '#/staff'; setTimeout(() => staffTypesDialog(), 400); }),
+        L(viewOn('payroll'), 'hand-coins', t('Ish haqi'), go('payroll')),
+        L(viewOn('attendance'), 'calendar', t('Ish vaqti'), go('attendance'), c.at_work ? t('{0} ishda', c.at_work) : null),
+        L(has('audit'), 'history', t('Amallar tarixi'), tab('audit')),
+      ]],
+      ['slate', 'settings', t('Sozlamalar'), [
+        L(has('rooms'), 'house', App.biz === 'fastfood' ? t('Stollar') : t('Xonalar'), tab('rooms'), c.rooms),
+        L(has('rights'), 'shield-check', t('Ruxsatlar'), tab('rights')),
+        L(has('telegram'), 'send', t('Telegram'), tab('telegram')),
+        L(has('devices'), 'monitor-smartphone', t('Qurilmalar'), tab('devices'), c.devices),
+        L(has('backup'), 'database', t('Zaxira'), tab('backup')),
+      ]],
+    ].map(([color, ic, title, items]) => [color, ic, title, items.filter(Boolean)]).filter(([, , , items]) => items.length);
+  },
+  render(d) {
+    const kpi = (ic, label, value, sub) => `<div class="card pn-kpi"><span class="pn-ic">${icon(ic, 24)}</span><div><span class="small muted">${label}</span><b>${value}</b><span class="small muted">${sub || '&nbsp;'}</span></div></div>`;
+    const s = d.sales;
+    const kpis = [
+      s ? kpi('banknote', t('Bugungi savdo'), money(s.today), s.pct === null ? t('{0} chek', s.checks) : `${s.pct >= 0 ? '+' : ''}${s.pct}% ${t('kechagidan')}`) : '',
+      kpi('receipt', t('Ochiq cheklar'), t('{0} ta', d.open.count), d.open.total !== null ? money(d.open.total) : ''),
+      d.expense ? kpi('wallet', t('Bugungi xarajat'), money(d.expense.total), d.expense.top.map(esc).join(', ')) : '',
+      kpi('ban', t('Stop-list'), t('{0} ta taom', d.counts.stop), d.counts.stop ? t('tugagan') : t("hammasi bor")),
+    ].join('');
+    this._links = this.links(d);
+    let n = 0;
+    return `<div class="page-head"><h1>${t('Boshliq paneli')}</h1><span class="muted">${esc(longDate())} · ${fmtTime(Date.now())}</span></div>
+      <div class="pn-kpis">${kpis}</div>
+      <div class="pn-groups">${this._links.map(([color, ic, title, items]) => `<section class="card pn-group pn-${color}">
+        <h2>${icon(ic, 20)} ${esc(title)}</h2>
+        ${items.map((x) => `<button type="button" class="pn-link" data-pl="${n++}">${icon(x.ic, 19)}<span class="grow">${esc(x.label)}</span>${x.badge !== null && x.badge !== undefined && x.badge !== '' ? `<span class="pn-badge ${x.cls}">${esc(String(x.badge))}</span>` : ''}${icon('chevron-right', 18)}</button>`).join('')}
+      </section>`).join('')}</div>`;
+  },
+  bind(root) {
+    const flat = this._links.flatMap(([, , , items]) => items);
+    root.querySelectorAll('[data-pl]').forEach((b) => b.onclick = () => flat[Number(b.dataset.pl)].act());
+  },
+};

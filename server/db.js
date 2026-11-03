@@ -540,6 +540,19 @@ CREATE INDEX IF NOT EXISTS idx_guest_req ON guest_requests(status, room_id);
   addCol('dishes', 'supplier_id', 'INTEGER');
   addCol('dishes', 'min_stock', 'INTEGER');
   addCol('order_items', 'service', "TEXT NOT NULL DEFAULT ''");
+  /* Modifiers: groups of choices a dish can have ("Achchiqligi": achchiq / achchiqmas; "Qo'shimcha": +pishloq…).
+     A group is one-of or many-of, required or not; an option may change the price. A group is shared by many dishes.
+     The chosen ones are written on the check line itself (order_items.mods, names and prices as they were). */
+  db.exec(`CREATE TABLE IF NOT EXISTS modifier_groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, multi INTEGER NOT NULL DEFAULT 0, required INTEGER NOT NULL DEFAULT 0,
+    sort INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1)`);
+  db.exec(`CREATE TABLE IF NOT EXISTS modifier_options (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER NOT NULL REFERENCES modifier_groups(id) ON DELETE CASCADE,
+    name TEXT NOT NULL, price INTEGER NOT NULL DEFAULT 0, sort INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1)`);
+  db.exec(`CREATE TABLE IF NOT EXISTS dish_modifiers (
+    dish_id INTEGER NOT NULL REFERENCES dishes(id) ON DELETE CASCADE, group_id INTEGER NOT NULL REFERENCES modifier_groups(id) ON DELETE CASCADE,
+    PRIMARY KEY (dish_id, group_id))`);
+  addCol('order_items', 'mods', "TEXT NOT NULL DEFAULT ''");
   // Who cancelled a dish and when (shown in the checks report next to the cancelled line).
   addCol('order_items', 'cancelled_at', 'INTEGER');
   addCol('order_items', 'cancelled_by', 'INTEGER');

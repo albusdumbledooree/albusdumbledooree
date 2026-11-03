@@ -119,6 +119,51 @@ function catColor(menu, id) {
   if (i < 0) return '#94a3b8';
   return menu.categories[i].color || CAT_COLORS[i % CAT_COLORS.length];
 }
+// ---------- Modifiers (a dish's choices: "achchiq / achchiqmas", "+pishloq") ----------
+// The chosen ones of a check line as a short text: stored as JSON on the line, sent as text on paper tickets.
+function modsText(i) {
+  const m = i && i.mods;
+  if (!m) return '';
+  if (Array.isArray(m)) return m.map((x) => x.name || x).join(', ');
+  if (m[0] !== '[') return String(m);
+  try { return JSON.parse(m).map((x) => x.name).join(', '); } catch { return ''; }
+}
+/* Asks for a dish's choices before it goes on the check. Resolves { ids, text, price } or null (closed).
+   One-of groups are radio buttons, many-of are ticks; a required group must be answered; the price follows the choice. */
+function pickMods(menu, dish) {
+  const groups = (dish.mods || []).map((id) => (menu.modifiers || []).find((g) => g.id === id)).filter(Boolean);
+  if (!groups.length) return Promise.resolve({ ids: [], text: '', price: dish.price });
+  return new Promise((resolve) => {
+    let done = false;
+    const chosen = (f) => [...f.querySelectorAll('[data-opt]:checked')].map((x) => Number(x.value));
+    const sum = (f) => dish.price + chosen(f).reduce((a, id) => a + ((groups.flatMap((g) => g.options).find((o) => o.id === id) || {}).price || 0), 0);
+    const form = openModal({
+      title: `${icon('list')} ${esc(dish.name)}`,
+      body: groups.map((g) => `<div class="mod-group" data-g="${g.id}"><div class="mod-head"><b>${esc(g.name)}</b>
+          <span class="small muted">${g.required ? t('majburiy') : t('ixtiyoriy')}${g.multi ? ` · ${t('bir nechtasi')}` : ''}</span></div>
+        <div class="mod-opts">${g.options.map((o, i) => `<label class="mod-opt"><input type="${g.multi ? 'checkbox' : 'radio'}" name="g${g.id}" value="${o.id}" data-opt ${!g.multi && g.required && i === 0 ? 'checked' : ''}>
+          <span>${esc(o.name)}${o.price ? ` <small>${o.price > 0 ? '+' : '−'}${num(Math.abs(o.price))}</small>` : ''}</span></label>`).join('')}</div></div>`).join('')
+        + `<div class="mod-total"><span>${t('Narxi')}</span><b id="mod-sum">${money(dish.price)}</b></div>`,
+      actions: [{ label: t('Bekor'), onClick: () => { done = true; resolve(null); } }, { label: t("Qo'shish"), cls: 'primary', icon: 'plus', onClick: (f) => {
+        const ids = chosen(f);
+        const miss = groups.find((g) => g.required && !g.options.some((o) => ids.includes(o.id)));
+        if (miss) { toast(t('{0} — tanlang', miss.name), 'warn'); return false; }
+        const all = groups.flatMap((g) => g.options);
+        done = true;
+        resolve({ ids, text: ids.map((id) => all.find((o) => o.id === id).name).join(', '), price: sum(f) });
+        return undefined;
+      } }],
+      onClose: () => { if (!done) resolve(null); },
+      onMount: (f) => {
+        const upd = () => { f.querySelector('#mod-sum').innerHTML = money(sum(f)); };
+        f.querySelectorAll('[data-opt]').forEach((x) => x.onchange = upd);
+        upd();
+      },
+    });
+    void form;
+  });
+}
+
 // A colour (#abc / #aabbcc) with transparency, as rgba() that every browser understands.
 function rgba(hex, a) {
   let h = String(hex || '').trim().replace('#', '');
@@ -631,7 +676,7 @@ function receiptLogo(s = App.settings) {
    the lines the boss wrote under it. s: the business's name and check settings (a bill printed elsewhere brings its own). */
 function receiptBody(o, s = App.settings) {
   const live = o.items.filter((i) => i.status !== 'cancelled');
-  const row = (i) => `<tr><td>${esc(i.name)}</td><td class="q">${i.qty}</td><td class="s">${num(i.qty * i.price)}</td></tr>`;
+  const row = (i) => `<tr><td>${esc(i.name)}${modsText(i) ? `<br><small>+ ${esc(modsText(i))}</small>` : ''}</td><td class="q">${i.qty}</td><td class="s">${num(i.qty * i.price)}</td></tr>`;
   let lines;
   const named = live.filter((i) => i.category_name);
   if (s.receipt_group !== false && named.length) {
@@ -681,7 +726,7 @@ function printReceipt(o, s = App.settings) {
 function printKitchenTicket(tk) {
   printDoc(`${t('Buyurtma')} #${tk.order_id}`, `${tk.cancel ? `<div class="c huge inv">${t('BEKOR QILINDI')}</div>` : ''}${tk.deleted ? `<div class="c big">${t("BUTUN CHEK O'CHIRILDI")}</div>${tk.reason ? `<div class="c">${t('Sabab')}: ${esc(tk.reason)}</div>` : ''}` : ''}${tk.reprint ? `<div class="c big inv">${t('QAYTA CHOP ETILDI')}</div>` : ''}${tk.late ? `<div class="c big">${t('KECHIKIB CHIQDI')} (${fmtTime(tk.at)})</div>` : ''}<div class="c huge">${esc(tk.room)}</div>
     <div class="c">${t('Chek')} #${tk.order_id} · ${esc(tk.waiter || '')}${tk.by && tk.by !== tk.waiter ? ` (${esc(tk.by)})` : ''} · ${fmtTime(tk.at || Date.now())}</div><hr>
-    <table>${tk.items.map((i) => `<tr class="big"><td>${i.qty} ×</td><td>${esc(i.name)}${i.note ? `<br><small>* ${esc(i.note)}</small>` : ''}</td></tr>`).join('')}</table><hr>`, 'kitchen');
+    <table>${tk.items.map((i) => `<tr class="big"><td style="white-space:nowrap;padding-right:8px">${i.qty} ×</td><td>${esc(i.name)}${modsText(i) ? `<br>+ ${esc(modsText(i))}` : ''}${i.note ? `<br><small>* ${esc(i.note)}</small>` : ''}</td></tr>`).join('')}</table><hr>`, 'kitchen');
 }
 
 // Shrinks a picture before upload (a phone photo can be 8 MB; the desktop needs ~300 KB).

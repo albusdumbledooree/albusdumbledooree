@@ -77,6 +77,7 @@ function ticket(job, { width = 48, label = '' } = {}) {
     const rows = wrap(it.name, Math.max(8, width - lead.length));
     rows.forEach((r, i) => text(`${i ? ' '.repeat(lead.length) : lead}${r}`));
     tall(false); bold(false);
+    if (it.mods) { bold(true); for (const r of wrap(`+ ${it.mods}`, width - 3)) text(`   ${r}`); bold(false); }
     if (it.note) for (const r of wrap(`* ${it.note}`, width - 3)) text(`   ${r}`);
   }
   text('-'.repeat(width));
@@ -124,7 +125,8 @@ function bill(job, { width = 48 } = {}) {
   if (o.closed_at) text(`Yopildi: ${dt(o.closed_at)}`);
   text('-'.repeat(width));
   const live = (o.items || []).filter((x) => x.status !== 'cancelled');
-  const line = (i) => { for (const r of wrap(i.name, width)) text(r); pair(`  ${i.qty} x ${sum(i.price)}`, sum(i.qty * i.price)); };
+  const modsOf = (i) => { try { return i.mods ? JSON.parse(i.mods).map((m) => m.name).join(', ') : ''; } catch { return ''; } };
+  const line = (i) => { for (const r of wrap(i.name, width)) text(r); if (modsOf(i)) for (const r of wrap(`+ ${modsOf(i)}`, width - 2)) text(`  ${r}`); pair(`  ${i.qty} x ${sum(i.price)}`, sum(i.qty * i.price)); };
   // Under their sections (BAR, OSHXONA…) when the boss chose so in the check settings.
   if (s.receipt_group !== false && live.some((i) => i.category_name)) {
     const groups = new Map();

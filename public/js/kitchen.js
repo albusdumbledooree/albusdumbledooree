@@ -7,6 +7,7 @@ function ticketHtml(i) {
     <div class="t-head">${icon(i.takeaway ? 'shopping-bag' : 'door-open', 16)}<b>${esc(i.room_name)}</b>
       <span>· ${esc(i.waiter_name)}</span><span class="grow"></span><span class="timer">${icon('clock', 14)} <b data-since="${i.created_at}"></b></span></div>
     <div class="dish-name"><span class="q">${i.qty}×</span>${esc(i.name)}</div>
+    ${modsText(i) ? `<div class="note mods-note">${icon('plus', 16)} ${esc(modsText(i))}</div>` : ''}
     ${i.note ? `<div class="note">${icon('sticky-note', 16)} ${esc(i.note)}</div>` : ''}
     <div class="row small muted">
       ${i.status === 'new' || i.status === 'cooking' ? `<span class="timer">${icon('timer', 14)} <b data-eta="${i.eta_at}"></b></span><span>~${i.prep_minutes} ${t('daq')}</span>` : ''}

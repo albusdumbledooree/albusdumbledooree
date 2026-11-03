@@ -2,6 +2,19 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.26.0 — Boshliq paneli va qo'shimcha tanlovlar (modifikatorlar)
+- **Boshliq paneli** (yangi "Panel" bo'limi, boshliq va admin uchun): tepada bugungi savdo (kechagi shu vaqtga nisbatan %),
+  ochiq cheklar va summasi, bugungi xarajat, stop-list; pastda 5 ta rangli guruh — Menyu, Moliya, Cheklar, Xodimlar,
+  Sozlamalar — har bir havolada jonli son (taomlar, ochiq va o'chirilgan cheklar, otkazlar, bronlar, ishdagilar…).
+  Hisobot huquqi yo'q admin pul raqamlarini ko'rmaydi.
+- **Qo'shimcha tanlovlar** (Menyu → "Qo'shimcha tanlovlar"): guruhlar — masalan "Achchiqligi" (achchiq / o'rtacha /
+  achchiqmas) yoki "Qo'shimcha" (+pishloq +5 000, +tuxum). Guruh "bittasi" yoki "bir nechtasi", majburiy yoki ixtiyoriy;
+  bitta guruh ko'p taomga biriktiriladi (guruh oynasida yoki taom oynasida).
+  - Ofitsant yoki kassir taomni bosganda tanlov oynasi chiqadi, narx tanlovga qarab o'zgaradi; bir xil tanlov bitta qatorga qo'shiladi.
+  - Tanlov oshxona ekrani, oshxona qog'ozi (FLOWI Printer ham), mijoz cheki, cheklar hisobotida ko'rinadi.
+  - Variant keyin o'zgartirilsa ham, eski cheklarda o'sha paytda tanlangani qoladi.
+- Oshxona qog'ozida "1 ×" belgisi endi bo'linmaydi.
+
 ## 1.25.0 — Cheklar hisoboti va yangi chek ko'rinishi
 - **Cheklar hisoboti** yangilandi: keng jadval — №, turi (yopilgan / ochiq / o'chirilgan), ochilgan va yopilgan vaqt, ofitsant,
   stol va zal, mehmonlar, tannarx, taomlar, xizmat haqi (% va summa), chegirma (% va summa), jami.
