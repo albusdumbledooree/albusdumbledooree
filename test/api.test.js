@@ -2525,3 +2525,21 @@ test('modifiers: groups on dishes, price changes, required and one-of rules, sho
   await call('DELETE', `/api/modifiers/${spicy.id}`, boss);
   await call('POST', `/api/orders/${o.id}/cancel`, boss, { reason: 'test' });
 });
+
+test('the bill on paper (ESC/POS): one row per dish with its count, same dishes joined, sums in the columns, no payment method', () => {
+  const { bill } = require('../server/escpos');
+  const it = (name, qty, price, extra = {}) => ({ name, qty, price, status: 'served', category_name: 'NON', category_sort: 1, ...extra });
+  const out = bill({ order: { id: 17, status: 'closed', room: { name: 'ZAL 1' }, waiter: { name: 'Madina' }, guests: 10, opened_at: Date.now(), closed_at: Date.now(),
+    items: [it('Non', 1, 5000), it('Non', 1, 5000), it('Non', 1, 5000, { status: 'cancelled' }), it('Saboy idish', 1, 5000), it('Saboy idish', 1, 5000)],
+    subtotal: 20000, service_type: 'per_guest', service_pct: 2000, service_amount: 20000, total: 40000, paid_cash: 40000, paid_card: 0 },
+  shop: { name: 'SAM OSH' } }, { width: 48 }).toString('latin1');
+  const lines = out.split('\n').map((l) => l.replace(/[\x00-\x1f]/g, '').replace(/^[!E\-a3]{0,4}/, ''));
+  const non = lines.filter((l) => /^Non\b/.test(l));
+  assert.equal(non.length, 1, 'the same dish is one row');
+  assert.match(non[0], /^Non\s+2\s+10 000$/);
+  assert.ok(lines.some((l) => /^Saboy idish\s+2\s+10 000$/.test(l)));
+  assert.ok(!/ x \d/.test(out), 'no "2 x 5 000" rows');
+  assert.ok(lines.some((l) => /^Taomlar\s+20 000$/.test(l)) && lines.some((l) => /^Xizmat haqi \(10 kishi\)\s+10\s+20 000$/.test(l)));
+  assert.ok(!/Naqd|Karta/.test(out), 'no payment method');
+  assert.ok(out.includes('\x1b3'), 'wider line spacing');
+});

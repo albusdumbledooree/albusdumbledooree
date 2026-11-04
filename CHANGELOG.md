@@ -2,6 +2,14 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.26.1 — Mijoz cheki o'qishga qulayroq
+- Taom bitta qatorda: **nomi — soni — summasi** ("2 x 35 000" degan alohida qator yo'q), tepasida "Nomi / Soni / Summa".
+- Bir xil taom bir necha marta urilgan bo'lsa, chekda bitta qator: "Non — 2 — 10 000", "Saboy idish — 4 — 20 000".
+- "Taomlar" va "Xizmat haqi" ro'yxat davomida, o'sha ustunlarda (chiziqsiz), keyin katta JAMI.
+- Chekda to'lov turi (Naqd / Karta / O'tkazma) yozilmaydi; avansli sotuvda "Avans" va "Qoldi" qoladi.
+- FLOWI Printer chekida qatorlar orasi kengroq — o'qish oson.
+- Hammasi FLOWI Printer, Windows dasturi va brauzer chekida bir xil.
+
 ## 1.26.0 — Boshliq paneli va qo'shimcha tanlovlar (modifikatorlar)
 - **Boshliq paneli** (yangi "Panel" bo'limi, boshliq va admin uchun): tepada bugungi savdo (kechagi shu vaqtga nisbatan %),
   ochiq cheklar va summasi, bugungi xarajat, stop-list; pastda 5 ta rangli guruh — Menyu, Moliya, Cheklar, Xodimlar,

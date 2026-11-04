@@ -1350,6 +1350,7 @@
   "Kamida bitta variant yozing": ["Введите хотя бы один вариант", "Enter at least one option"],
   "Qo'shimcha tanlovni saqladi": ["Сохранил модификатор", "Saved a modifier"],
   "Qo'shimcha tanlovni o'chirdi": ["Удалил модификатор", "Deleted a modifier"],
+  "{0} kishi": ["{0} чел.", "{0} people"],
     "Kamera topilmadi": ["Камера не найдена", "No camera found"],
     "BUTUN CHEK O'CHIRILDI": ["ЧЕК УДАЛЁН ПОЛНОСТЬЮ","WHOLE CHECK DELETED"],
     "Diqqat! {0}. Butun chek o'chirildi.": ["Внимание! {0}. Чек удалён полностью.","Attention! {0}. The whole check was deleted."],

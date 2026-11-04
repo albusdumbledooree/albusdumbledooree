@@ -109,6 +109,7 @@ function bill(job, { width = 48 } = {}) {
     text(`${last}${' '.repeat(Math.max(1, w - last.length - right.length))}${right}`);
   };
   raw(ESC, 0x40); raw(ESC, 0x74, 17);
+  raw(ESC, 0x33, 46); // wider line spacing (46 dots instead of ~30): easier to read
   align(1);
   if (job.late) { bold(true); text(`KECHIKIB CHIQDI (${hm(job.at)})`); bold(false); }
   bold(true); tall(true);
@@ -124,13 +125,30 @@ function bill(job, { width = 48 } = {}) {
   text(`Ochildi: ${dt(o.opened_at)}`);
   if (o.closed_at) text(`Yopildi: ${dt(o.closed_at)}`);
   text('-'.repeat(width));
-  const live = (o.items || []).filter((x) => x.status !== 'cancelled');
+  /* The dishes as columns: name | count | sum, one row each (a long name wraps inside its column).
+     The same dish (name, price, choices) ordered several times is one row with the total count. */
   const modsOf = (i) => { try { return i.mods ? JSON.parse(i.mods).map((m) => m.name).join(', ') : ''; } catch { return ''; } };
-  const line = (i) => { for (const r of wrap(i.name, width)) text(r); if (modsOf(i)) for (const r of wrap(`+ ${modsOf(i)}`, width - 2)) text(`  ${r}`); pair(`  ${i.qty} x ${sum(i.price)}`, sum(i.qty * i.price)); };
+  const QW = 5; const SW = 11; const NW = Math.max(10, width - QW - SW);
+  const cols = (name, qty, total) => {
+    const rows = wrap(name, NW - 1);
+    rows.forEach((r, n) => text(n === 0 ? `${r.padEnd(NW)}${String(qty).padStart(QW)}${String(total).padStart(SW)}` : r));
+  };
+  const merged = [];
+  for (const i of (o.items || []).filter((x) => x.status !== 'cancelled')) {
+    const key = `${i.name}|${i.price}|${i.mods || ''}`;
+    const m = merged.find((x) => x.key === key);
+    if (m) m.qty += i.qty; else merged.push({ ...i, key, qty: i.qty });
+  }
+  const line = (i) => {
+    cols(i.name, i.qty, sum(i.qty * i.price));
+    if (modsOf(i)) for (const r of wrap(`+ ${modsOf(i)}`, NW - 3)) text(`  ${r}`);
+  };
+  bold(true); cols('Nomi', 'Soni', 'Summa'); bold(false);
+  text('-'.repeat(width));
   // Under their sections (BAR, OSHXONA…) when the boss chose so in the check settings.
-  if (s.receipt_group !== false && live.some((i) => i.category_name)) {
+  if (s.receipt_group !== false && merged.some((i) => i.category_name)) {
     const groups = new Map();
-    for (const i of live) {
+    for (const i of merged) {
       const k = i.category_name || 'Boshqa';
       if (!groups.has(k)) groups.set(k, { sort: i.category_name ? i.category_sort ?? 0 : 1e9, items: [] });
       groups.get(k).items.push(i);
@@ -139,19 +157,24 @@ function bill(job, { width = 48 } = {}) {
       bold(true); raw(ESC, 0x2d, 1); text(k.toUpperCase()); raw(ESC, 0x2d, 0); bold(false);
       g.items.forEach(line);
     }
-  } else live.forEach(line);
-  text('-'.repeat(width));
-  pair('Taomlar', sum(o.subtotal));
-  if (o.service_amount) pair(o.service_type === 'per_guest' ? `Xizmat haqi (${o.guests} kishi)` : `Xizmat haqi ${o.service_pct}%`, sum(o.service_amount));
-  if (o.discount) pair('Chegirma', `-${sum(o.discount)}`);
+  } else merged.forEach(line);
+  // The sums go on in the same columns, right under the dishes (no line between).
+  cols('Taomlar', '', sum(o.subtotal));
+  if (o.service_amount) {
+    if (o.service_type === 'per_guest') cols(`Xizmat haqi (${o.guests} kishi)`, o.guests, sum(o.service_amount));
+    else cols(`Xizmat haqi ${o.service_pct}%`, '', sum(o.service_amount));
+  }
+  if (o.discount) cols('Chegirma', '', `-${sum(o.discount)}`);
+  text('='.repeat(width));
   bold(true); big(true);
   pair('JAMI', sum(o.total), Math.floor(width / 2));
   big(false); bold(false);
+  text('='.repeat(width));
   if (o.guests > 1 && !o.takeaway && s.receipt_per_person !== false) pair(`${o.guests} kishi - har biriga`, sum(Math.round(o.total / o.guests)));
-  for (const m of ['cash', 'card', 'transfer']) if (o.status === 'closed' && o[`paid_${m}`]) pair({ cash: 'Naqd', card: 'Karta', transfer: "O'tkazma" }[m], sum(o[`paid_${m}`]));
   text('-'.repeat(width));
   if (o.cashier) text(`Kassir: ${o.cashier.name}`);
   if (s.receipt_footer) { align(1); for (const line of String(s.receipt_footer).split('\n')) for (const r of wrap(line, width)) text(r); align(0); }
+  raw(ESC, 0x32); // line spacing back to the printer's own
   raw(ESC, 0x64, 4);
   raw(GS, 0x56, 0x42, 0x00);
   return Buffer.from(b);

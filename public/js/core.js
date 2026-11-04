@@ -619,6 +619,7 @@ function docHtml(title, body, s = App.settings || {}) {
     .name{font-size:${narrow ? 17 : 21}px;font-weight:900;text-align:center;letter-spacing:.06em;text-transform:uppercase;margin:2px 0 1px}
     .addr{text-align:center;font-size:.9em;margin-bottom:6px}
     .kv td:last-child{text-align:right}
+    .items td{padding:4px 0}.kv td{padding:3px 0}
     .items th{border-bottom:2px solid #000;padding-bottom:3px}.items .q{text-align:center;width:16%}.items .s{text-align:right;width:28%;white-space:nowrap}
     .items .sec td{padding-top:6px;text-decoration:underline;text-transform:uppercase;font-weight:900}
     .jami td{font-size:${narrow ? 19 : 24}px;font-weight:900;padding:3px 0}
@@ -675,7 +676,13 @@ function receiptLogo(s = App.settings) {
    the dishes (under their sections when chosen); sums, the total in big letters, per person, payments, advance;
    the lines the boss wrote under it. s: the business's name and check settings (a bill printed elsewhere brings its own). */
 function receiptBody(o, s = App.settings) {
-  const live = o.items.filter((i) => i.status !== 'cancelled');
+  // The same dish (name, price, choices) ordered several times is one row with the total count.
+  const live = [];
+  for (const i of o.items.filter((x) => x.status !== 'cancelled')) {
+    const key = `${i.name}|${i.price}|${modsText(i)}`;
+    const m = live.find((x) => x.key === key);
+    if (m) m.qty += i.qty; else live.push({ ...i, key });
+  }
   const row = (i) => `<tr><td>${esc(i.name)}${modsText(i) ? `<br><small>+ ${esc(modsText(i))}</small>` : ''}</td><td class="q">${i.qty}</td><td class="s">${num(i.qty * i.price)}</td></tr>`;
   let lines;
   const named = live.filter((i) => i.category_name);
@@ -697,18 +704,17 @@ function receiptBody(o, s = App.settings) {
     [o.takeaway ? t('Joy') : t('Stol'), esc(o.takeaway ? placeName(o) : `${o.room.number}, ${o.room.name}`)],
     ...(counter ? [] : [[t('Mehmonlar'), o.guests]]),
   ];
-  const pays = o.status === 'closed' ? ['cash', 'card', 'transfer'].filter((m) => o[`paid_${m}`]).map((m) => `<tr><td>${methodName(m)}:</td><td class="r">${num(o[`paid_${m}`])}</td></tr>`).join('') : '';
   const foot = String(s.receipt_footer || '').split('\n').map((x) => x.trim()).filter(Boolean);
   return `${receiptLogo(s)}
     <div class="name">${esc(s.name)}</div>${s.address || s.phone ? `<div class="addr">${[s.address, s.phone].filter(Boolean).map(esc).join(' · ')}</div>` : ''}
     ${counter ? `<div class="c huge">№ ${o.id}</div>` : ''}
     <table class="kv">${kv.map(([k, v]) => `<tr><td>${k}:</td><td>${v}</td></tr>`).join('')}</table>
-    <hr><table class="items"><tr><th>${t('Nomi')}</th><th class="q">${t('Soni')}</th><th class="s">${t('Summa')}</th></tr>${lines}</table><hr>
-    <table class="kv"><tr><td>${t('Summa')}:</td><td>${num(o.subtotal)}</td></tr>
-      ${o.service_amount ? `<tr><td>${esc(serviceLabel(o))}:</td><td>${num(o.service_amount)}</td></tr>` : ''}
-      ${o.discount ? `<tr><td>${t('Chegirma')}:</td><td>−${num(o.discount)}</td></tr>` : ''}</table>
+    <hr><table class="items"><tr><th>${t('Nomi')}</th><th class="q">${t('Soni')}</th><th class="s">${t('Summa')}</th></tr>${lines}
+      <tr class="sum1"><td>${W('Taomlar')}</td><td class="q"></td><td class="s">${num(o.subtotal)}</td></tr>
+      ${o.service_amount ? `<tr><td>${t('Xizmat haqi')}${o.service_type === 'per_guest' ? ` (${t('{0} kishi', o.guests)})` : ` ${o.service_pct}%`}</td><td class="q">${o.service_type === 'per_guest' ? o.guests : ''}</td><td class="s">${num(o.service_amount)}</td></tr>` : ''}
+      ${o.discount ? `<tr><td>${t('Chegirma')}</td><td class="q"></td><td class="s">−${num(o.discount)}</td></tr>` : ''}</table>
     <hr class="thick"><table class="kv jami"><tr><td>${t('JAMI')}:</td><td>${num(o.total)}</td></tr></table><hr class="thick">
-    <table class="kv">${share ? `<tr class="big"><td>${t('{0} kishi — har biriga', o.guests)}:</td><td>${num(share)}</td></tr>` : ''}${pays}</table>
+    ${share ? `<table class="kv"><tr class="big"><td>${t('{0} kishi — har biriga', o.guests)}:</td><td>${num(share)}</td></tr></table>` : ''}
     ${o.advance || o.balance > 0 || (o.payments || []).length ? `<hr><table class="kv">
       ${o.customer ? `<tr><td colspan="2">${t('Mijoz')}: ${esc(o.customer.name)} ${esc(o.customer.phone || '')}</td></tr>` : ''}
       ${o.advance ? `<tr><td>${t("Avans (bosh to'lov)")}:</td><td>${num(o.advance)}</td></tr>` : ''}
