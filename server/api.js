@@ -147,7 +147,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     // The check's look: logo width (% of the paper), dishes under their sections, the "per person" line.
     out.receipt_logo_size = Math.min(100, Math.max(20, Number(out.receipt_logo_size) || 50));
     out.receipt_group = out.receipt_group === '1';
-    out.room_assign = out.room_assign === 'assigned' ? 'assigned' : 'open'; // section names on the check: off unless the boss switches them on
+    out.room_assign = out.room_assign === 'assigned' ? 'assigned' : 'open';
+    out.delivery_fee = Number(out.delivery_fee) || 0;
     out.receipt_per_person = out.receipt_per_person !== '0';
     out.receipt_logo_id = out.receipt_logo_id ? Number(out.receipt_logo_id) : null;
     out.staff_meal_price = out.staff_meal_price === 'cost' ? 'cost' : 'menu';
@@ -494,7 +495,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   // ---------- Settings ----------
   function updateSettings({ user, body }) {
-    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'receipt_logo_size', 'receipt_group', 'receipt_per_person', 'room_assign',
+    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'receipt_logo_size', 'receipt_group', 'receipt_per_person', 'room_assign', 'delivery_fee',
       'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo',
       'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', 'cashback_pct', 'qr_order', 'qr_from', 'qr_to',
       'geo_lat', 'geo_lng', 'geo_radius', 'work_from', 'expense_groups', 'staff_types', ...GEO_FLAGS, ...OWNER_SETTINGS];
@@ -536,6 +537,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       if (k === 'logo' || k === 'receipt_logo_id') v = v ? String(assetId(v, 'logo')) : '';
       if (k === 'receipt_logo' || k === 'receipt_group' || k === 'receipt_per_person') v = v ? '1' : '0';
       if (k === 'room_assign') v = v === 'assigned' ? 'assigned' : 'open';
+      if (k === 'delivery_fee') v = int(v, 'Yetkazib berish haqi', { max: 10_000_000 });
       if (k === 'receipt_logo_size') v = int(v, "Logotip o'lchami", { min: 20, max: 100 });
       // Lines under the check: several, each printed on its own line.
       if (k === 'receipt_footer') v = String(v ?? '').replace(/\r/g, '').split('\n').map((x) => x.trim().slice(0, 64)).slice(0, 8).join('\n').trim();
@@ -1148,7 +1150,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   // Name shown to the kitchen and on lists: "3 · Banket 3" or "Olib ketish #12 · Aziz".
   function placeName(o, room) {
-    if (o.delivery) return `Yetkazish #${o.id}${o.label ? ` · ${o.label}` : ''}`;
+    if (o.delivery) return `Dostavka #${o.id}${o.label ? ` · ${o.label}` : ''}`;
     return o.takeaway ? `Olib ketish #${o.id}${o.label ? ` · ${o.label}` : ''}` : room.name;
   }
 
@@ -1159,6 +1161,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const items = q("SELECT i.* FROM order_items i JOIN orders o ON o.id = i.order_id WHERE o.status = 'open' AND o.takeaway = 1").all();
     return {
       room_id: q("SELECT id FROM rooms WHERE type = 'soboy'").get().id,
+      couriers: q("SELECT id, name FROM users WHERE active = 1 AND role = 'waiter' AND delivery = 1 ORDER BY name").all(),
       orders: rows.map((o) => {
         const its = items.filter((i) => i.order_id === o.id);
         const st = { new: 0, cooking: 0, ready: 0 };
@@ -1191,24 +1194,30 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     if (!room) throw new HttpError(404, 'Xona topilmadi');
     if (room.type === 'soboy') {
       if (!canTakeaway(user)) throw new HttpError(403, "Olib ketish faqat kassir va dostavchik uchun");
-      // Delivery: the customer's name, phone and address; the delivery charge is a line on the check (no kitchen).
-      const dv = body.delivery && typeof body.delivery === 'object' ? {
-        name: str(body.delivery.name, 'Mijoz ismi', { max: 60 }),
-        phone: str(body.delivery.phone, 'Telefon', { required: true, max: 30 }),
-        address: str(body.delivery.address, 'Manzil', { required: true, max: 200 }),
-        fee: int(body.delivery.fee, 'Yetkazish haqi', { max: 10_000_000 }),
-      } : null;
-      // Takeaway: every customer gets a new check, written by any waiter or cashier.
+      /* Two kinds of counter checks, counted apart: takeaway (the guest picks it up) and delivery (a courier takes it).
+         A courier's check is always a delivery. The customer's phone and address are optional; the delivery fee
+         (Settings → Muassasa, 0 = none) is a line on the check (no kitchen). */
+      const courier = user.role === 'waiter' && !!user.delivery;
+      const isDelivery = courier || !!body.delivery;
+      const dv = isDelivery ? (body.delivery && typeof body.delivery === 'object' ? body.delivery : {}) : null;
+      let waiterId = user.id;
+      if (isDelivery && !courier && dv.courier_id) {
+        const c = q("SELECT id FROM users WHERE id = ? AND active = 1 AND role = 'waiter' AND delivery = 1").get(int(dv.courier_id, 'Dostavchik', { min: 1 }));
+        if (!c) throw new HttpError(400, 'Dostavchik topilmadi');
+        waiterId = c.id;
+      }
       const t0 = now();
       const id = q("INSERT INTO orders (room_id, waiter_id, guests, note, opened_at, takeaway, label, delivery, phone, address) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)").run(
-        roomId, user.id, int(body.guests, 'Mehmonlar', { min: 1, max: 1000, def: 1 }), str(body.note, 'Izoh', { max: 300 }), t0,
-        dv ? dv.name : str(body.label, 'Mijoz', { max: 60 }), dv ? 1 : 0, dv ? dv.phone : '', dv ? dv.address : ''
+        roomId, waiterId, int(body.guests, 'Mehmonlar', { min: 1, max: 1000, def: 1 }), str(body.note, 'Izoh', { max: 300 }), t0,
+        isDelivery ? str(dv.name ?? body.label, 'Mijoz ismi', { max: 60 }) : str(body.label, 'Mijoz', { max: 60 }), isDelivery ? 1 : 0,
+        isDelivery ? str(dv.phone, 'Telefon', { max: 30 }) : '', isDelivery ? str(dv.address, 'Manzil', { max: 200 }) : ''
       ).lastInsertRowid;
-      if (dv && dv.fee > 0) {
+      const fee = isDelivery ? Number(settings().delivery_fee) || 0 : 0;
+      if (fee > 0) {
         q(`INSERT INTO order_items (order_id, dish_id, name, price, cost, qty, note, status, needs_kitchen, prep_minutes, created_at, served_at)
-          VALUES (?, NULL, 'Yetkazib berish', ?, 0, 1, ?, 'served', 0, 0, ?, ?)`).run(id, dv.fee, dv.address, t0, t0);
+          VALUES (?, NULL, 'Yetkazib berish', ?, 0, 1, '', 'served', 0, 0, ?, ?)`).run(id, fee, t0, t0);
       }
-      audit(user, 'order_open', `#${id} ${dv ? `Yetkazib berish: ${dv.name} ${dv.phone}, ${dv.address}` : 'Olib ketish'}`);
+      audit(user, 'order_open', `#${id} ${isDelivery ? `Dostavka${dv.phone ? `: ${dv.phone}` : ''}${dv.address ? `, ${dv.address}` : ''}` : 'Olib ketish'}`);
       events.publish('rooms');
       return orderDetails(id);
     }
@@ -1237,6 +1246,11 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const o = getOrderRow(params.id);
     assertOrderAccess(user, o);
     if (o.status !== 'open') throw new HttpError(400, 'Buyurtma yopilgan');
+    // A delivery's phone and address can be filled in or corrected later.
+    if (o.delivery && (body.phone !== undefined || body.address !== undefined)) {
+      q('UPDATE orders SET phone = ?, address = ? WHERE id = ?').run(
+        body.phone !== undefined ? str(body.phone, 'Telefon', { max: 30 }) : o.phone, body.address !== undefined ? str(body.address, 'Manzil', { max: 200 }) : o.address, o.id);
+    }
     q('UPDATE orders SET guests = ?, note = ?, label = ? WHERE id = ?').run(
       body.guests !== undefined ? int(body.guests, 'Mehmonlar', { min: 1, max: 1000 }) : o.guests,
       body.note !== undefined ? str(body.note, 'Izoh', { max: 300 }) : o.note,
@@ -1307,10 +1321,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   }
 
   function getItem(id) {
-    const it = q(`SELECT i.*, o.room_id, o.waiter_id, o.status order_status, o.takeaway, o.label, r.name room_name, r.number room_number
+    const it = q(`SELECT i.*, o.room_id, o.waiter_id, o.status order_status, o.takeaway, o.delivery, o.label, r.name room_name, r.number room_number
       FROM order_items i JOIN orders o ON o.id = i.order_id JOIN rooms r ON r.id = o.room_id WHERE i.id = ?`).get(id);
     if (!it) throw new HttpError(404, 'Taom topilmadi');
-    if (it.takeaway) it.room_name = placeName({ id: it.order_id, takeaway: 1, label: it.label }, null);
+    if (it.takeaway) it.room_name = placeName({ id: it.order_id, takeaway: 1, delivery: it.delivery, label: it.label }, null);
     return it;
   }
 
@@ -1668,7 +1682,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   function cancelOrder({ user, params, body }) {
     const o = getOrderRow(params.id);
     if (o.status !== 'open') throw new HttpError(400, 'Buyurtma yopilgan');
-    const live = q("SELECT COUNT(*) c FROM order_items WHERE order_id = ? AND status != 'cancelled'").get(o.id).c;
+    // The automatic delivery fee line alone does not make a check "with dishes".
+    const live = q("SELECT COUNT(*) c FROM order_items WHERE order_id = ? AND status != 'cancelled' AND NOT (dish_id IS NULL AND name = 'Yetkazib berish' AND needs_kitchen = 0)").get(o.id).c;
     if (user.role === 'waiter') assertOrderAccess(user, o);
     // A check with dishes: the boss deletes it; when the boss has set a "delete password", anyone who knows it can,
     // and then even an admin needs it. Nothing is erased: the check stays in the reports with who deleted it.
@@ -1753,7 +1768,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     if (m) where += ` AND ${m}`;
     if (Number(query.waiter)) { where += ' AND o.waiter_id = ?'; params.push(Number(query.waiter)); }
     if (query.section !== undefined && query.section !== '') {
-      if (query.section === '-') where += ' AND o.takeaway = 1';
+      if (query.section === '-') where += ' AND o.takeaway = 1 AND o.delivery = 0';
+      else if (query.section === 'dlv') where += ' AND o.takeaway = 1 AND o.delivery = 1';
       else { where += ' AND o.takeaway = 0 AND r.section = ?'; params.push(str(query.section, "Bo'lim", { max: 40 })); }
     }
     if (Number(query.room)) { where += ' AND o.room_id = ? AND o.takeaway = 0'; params.push(Number(query.room)); }
@@ -1825,7 +1841,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const head = ['Chek', 'Holat', 'Ochilgan', 'Yopilgan', 'Zal', 'Xona', 'Ofitsant', 'Kassir', 'Mehmon', 'Taomlar', 'Tannarx', 'Taomlar summasi',
       'Xizmat haqi', 'Chegirma', 'Jami', 'Naqd', 'Karta', "O'tkazma", 'Bekor sababi'];
     const lines = rows.map((o) => [o.id, { closed: 'Yopilgan', open: 'Ochiq', cancelled: "O'chirilgan" }[o.status] || o.status, dt(o.opened_at), dt(o.closed_at),
-      o.takeaway ? 'Olib ketish' : o.room_section || '', o.takeaway ? placeName(o, null) : `${o.room_number} ${o.room_name}`, o.waiter_name, o.cashier_name || '', o.guests,
+      o.takeaway ? (o.delivery ? 'Dostavka' : 'Olib ketish') : o.room_section || '', o.takeaway ? placeName(o, null) : `${o.room_number} ${o.room_name}`, o.waiter_name, o.cashier_name || '', o.guests,
       (items.get(o.id) || []).join(', '), o.cost, o.subtotal, o.service_amount, o.discount, o.total, o.paid_cash, o.paid_card, o.paid_transfer, o.cancel_reason || '']);
     const csv = '\ufeff' + [head, ...lines].map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
     return { __file: { name: `cheklar_${dt(Date.now()).slice(0, 10)}.csv`, type: 'text/csv; charset=utf-8', body: csv } };
@@ -1868,11 +1884,11 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   // ---------- Kitchen ----------
   // Kitchen and waiter lists show takeaway checks as "Olib ketish #12 · Aziz".
-  const withPlace = (i) => (i.takeaway ? { ...i, room_name: placeName({ id: i.order_id, takeaway: 1, label: i.label }, null) } : i);
+  const withPlace = (i) => (i.takeaway ? { ...i, room_name: placeName({ id: i.order_id, takeaway: 1, delivery: i.delivery, label: i.label }, null) } : i);
 
   function kitchen() {
     const since = now() - 30 * MIN;
-    const items = q(`SELECT i.*, o.guests, o.takeaway, o.label, r.name room_name, r.number room_number, w.name waiter_name, c.name chef_name
+    const items = q(`SELECT i.*, o.guests, o.takeaway, o.delivery, o.label, r.name room_name, r.number room_number, w.name waiter_name, c.name chef_name
       FROM order_items i JOIN orders o ON o.id = i.order_id JOIN rooms r ON r.id = o.room_id
       JOIN users w ON w.id = o.waiter_id LEFT JOIN users c ON c.id = i.chef_id
       WHERE i.needs_kitchen = 1 AND (i.status IN ('new','cooking') OR (i.status = 'ready') OR (i.status = 'served' AND i.served_at > ?))
@@ -1881,7 +1897,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   }
 
   function myReady({ user }) {
-    return q(`SELECT i.*, o.takeaway, o.label, r.name room_name, r.number room_number FROM order_items i JOIN orders o ON o.id = i.order_id
+    return q(`SELECT i.*, o.takeaway, o.delivery, o.label, r.name room_name, r.number room_number FROM order_items i JOIN orders o ON o.id = i.order_id
       JOIN rooms r ON r.id = o.room_id WHERE i.status = 'ready' AND o.status = 'open' AND (o.waiter_id = ? OR ? IN ('owner','admin'))
       ORDER BY i.ready_at`).all(user.id, user.role).map(withPlace);
   }

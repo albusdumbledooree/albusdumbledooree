@@ -418,6 +418,15 @@ tr.clickable:hover td { background: var(--panel-2); }
 .checkpane .cp-head { padding: 12px 14px 10px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; background: var(--panel-2); border-radius: 10px 10px 0 0; }
 .checkpane .cp-head .avatar { border-radius: 8px; width: 40px; height: 40px; font-size: 16px; background: var(--brand); }
 .checkpane .cp-head .grow b { display: block; font-size: 17px; }
+/* Delivery check: name, phone, address (all optional) and the courier, under the title. */
+.checkpane .cp-head.dv { flex-wrap: wrap; }
+.checkpane .cp-head.dv .grow .small { display: flex; align-items: center; gap: 4px; }
+.dv-fields { order: 5; flex: 1 1 100%; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr); gap: 6px; }
+.dv-fields input, .dv-fields select { min-height: 36px; padding: 6px 8px; width: 100%; min-width: 0; font-size: 15px; }
+.dv-fields .dv-tel .icon-btn { margin-left: -2px; }
+.dv-fields .wide { grid-column: 1 / -1; }
+.dv-fields .dv-tel { display: flex; gap: 4px; min-width: 0; }
+.dv-fields .dv-tel .icon-btn { flex: none; width: 36px; height: 36px; }
 .checkpane .cp-body { overflow-y: auto; padding: 4px 14px; flex: 1; }
 .checkpane .cp-foot { border-top: 1px solid var(--line); padding: 10px 14px 12px; }
 .guests { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }

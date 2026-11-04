@@ -119,7 +119,7 @@ function bill(job, { width = 48 } = {}) {
   if (s.phone) text(s.phone);
   align(0);
   text('-'.repeat(width));
-  const place = o.delivery ? `Yetkazish #${o.id}` : o.takeaway ? `Olib ketish #${o.id}` : (o.room && o.room.name) || '';
+  const place = o.delivery ? `Dostavka #${o.id}` : o.takeaway ? `Olib ketish #${o.id}` : (o.room && o.room.name) || '';
   pair(`Chek #${o.id}${o.status !== 'closed' ? ' (hisob)' : ''}`, place);
   if (o.waiter && !o.takeaway) pair(`Ofitsant: ${o.waiter.name}`, `Mehmon: ${o.guests}`);
   text(`Ochildi: ${dt(o.opened_at)}`);

@@ -2385,11 +2385,30 @@ test('courier (dostavchik): own staff types, a delivery with phone, address and 
   assert.equal(c.delivery, 1); assert.equal(c.position, 'Dostavchik');
   const courier = await login('sardor', 'pass1234', 'demo');
   assert.equal((await call('GET', '/api/me', courier)).data.user.delivery, 1);
-  // A delivery: phone and address are needed; the fee is a line on the check.
+  // A courier's check is always a delivery ("Dostavka"); phone and address are optional; the fee comes from the settings.
   const soboy = (await call('GET', '/api/takeaway', courier)).data.room_id;
-  assert.equal((await call('POST', '/api/orders', courier, { room_id: soboy, delivery: { name: 'Aziz', phone: '', address: 'Yunusobod' } })).status, 400);
-  const o = (await call('POST', '/api/orders', courier, { room_id: soboy, delivery: { name: 'Aziz aka', phone: '+998901112233', address: 'Yunusobod 4-kvartal, 12-uy', fee: 15000 } })).data;
-  assert.equal(o.delivery, 1); assert.equal(o.label, 'Aziz aka'); assert.equal(o.address, 'Yunusobod 4-kvartal, 12-uy');
+  const bare = (await call('POST', '/api/orders', courier, { room_id: soboy, label: 'Olib ketaman' })).data;
+  assert.equal(bare.delivery, 1, 'a courier never writes a plain takeaway check');
+  assert.equal(bare.label, 'Olib ketaman');
+  await call('POST', `/api/orders/${bare.id}/cancel`, boss, {});
+  assert.equal((await call('PUT', '/api/settings', boss, { delivery_fee: 15000 })).data.delivery_fee, 15000);
+  const o = (await call('POST', '/api/orders', courier, { room_id: soboy, delivery: { name: 'Aziz aka', phone: '', address: '' } })).data;
+  assert.equal(o.delivery, 1); assert.equal(o.label, 'Aziz aka'); assert.equal(o.address, '');
+  // Phone and address can be filled in later.
+  await call('PUT', `/api/orders/${o.id}`, courier, { phone: '+998901112233', address: 'Yunusobod 4-kvartal, 12-uy' });
+  assert.equal((await call('GET', `/api/orders/${o.id}`, courier)).data.address, 'Yunusobod 4-kvartal, 12-uy');
+  // The cashier opens a delivery for a courier; a plain waiter is not a courier.
+  const kassaTw = (await call('GET', '/api/takeaway', boss)).data;
+  assert.deepEqual(kassaTw.couriers.map((x) => x.id), [c.id]);
+  const jasurId = (await call('GET', '/api/me', await login('jasur', '1234', 'demo'))).data.user.id;
+  assert.equal((await call('POST', '/api/orders', boss, { room_id: soboy, delivery: { courier_id: jasurId } })).status, 400);
+  const forC = (await call('POST', '/api/orders', boss, { room_id: soboy, delivery: { courier_id: c.id, phone: '901234567' } })).data;
+  assert.equal(forC.waiter.id, c.id); assert.equal(forC.delivery, 1);
+  await call('POST', `/api/orders/${forC.id}/cancel`, boss, {});
+  // Plain takeaway from the cashier stays takeaway and carries no fee.
+  const pick = (await call('POST', '/api/orders', boss, { room_id: soboy })).data;
+  assert.equal(pick.delivery, 0); assert.ok(!pick.items.length);
+  await call('POST', `/api/orders/${pick.id}/cancel`, boss, {});
   const menu = (await call('GET', '/api/menu', courier)).data;
   const osh = menu.dishes.find((d) => /Osh/.test(d.name));
   const withDish = (await call('POST', `/api/orders/${o.id}/items`, courier, { items: [{ dish_id: osh.id, qty: 3 }] })).data;
@@ -2410,6 +2429,14 @@ test('courier (dostavchik): own staff types, a delivery with phone, address and 
   const row = st.staff.find((r) => r.id === c.id);
   assert.ok(row, JSON.stringify(st.staff.map((r) => r.name)));
   assert.equal(row.revenue, ord.total);
+  // Hall, takeaway and delivery are counted apart; the checks list filters deliveries.
+  assert.ok(st.summary.types.delivery.checks >= 1 && st.summary.types.delivery.revenue >= ord.total);
+  assert.equal(st.summary.types.hall.revenue + st.summary.types.takeaway.revenue + st.summary.types.delivery.revenue, st.summary.revenue);
+  const dl = (await call('GET', `/api/checks?status=all&section=dlv&from=${day0.getTime()}&to=${day0.getTime() + 864e5}`, boss)).data;
+  assert.ok(dl.rows.length >= 1 && dl.rows.every((r) => r.delivery === 1), JSON.stringify(dl.rows.map((r) => r.delivery)));
+  const tk = (await call('GET', `/api/checks?status=all&section=-&from=${day0.getTime()}&to=${day0.getTime() + 864e5}`, boss)).data;
+  assert.ok(tk.rows.every((r) => r.delivery === 0));
+  await call('PUT', '/api/settings', boss, { delivery_fee: 0 });
   const person = (await call('GET', `/api/stats/user/${c.id}?from=${day0.getTime()}&to=${day0.getTime() + 864e5}`, boss)).data;
   assert.ok(JSON.stringify(person).includes(osh.name));
   // Changing their type to a plain waiter takes the deliveries off.

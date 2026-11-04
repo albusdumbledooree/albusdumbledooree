@@ -109,6 +109,8 @@ Views.reports = {
         <div class="grid grid-2" style="margin-top:16px">
           <div class="card"><div class="card-head"><h2>${t("To'lov turlari")}</h2></div>
             ${hbars([{ label: t('Naqd'), value: s.cash }, { label: t('Karta'), value: s.card }, { label: t("O'tkazma"), value: s.transfer }, ...(s.debt ? [{ label: t('Qarzga'), value: s.debt }] : []), ...(s.bonus ? [{ label: t('Bonus bilan'), value: s.bonus }] : []), ...(s.staff ? [{ label: t('Xodim hisobiga'), value: s.staff }] : [])].filter((x) => x.value))}</div>
+          ${s.types && (s.types.takeaway.checks || s.types.delivery.checks) ? `<div class="card"><div class="card-head"><h2>${t('Savdo turlari')}</h2></div>
+            ${hbars([{ label: `${t('Zal')} (${s.types.hall.checks})`, value: s.types.hall.revenue }, { label: `${t('Olib ketish')} (${s.types.takeaway.checks})`, value: s.types.takeaway.revenue }, { label: `${t('Dostavka')} (${s.types.delivery.checks})`, value: s.types.delivery.revenue }].filter((x) => x.value))}</div>` : ''}
           ${r ? `<div class="card"><div class="card-head"><h2>${t('Xarajatlar')}</h2></div>${hbars(r.expense_by_category.map((x) => ({ label: x.key, value: x.value })), { red: true })}</div>` : ''}
           <div class="card"><div class="card-head"><h2>${t("Eng ko'p sotilgan")}</h2><a href="#" data-rtab="dishes" class="small">${t('Hammasi')} →</a></div>
             ${hbars(d.stats.categories.flatMap((c) => c.dishes).sort((a, b) => b.qty - a.qty).slice(0, 8).map((x) => ({ label: `${x.name} (${x.qty})`, value: x.revenue })))}</div>
@@ -142,7 +144,8 @@ Views.reports = {
       downloadCsv(`hisobot_${localDay(r.from)}_${localDay(r.to - 1)}.csv`, [
         [t('Hisobot'), `${fmtDate(r.from)} — ${fmtDate(r.to - 1)}`, d.stats.user ? d.stats.user.name : t('Hamma xodimlar')], [],
         [t('Savdo'), s.revenue], [t('Cheklar'), s.checks], [t('Mehmonlar'), s.guests], [t("O'rtacha chek"), s.avg], [t('Xizmat haqi'), s.service], [t('Chegirma'), s.discount],
-        [t('Naqd'), s.cash], [t('Karta'), s.card], [t("O'tkazma"), s.transfer], [],
+        [t('Naqd'), s.cash], [t('Karta'), s.card], [t("O'tkazma"), s.transfer],
+        ...(s.types ? [[t('Zal'), s.types.hall.revenue], [t('Olib ketish'), s.types.takeaway.revenue], [t('Dostavka'), s.types.delivery.revenue]] : []), [],
         [W('Taomlar'), t('Soni'), t('Summa'), t('Foyda')],
         ...d.stats.categories.flatMap((c) => [[c.name, c.qty, c.revenue, c.has_cost ? c.profit : ''], ...c.dishes.map((x) => [`   ${x.name}`, x.qty, x.revenue, x.has_cost ? x.profit : ''])]), [],
         [t('Xodim'), t('Cheklar'), t('Mehmonlar'), t('Savdo'), t('Chegirma'), t('Bekor'), t('Yopgan cheklari')],

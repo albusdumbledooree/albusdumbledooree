@@ -107,7 +107,7 @@ function flowiLogo(height = 22) {
 function jobName(u) { return (u && u.position && u.app !== 0 ? u.position : roleName(u && u.role)); }
 
 function placeName(o) {
-  if (o.delivery) return `${t('Yetkazish')} #${o.id}${o.label ? ` · ${o.label}` : ''}`;
+  if (o.delivery) return `${t('Dostavka')} #${o.id}${o.label ? ` · ${o.label}` : ''}`;
   if (o.takeaway) return `${isShop() ? t('Sotuv') : t('Olib ketish')} #${o.id}${o.label ? ` · ${o.label}` : ''}`;
   return o.room ? o.room.name : o.room_name || '';
 }

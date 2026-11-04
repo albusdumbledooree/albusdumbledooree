@@ -245,12 +245,12 @@ Views.history = {
     const phone = window.matchMedia('(max-width: 760px)').matches;
     const label = h.status === 'unpaid' ? t("Barcha to'lanmagan cheklar") : h.period === 'all' ? (s.first_at ? t('{0} dan beri', fmtDate(s.first_at)) : '') : `${fmtDate(r.from)}${r.to - r.from > 24 * 60 * MIN ? ` — ${fmtDate(r.to - 1)}` : ''}`;
     const sel = (name, opts, val) => `<select data-hf="${name}">${opts.map(([k, n]) => `<option value="${esc(k)}" ${String(val) === String(k) ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>`;
-    const rooms = f.rooms.filter((x) => !h.section || h.section === '-' || x.section === h.section);
+    const rooms = f.rooms.filter((x) => !h.section || h.section === '-' || h.section === 'dlv' || x.section === h.section);
     const filters = `<div class="ck-filters">
         ${sel('status', CK_TYPES().map(([k, n]) => [k, `${t('Turi')}: ${n}`]), h.status)}
         ${sel('method', CK_METHODS(), h.method)}
         ${sel('waiter', [['', `${roleName('waiter')}: ${t('hammasi')}`], ...f.waiters.map((w) => [w.id, w.name])], h.waiter)}
-        ${isShop() ? '' : sel('section', [['', `${t('Zal')}: ${t('hammasi')}`], ...f.sections.map((x) => [x, x]), ['-', t('Olib ketish')]], h.section)}
+        ${isShop() ? '' : sel('section', [['', `${t('Zal')}: ${t('hammasi')}`], ...f.sections.map((x) => [x, x]), ['-', t('Olib ketish')], ['dlv', t('Dostavka')]], h.section)}
         ${isShop() ? '' : sel('room', [['', `${t('Stol / xona')}: ${t('hammasi')}`], ...rooms.map((x) => [x.id, `${x.number} · ${x.name}`])], h.room)}
         ${sel('discount', [['', `${t('Chegirma')}: ${t('hammasi')}`], ['yes', t('Chegirmali')], ['no', t('Chegirmasiz')]], h.discount)}
         <div class="scan">${icon('search', 18)}<input type="search" id="h-q" placeholder="${esc(t('Chek raqami, xona yoki ofitsant'))}" value="${esc(h.q)}"></div></div>`;
@@ -1614,6 +1614,9 @@ Views.settings = {
         <label class="field" id="sv-pct">${t('Foiz, %')}<input type="number" name="service_pct" min="0" max="50" step="0.5" value="${s.service_pct}"></label>
         <label class="field" id="sv-guest">${t('Bir kishi uchun')} (${esc(s.currency)})<input type="number" name="service_per_guest" min="0" step="500" value="${s.service_per_guest}"></label></div>
       <p class="small muted" style="margin-top:8px">${t("Xizmat haqi faqat shu yerda o'zgaradi. Olib ketishda xizmat haqi olinmaydi.")}</p>
+      ${isShop() ? '' : `<h3 style="margin:18px 0 10px">${icon('truck', 18)} ${t('Dostavka')}</h3>
+      <div class="form-grid"><label class="field">${t('Yetkazib berish haqi')} (${esc(s.currency)})<input type="number" name="delivery_fee" min="0" step="1000" value="${s.delivery_fee || 0}"></label></div>
+      <p class="small muted" style="margin-top:8px">${t("Har bir dostavka chekiga avtomatik qo'shiladi. 0 — qo'shilmaydi.")}</p>`}
       <p class="small muted" style="margin-top:12px">${icon('receipt', 14)} ${t("Chek ko'rinishi (logotip o'lchami, qog'oz kengligi, chek ostidagi yozuvlar): Sozlamalar → Ko'rinish.")}</p>
       ${moduleOn('payroll') ? `<h3 style="margin:18px 0 10px">${icon('utensils', 18)} ${t('Xodimlar ovqati')}</h3>
       <div class="form-grid"><label class="field">${t('Kassada "Xodim hisobiga" yopilgan chek ish haqidan qaysi narxda ushlanadi')}<select name="staff_meal_price">

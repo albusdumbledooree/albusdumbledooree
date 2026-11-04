@@ -2,6 +2,16 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.29.0 — Dostavka alohida: "Olib ketish" bilan aralashmaydi
+
+- Dostavchikda "Olib ketish" o'rniga 🚚 **Dostavka** bo'limi: uning hamma cheklari "Dostavka #N" bo'lib yuradi.
+- Kassir va boshliqda ikkita alohida bo'lim: **Olib ketish** va **Dostavka** (har birida o'z hisoblagichi). Kassir dostavka chekini ochib, dostavchikni tanlay oladi.
+- Mijoz ismi, telefoni va manzili — ixtiyoriy; keyin ham to'ldirish yoki tuzatish mumkin, telefon yonida qo'ng'iroq tugmasi.
+- Sozlamalar → Muassasa: **Yetkazib berish haqi** (standart 0 — qo'shilmaydi). Dostavkada xizmat haqi olinmaydi.
+- Hisobot: yangi "Savdo turlari" — Zal / Olib ketish / Dostavka alohida (Excelda ham). Cheklar hisobotida "Dostavka" filtri; "Olib ketish" filtri endi dostavkani qo'shmaydi.
+- Oshxona ekrani, oshxona qog'ozi va mijoz cheki: "Dostavka #N".
+- Faqat avtomatik dostavka haqi qatori bo'lgan bo'sh chekni o'chirish taomli chekdek parol so'ramaydi.
+
 ## 1.28.0 — Xonalar "kim birinchi ochsa", oshxona qog'ozi yangi uslubda
 - **Xonalarni ofitsantga biriktirish shart emas**: bo'sh xonani istalgan ofitsant ochadi, chek yopilguncha xona o'shaniki;
   boshqa ofitsantlar uni xira ko'radi (kimniki va summasi), faqat ko'ra oladi, taom ura olmaydi. Chek yopilgach xona yana bo'sh.

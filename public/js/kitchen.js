@@ -4,7 +4,7 @@
 function ticketHtml(i) {
   const notify = App.kitchenMode === 'notify';
   return `<div class="ticket ${i.status}">
-    <div class="t-head">${icon(i.takeaway ? 'shopping-bag' : 'door-open', 16)}<b>${esc(i.room_name)}</b>
+    <div class="t-head">${icon(i.delivery ? 'truck' : i.takeaway ? 'shopping-bag' : 'door-open', 16)}<b>${esc(i.room_name)}</b>
       <span>· ${esc(i.waiter_name)}</span><span class="grow"></span><span class="timer">${icon('clock', 14)} <b data-since="${i.created_at}"></b></span></div>
     <div class="dish-name"><span class="q">${i.qty}×</span>${esc(i.name)}</div>
     ${modsText(i) ? `<div class="note mods-note">${icon('plus', 16)} ${esc(modsText(i))}</div>` : ''}

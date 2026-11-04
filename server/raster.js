@@ -208,7 +208,7 @@ function billRaster(job, { paper = 80, logo = null } = {}) {
   }
   for (const r of [s.address, s.phone].filter(Boolean).flatMap((x) => wrap(x, cols))) line(r, { center: true });
   dashes();
-  const place = o.delivery ? `Yetkazish #${o.id}` : o.takeaway ? `Olib ketish #${o.id}` : (o.room && o.room.name) || '';
+  const place = o.delivery ? `Dostavka #${o.id}` : o.takeaway ? `Olib ketish #${o.id}` : (o.room && o.room.name) || '';
   line(`Chek #${o.id}${o.status !== 'closed' ? ' (hisob)' : ''}`, { right: place });
   if (o.waiter && !o.takeaway) line(`Ofitsant: ${o.waiter.name}`, { right: `Mehmon: ${o.guests}` });
   line(`Ochildi: ${dt(o.opened_at)}`);

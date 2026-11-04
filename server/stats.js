@@ -44,7 +44,10 @@ function createStats(db, { now }) {
     const live = items.filter((i) => i.status !== 'cancelled');
     const cancelled = items.filter((i) => i.status === 'cancelled');
     const revenue = sum(orders, (o) => o.total);
+    // Hall, take-away and delivery are counted apart so a courier's money never mixes with the counter's.
+    const kind = (k) => { const os = orders.filter((o) => (o.takeaway ? (o.delivery ? 'delivery' : 'takeaway') : 'hall') === k); return { checks: os.length, revenue: sum(os, (o) => o.total) }; };
     return {
+      types: { hall: kind('hall'), takeaway: kind('takeaway'), delivery: kind('delivery') },
       revenue, checks: orders.length, guests: sum(orders, (o) => o.guests), avg: orders.length ? Math.round(revenue / orders.length) : 0,
       service: sum(orders, (o) => o.service_amount), discount: sum(orders, (o) => o.discount),
       cash: sum(orders, (o) => o.paid_cash), card: sum(orders, (o) => o.paid_card), transfer: sum(orders, (o) => o.paid_transfer),
