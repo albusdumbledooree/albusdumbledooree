@@ -650,7 +650,7 @@ function docHtml(title, body, s = App.settings || {}, mono = false) {
     @page{size:${narrow ? 58 : 80}mm auto;margin:0}
     ${mono ? `${ReceiptFont.css()}
     body,td,th,.foot{font-family:"FLOWI Chek","DejaVu Sans Mono",Consolas,"Courier New",monospace !important;font-weight:700}
-    body{font-size:${narrow ? 11.5 : 12.5}px;line-height:1.5}.items td{padding:5px 0}.kv td{padding:4px 0}
+    body{font-size:${narrow ? 11.5 : 12.5}px;line-height:1.4}.items td{padding:3px 0}.kv td{padding:2px 0}
     .name{letter-spacing:.02em}.kv td:last-child{white-space:nowrap}tr.pp{font-size:${narrow ? 11.5 : 12.5}px !important}.pp td{white-space:nowrap}` : ''}
   </style></head><body>${body}</body></html>`;
 }
@@ -685,7 +685,7 @@ function perPerson(o) { return o.guests > 1 ? Math.round(o.total / o.guests) : 0
 async function printCheck(orderId) {
   try {
     const r = await POST(`/api/orders/${orderId}/print`);
-    if (!r.sent_to) return printReceipt(r);
+    if (!r.sent_to) return printReceipt({ ...r, printed_by: App.user && App.user.name });
     if (r.sent_to.online) toast(t('Chek {0} printeriga yuborildi', r.sent_to.name), 'ok');
     else toast(t("{0} printeri hozir ulanmagan — chek u yoqilganda chiqadi", r.sent_to.name), 'warn', 8000);
   } catch (e) { toastError(e); }
@@ -747,7 +747,7 @@ function receiptBody(o, s = App.settings) {
       ${(o.payments || []).map((p) => `<tr><td>${fmtDate(p.created_at)} ${methodName(p.method)}:</td><td>${num(p.amount)}</td></tr>`).join('')}
       ${o.balance > 0 ? `<tr class="big"><td>${t('QOLDI')}:</td><td>${num(o.balance)}</td></tr>${o.due_at ? `<tr><td>${t("To'lash sanasi")}:</td><td>${fmtDate(o.due_at)}</td></tr>` : ''}`
         : `<tr class="big"><td colspan="2" class="c">${t("TO'LIQ TO'LANDI")}</td></tr>`}</table>` : ''}
-    ${o.cashier ? `<div style="margin-top:4px">${t('Kassir')}: ${esc(o.cashier.name)}</div>` : ''}
+    ${o.cashier || o.printed_by ? `<div style="margin-top:4px">${t('Kassir')}: ${esc(o.cashier ? o.cashier.name : o.printed_by)}</div>` : ''}
     ${foot.length ? `<div class="foot">${foot.map((x) => `<div>${esc(x)}</div>`).join('')}</div>` : ''}`;
 }
 function printReceipt(o, s = App.settings) {
@@ -819,7 +819,7 @@ const OrderPrinter = {
     try {
       const r = await this.dev('GET', '/api/device/print-jobs');
       for (const j of r.jobs) {
-        if (j.kind === 'bill') printReceipt(j.order, { ...(App.settings || {}), ...j.shop }); else printKitchenTicket(j);
+        if (j.kind === 'bill') printReceipt({ ...j.order, printed_by: j.by }, { ...(App.settings || {}), ...j.shop }); else printKitchenTicket(j);
         await new Promise((ok) => setTimeout(ok, 800));
       }
       if (r.jobs.length) await this.dev('POST', '/api/device/print-ack', { upto: r.last });

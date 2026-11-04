@@ -2,6 +2,10 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.27.1 — Chek ixchamroq, kassir doim yoziladi
+- Mijoz chekida qatorlar biroz yaqinroq (chek ~17% qisqa), lekin bir-biriga tegmaydi.
+- "Kassir: …" doim chiqadi: yopilgan chekda pulni olgan kassir, to'lovdan oldingi hisob chekida "Chek"ni bosgan xodim.
+
 ## 1.27.0 — Mijoz cheki rasm bo'lib chiqadi: o'z shrifti, keng qatorlar
 - **FLOWI Printer orqali mijoz cheki endi rasm bo'lib chiqadi**: shrift DejaVu Sans Mono (qalin), qatorlar orasi keng,
   ustunlar tekis — har qanday 80 / 58 mm printerda bir xil (avval printerning o'z shrifti va oralig'i edi, uni buyruq

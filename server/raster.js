@@ -158,13 +158,13 @@ function billRaster(job, { paper = 80, logo = null } = {}) {
   const c = new Canvas(W);
   const F = FONT.sizes[24]; const cw = F.w;
   const cols = Math.floor((W - 2 * M) / cw);
-  const ROW = 46; // one line of text, with the space under it
+  const ROW = 38; // one line of text (29 dots) with the space under it
   const line = (str, { center = false, right = '', underline = false } = {}) => {
     let txt = String(str);
     // Too long for both on one line: the left part on its own line, the right one under it (nothing is cut off).
     if (right && txt.length + 1 + right.length > cols) {
       line(txt);
-      c.y -= 10;
+      c.y -= 6;
       txt = '';
     }
     const top = c.y + Math.round((ROW - F.h) / 2);
@@ -174,15 +174,15 @@ function billRaster(job, { paper = 80, logo = null } = {}) {
     if (right) c.text(W - M - right.length * cw, top, right, 24);
     c.y += ROW;
   };
-  const dashes = () => { c.bar(M, W - M, c.y + 12, 3, 10, 6); c.y += 28; };
-  const double = () => { c.bar(M, W - M, c.y + 8, 3); c.bar(M, W - M, c.y + 15, 3); c.y += 28; };
+  const dashes = () => { c.bar(M, W - M, c.y + 9, 3, 10, 6); c.y += 22; };
+  const double = () => { c.bar(M, W - M, c.y + 6, 3); c.bar(M, W - M, c.y + 13, 3); c.y += 24; };
   // The columns: name | count | sum (a long name wraps inside its column).
   const QC = paper === 58 ? 3 : 4; const SC = paper === 58 ? 9 : 11; const NC = cols - QC - SC;
   const cols3 = (name, qty, total) => {
     const rows = wrap(name, NC - 1);
     rows.forEach((r, n) => {
       // The rest of a long name sits closer under its first line, so it reads as one dish.
-      if (n > 0) c.y -= 10;
+      if (n > 0) c.y -= 6;
       const top = c.y + Math.round((ROW - F.h) / 2);
       c.text(M, top, r, 24);
       if (n === 0) {
@@ -204,7 +204,7 @@ function billRaster(job, { paper = 80, logo = null } = {}) {
   // The business's name, big, centred (wrapped when long).
   const T = FONT.sizes[34];
   for (const r of wrap(s.name || '', Math.floor((W - 2 * M) / T.w))) {
-    c.text(Math.round((W - r.length * T.w) / 2), c.y + 8, r, 34); c.y += T.h + 18;
+    c.text(Math.round((W - r.length * T.w) / 2), c.y + 4, r, 34); c.y += T.h + 8;
   }
   for (const r of [s.address, s.phone].filter(Boolean).flatMap((x) => wrap(x, cols))) line(r, { center: true });
   dashes();
@@ -225,7 +225,7 @@ function billRaster(job, { paper = 80, logo = null } = {}) {
   }
   const item = (i) => {
     cols3(i.name, i.qty, sum(i.qty * i.price));
-    if (modsOf(i)) for (const r of wrap(`+ ${modsOf(i)}`, cols - 2)) { c.y -= 10; line(`  ${r}`); }
+    if (modsOf(i)) for (const r of wrap(`+ ${modsOf(i)}`, cols - 2)) { c.y -= 6; line(`  ${r}`); }
   };
   if (s.receipt_group !== false && merged.some((i) => i.category_name)) {
     const groups = new Map();
@@ -251,7 +251,7 @@ function billRaster(job, { paper = 80, logo = null } = {}) {
   const total = sum(o.total);
   c.text(M, c.y + 6, 'JAMI', 46);
   c.text(W - M - total.length * J.w, c.y + 6, total, 46);
-  c.y += J.h + 14;
+  c.y += J.h + 8;
   double();
   if (o.guests > 1 && !o.takeaway && s.receipt_per_person !== false) line(`${o.guests} kishi - har biriga`, { right: sum(Math.round(o.total / o.guests)) });
   // An advance sale: what was paid ahead, later payments, what is left.
@@ -263,7 +263,9 @@ function billRaster(job, { paper = 80, logo = null } = {}) {
     if (o.balance > 0) line('QOLDI', { right: sum(o.balance) }); else line("TO'LIQ TO'LANDI", { center: true });
   }
   dashes();
-  if (o.cashier) line(`Kassir: ${o.cashier.name}`);
+  // Who took the money; on a bill before payment — who printed it.
+  const kassir = o.cashier ? o.cashier.name : job.by;
+  if (kassir) line(`Kassir: ${kassir}`);
   for (const r of String(s.receipt_footer || '').split('\n').map((x) => x.trim()).filter(Boolean).flatMap((x) => wrap(x, cols))) line(r, { center: true });
   c.y += 20;
   return c.escpos();
