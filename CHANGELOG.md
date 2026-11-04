@@ -2,6 +2,14 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.31.0 — flowi.uz sayti yangilandi
+
+- "Imkoniyatlar" bo'limiga 3 ta yangi kartochka qo'shildi: **Dostavka**, **Taom qo'shimchalari** (modifikatorlar), **Boshliq paneli**.
+- "Kassa" qismida yangi qator: har bir bo'lim o'z printeriga chiqadi, ikkinchi kompyuterdagi chek ham kassa printeridan chiqadi.
+- Sayt yuqorisidagi "Yangi" xabari: "Dostavka, taom qo'shimchalari va boshliq paneli".
+- Bosh qismdagi qatorga qo'shildi: "Kassa uchun Windows dasturi".
+- Hammasi o'zbek va rus tilida.
+
 ## 1.30.3 — Saytdagi "bepul kunlar" platformadan olinadi
 
 - flowi.uz saytida "14 kun bepul" qo'lda yozib qo'yilgan edi (asosiy tugma, pastki sarlavha, Google tavsifi). Endi platformadagi Tariflar → "Yangi biznesga bepul sinov (kun)" qiymati saytning hamma joyida (o'zbek va rus tilida) chiqadi.
