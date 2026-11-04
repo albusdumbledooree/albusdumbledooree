@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "historyId": "cd1cb162-72bc-45c4-9660-d43bc1dd4938",
+  "currentRevision": null,
+  "pendingChanges": false,
+  "files": {
+    "AGENTS.md": {
+      "hash": "1a68041fc901ff835682a2a8d6f63c96dbb0b9eef8fb0971e97a79eaf69303d3",
+      "content": "/root/.cache/hyperframes/history/cd1cb162-72bc-45c4-9660-d43bc1dd4938/blobs/1a/1a68041fc901ff835682a2a8d6f63c96dbb0b9eef8fb0971e97a79eaf69303d3"
+    },
+    "CLAUDE.md": {
+      "hash": "1a68041fc901ff835682a2a8d6f63c96dbb0b9eef8fb0971e97a79eaf69303d3",
+      "content": "/root/.cache/hyperframes/history/cd1cb162-72bc-45c4-9660-d43bc1dd4938/blobs/1a/1a68041fc901ff835682a2a8d6f63c96dbb0b9eef8fb0971e97a79eaf69303d3"
+    },
+    "gsap.min.js": {
+      "hash": "92bb9a96476f983d212a2bc4f54c889039c1696dd4461d40a736860938570fbb",
+      "content": "/root/.cache/hyperframes/history/cd1cb162-72bc-45c4-9660-d43bc1dd4938/blobs/92/92bb9a96476f983d212a2bc4f54c889039c1696dd4461d40a736860938570fbb"
+    },
+    "hyperframes.json": {
+      "hash": "53dbce1e19aa713cbb12ee0bc4d206143b45ab15e6ffbfcaa8f69572d4d24d50",
+      "content": "/root/.cache/hyperframes/history/cd1cb162-72bc-45c4-9660-d43bc1dd4938/blobs/53/53dbce1e19aa713cbb12ee0bc4d206143b45ab15e6ffbfcaa8f69572d4d24d50"
+    },
+    "index.html": {
+      "hash": "9fcdde55237687a194ac13909cac4f0515ba84d27186163c0b12d5ddc313cbfd",
+      "content": "/root/.cache/hyperframes/history/cd1cb162-72bc-45c4-9660-d43bc1dd4938/blobs/9f/9fcdde55237687a194ac13909cac4f0515ba84d27186163c0b12d5ddc313cbfd"
+    },
+    "meta.json": {
+      "hash": "da4050b53081279bd8deda36dbcd2280a32bb6354aba3d2b1469e563a92365a0",
+      "content": "/root/.cache/hyperframes/history/cd1cb162-72bc-45c4-9660-d43bc1dd4938/blobs/da/da4050b53081279bd8deda36dbcd2280a32bb6354aba3d2b1469e563a92365a0"
+    },
+    "package.json": {
+      "hash": "fc4ced63301dd877a2a32587c1d982fc9daa08c79db6c4e365bc385d0def364f",
+      "content": "/root/.cache/hyperframes/history/cd1cb162-72bc-45c4-9660-d43bc1dd4938/blobs/fc/fc4ced63301dd877a2a32587c1d982fc9daa08c79db6c4e365bc385d0def364f"
+    }
+  },
+  "revisions": {},
+  "checks": {
+    "latest": null,
+    "revisions": {},
+    "unversioned": []
+  },
+  "snapshots": {
+    "latest": null,
+    "revisions": {},
+    "unversioned": []
+  },
+  "renders": {
+    "latest": {
+      "id": "e205e1e6-7528-4be1-b6a2-efbcc5d21771",
+      "completedAt": 1793829572949,
+      "output": "/tmp/claude-0/-home-user-albusdumbledooree/a430697a-b2cc-505b-997f-939bd7d5a058/scratchpad/test.mp4",
+      "status": "completed",
+      "revision": null
+    },
+    "retainedRevisions": []
+  },
+  "pendingArtifactCleanup": []
+}
