@@ -2786,3 +2786,18 @@ test("To'lov va yordam boti: the business links with one tap, questions go to th
     tg.close();
   }
 });
+
+test('front page: the free days set in the platform are written everywhere on the site (not a fixed "14")', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  const { plans, terms } = (await call('GET', '/api/platform/plans', admin)).data;
+  try {
+    assert.equal((await call('PUT', '/api/platform/plans', admin, { plans, terms: { ...terms, trial_days: 7 } })).status, 200);
+    for (const [path, word] of [['/', '7 kun bepul'], ['/ru', '7 дней бесплатно']]) {
+      const html = await (await fetch(base + path)).text();
+      assert.ok(!/\b14 (kun bepul|дней бесплатно)/.test(html), `${path} still says 14`);
+      assert.ok(html.split(word).length - 1 >= 3, `${path}: ${word} in the meta, the button and the last block`);
+    }
+  } finally {
+    await call('PUT', '/api/platform/plans', admin, { plans, terms });
+  }
+});

@@ -133,7 +133,10 @@ function createSeo({ publicDir, publicInfo, verify }) {
       v.yandex ? `<meta name="yandex-verification" content="${esc(v.yandex)}">` : '',
       structured(lang, origin, src, dict),
     ].filter(Boolean).join('\n  ');
-    return html.replace('</head>', `  ${head}\n</head>`);
+    // "14 kun bepul" in the page is only the default: the free days set in the platform (Tariflar) are written everywhere.
+    const days = Number((publicInfo().terms || {}).trial_days);
+    const out = html.replace('</head>', `  ${head}\n</head>`);
+    return Number.isFinite(days) && days > 0 ? out.replace(/\b14( kun bepul| дней бесплатно)/g, `${days}$1`) : out;
   }
 
   function lastmod() {

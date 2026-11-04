@@ -2,6 +2,10 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.30.3 — Saytdagi "bepul kunlar" platformadan olinadi
+
+- flowi.uz saytida "14 kun bepul" qo'lda yozib qo'yilgan edi (asosiy tugma, pastki sarlavha, Google tavsifi). Endi platformadagi Tariflar → "Yangi biznesga bepul sinov (kun)" qiymati saytning hamma joyida (o'zbek va rus tilida) chiqadi.
+
 ## 1.30.2 — Telefonda platforma va kichik ekranlar
 
 - Platforma: telefonda yuqoridagi tugmalar ekranga sig'may, sahifa o'ngga surilib qolardi. Endi tugmalar logotip ostidagi alohida qatorda turadi (320–430 px ekranlarda tekshirildi).
