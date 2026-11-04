@@ -2018,13 +2018,14 @@ Views.settings = {
     const folderCard = !owner ? '' : `<div class="card"><div class="card-head"><h2>${icon('folder-open')} ${t('Kompyuterdagi zaxira papka')}</h2></div>
       <p>${t("Barcha ma'lumotlar (cheklar, menyu, xodimlar, kirim-chiqim) har 3 soatda shu kompyuterdagi \"FLOWI zaxira\" papkasiga o'zi saqlanadi. Saytda ma'lumot yo'qolsa, shu fayldan to'liq tiklanadi.")}</p>
       ${!App.device ? `<div class="notice">${icon('info', 18)} ${t("Avtomatik zaxira faqat ulangan qurilmada ishlaydi (kassa kompyuteri).")}</div>`
+        : FolderBackup.oldDesktop() ? `<div class="notice">${icon('info', 18)} ${t("Papkaga avtomatik zaxira uchun FLOWI dasturini yangilang: Ctrl+Shift+S → Yangilanish (1.2.0 yoki yangisi).")}</div>`
         : !FolderBackup.supported() ? `<div class="notice">${icon('info', 18)} ${t("Bu brauzer papkaga yozolmaydi. Kompyuterda Chrome yoki Edge'dan foydalaning yoki pastdagi tugma bilan yuklab oling.")}</div>`
         : folder.state === 'granted' ? `<div class="notice blue">${icon('circle-check', 18)} ${t('Papka ulangan: {0}', esc(folder.dir.name))}${folder.last ? ` · ${t('oxirgi nusxa')}: ${fmtDateTime(folder.last)}` : ''}</div>`
         : folder.state === 'prompt' ? `<div class="notice">${icon('triangle-alert', 18)} ${t('Brauzer papkaga yozish uchun ruxsat so\'rayapti')}</div>` : ''}
       <div class="row">
         ${App.device && FolderBackup.supported() ? (folder.state === 'none' ? `<button class="btn primary" id="fb-pick">${icon('folder-open', 18)} ${t('Papkani tanlash')}</button>`
           : `${folder.state === 'prompt' ? `<button class="btn primary" id="fb-allow">${icon('lock-open', 18)} ${t('Ruxsat berish')}</button>` : `<button class="btn primary" id="fb-now">${icon('save', 18)} ${t('Hozir saqlash')}</button>`}
-            <button class="btn" id="fb-pick">${icon('folder-open', 18)} ${t('Boshqa papka')}</button><button class="btn red-text" id="fb-off">${icon('x', 18)} ${t("O'chirish")}</button>`) : ''}
+            <button class="btn" id="fb-pick">${icon('folder-open', 18)} ${t('Boshqa papka')}</button>${folder.desktop ? `<button class="btn" id="fb-open">${icon('folder-open', 18)} ${t('Papkani ochish')}</button>` : ''}<button class="btn red-text" id="fb-off">${icon('x', 18)} ${t("O'chirish")}</button>`) : ''}
         <button class="btn" id="fb-download">${icon('hard-drive-download', 18)} ${t('Zaxirani yuklab olish')}</button></div></div>
       <div class="card"><div class="card-head"><h2>${icon('rotate-ccw')} ${t('Zaxiradan tiklash')}</h2></div>
         <p>${t("Zaxira faylini (.db) tanlang — sayt shu fayldagi holatga to'liq qaytadi. Hozirgi ma'lumotlar oldin serverda alohida saqlab qo'yiladi, shuning uchun hech narsa yo'qolmaydi.")}</p>
@@ -2044,6 +2045,7 @@ Views.settings = {
     on('#fb-allow', guard(async () => { if (await FolderBackup.allow()) toast(t('Zaxira saqlandi'), 'ok'); refreshView(); }));
     on('#fb-now', guard(async () => { const n = await FolderBackup.run(true); toast(t('Saqlandi: {0}', n), 'ok'); refreshView(); }));
     on('#fb-off', guard(async () => { await FolderBackup.forget(); refreshView(); }));
+    on('#fb-open', () => FolderBackup.desk() && FolderBackup.desk().open());
     on('#fb-download', guard(async () => {
       const res = await fetch('/api/backup/download', { headers: { Authorization: `Bearer ${App.token}` } });
       if (!res.ok) throw new Error(tServer((await res.json()).error));

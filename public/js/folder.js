@@ -4,11 +4,17 @@
  * The boss picks a folder once; a "FLOWI zaxira" folder is made inside it and every few hours
  * the whole database of the business is written there as one file (the last 60 are kept).
  * The browser remembers the folder; after a restart it may ask once more for permission.
+ * In the FLOWI Windows program (1.2+) the program itself writes the files (its browser has no folder access):
+ * window.flowiDesktop.backup — the folder is chosen in Windows' own dialog and remembered, no permission questions.
  */
 const FolderBackup = {
   EVERY: 3 * 60 * MIN,
   KEEP: 60,
-  supported() { return 'showDirectoryPicker' in window; },
+  // The FLOWI Windows program's own folder writer, when this page runs inside it.
+  desk() { return window.flowiDesktop && window.flowiDesktop.backup ? window.flowiDesktop.backup : null; },
+  supported() { return !!this.desk() || 'showDirectoryPicker' in window; },
+  // The Windows program older than 1.2: it can do it after an update.
+  oldDesktop() { return !!window.flowiDesktop && !window.flowiDesktop.backup; },
 
   idb() {
     return new Promise((resolve, reject) => {
@@ -42,6 +48,10 @@ const FolderBackup = {
   // Returns { dir, state: 'none' | 'granted' | 'prompt' }.
   async status() {
     if (!this.supported() || !App.device) return { state: 'none' };
+    if (this.desk()) {
+      const st = await this.desk().status();
+      return st && st.dir ? { dir: { name: st.dir }, state: 'granted', last: st.last || null, desktop: true } : { state: 'none', desktop: true };
+    }
     const dir = await this.get(this.key());
     if (!dir) return { state: 'none' };
     let state = 'prompt';
@@ -50,6 +60,13 @@ const FolderBackup = {
   },
 
   async pick() {
+    if (this.desk()) {
+      const st = await this.desk().pick();
+      if (!st) { const e = new Error('cancel'); e.name = 'AbortError'; throw e; }
+      await PUT('/api/devices/backup', { device_token: App.device.token, on: true });
+      await this.run(true);
+      return st;
+    }
     const parent = await window.showDirectoryPicker({ id: 'flowi-backup', mode: 'readwrite', startIn: 'documents' });
     const dir = await parent.getDirectoryHandle('FLOWI zaxira', { create: true });
     await this.set(this.key(), dir);
@@ -59,7 +76,7 @@ const FolderBackup = {
   },
 
   async forget() {
-    await this.set(this.key(), null);
+    if (this.desk()) await this.desk().forget(); else await this.set(this.key(), null);
     if (App.device && App.token) await PUT('/api/devices/backup', { device_token: App.device.token, on: false }).catch(() => {});
   },
 
@@ -82,6 +99,11 @@ const FolderBackup = {
       const res = await fetch('/api/device/backup', { headers: { Authorization: `Bearer ${App.device.token}` } });
       if (!res.ok) throw new Error(tServer(((await res.json().catch(() => ({}))) || {}).error || `HTTP ${res.status}`));
       const name = (/filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '') || [])[1] || `flowi_${localDay()}.db`;
+      if (st.desktop) {
+        const r = await this.desk().write(name, new Uint8Array(await res.arrayBuffer()));
+        if (!r || !r.ok) throw new Error((r && r.error) || t('Saqlanmadi'));
+        return name;
+      }
       const fh = await st.dir.getFileHandle(name, { create: true });
       const w = await fh.createWritable();
       await w.write(await res.blob());
@@ -104,6 +126,10 @@ const FolderBackup = {
   async files() {
     const st = await this.status();
     if (st.state !== 'granted') return [];
+    if (st.desktop) {
+      const names = await this.desk().list();
+      return names.map((n) => ({ name: n, handle: { getFile: async () => new File([await this.desk().read(n)], n) } }));
+    }
     const out = [];
     for await (const [n, h] of st.dir.entries()) if (h.kind === 'file' && /\.db$/.test(n)) out.push({ name: n, handle: h });
     return out.sort((a, b) => b.name.localeCompare(a.name));

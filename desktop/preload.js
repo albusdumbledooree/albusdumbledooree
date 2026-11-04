@@ -17,4 +17,14 @@ contextBridge.exposeInMainWorld('flowiDesktop', {
   updateCheck: () => ipcRenderer.invoke('flowi:update-check'),
   updateDownload: () => ipcRenderer.invoke('flowi:update-download'),
   updateInstall: () => ipcRenderer.invoke('flowi:update-install'),
+  // The backup folder on this computer (the program writes the files; the browser inside it cannot).
+  backup: {
+    status: () => ipcRenderer.invoke('flowi:backup-status'),
+    pick: () => ipcRenderer.invoke('flowi:backup-pick'),
+    write: (name, bytes) => ipcRenderer.invoke('flowi:backup-write', String(name), bytes),
+    list: () => ipcRenderer.invoke('flowi:backup-list'),
+    read: (name) => ipcRenderer.invoke('flowi:backup-read', String(name)),
+    forget: () => ipcRenderer.invoke('flowi:backup-forget'),
+    open: () => ipcRenderer.invoke('flowi:backup-open'),
+  },
 });

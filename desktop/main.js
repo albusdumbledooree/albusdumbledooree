@@ -14,12 +14,13 @@
  *   is off unless someone switches it on.
  * Settings: Ctrl+Shift+S.
  */
-const { app, BrowserWindow, ipcMain, shell, Menu, globalShortcut, session } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Menu, globalShortcut, session, dialog } = require('electron');
 const { loadRoots, verifyChain, pemsOf } = require('./certs');
 const path = require('node:path');
 const fs = require('node:fs');
 
-const DEFAULTS = { url: '', kiosk: false, autostart: true, silent: true, receiptPrinter: '', kitchenPrinter: '', paper: 80, autoUpdate: false, autoUpdateChosen: false };
+const DEFAULTS = { url: '', kiosk: false, autostart: true, silent: true, receiptPrinter: '', kitchenPrinter: '', paper: 80, autoUpdate: false, autoUpdateChosen: false,
+  backupDir: '', backupLast: 0 };
 // New versions of this program: the latest release of the FLOWI repository (only programs are released there).
 const UPDATE_FEED = 'https://github.com/albusdumbledooree/albusdumbledooree/releases/latest/download';
 const cfgFile = () => path.join(app.getPath('userData'), 'config.json');
@@ -121,6 +122,52 @@ ipcMain.handle('flowi:print', async (e, html, opts = {}) => {
   if (typeof html !== 'string' || html.length > 2_000_000) return { ok: false, error: 'Noto\'g\'ri chek' };
   return printHtml(html, opts.kind === 'kitchen' ? 'kitchen' : 'receipt');
 });
+/* ---------- Backup into a folder on this computer ----------
+   The browser inside this program (Chromium 108) has no folder access for pages, so the program writes the files itself:
+   the boss picks a folder once (Windows' own dialog), a "FLOWI zaxira" folder is made inside it, and the site sends
+   the whole database every few hours; the newest 60 files are kept. No permission questions, remembered after a restart. */
+const BACKUP_KEEP = 60;
+const backupName = (n) => typeof n === 'string' && /^flowi_[\w.-]{1,120}\.db$/.test(n) && !n.includes('..');
+function backupFiles() {
+  if (!cfg.backupDir || !fs.existsSync(cfg.backupDir)) return [];
+  return fs.readdirSync(cfg.backupDir).filter(backupName).sort().reverse();
+}
+const backupState = () => ({ dir: cfg.backupDir && fs.existsSync(cfg.backupDir) ? cfg.backupDir : '', last: cfg.backupLast || 0, files: backupFiles().length });
+ipcMain.handle('flowi:backup-status', (e) => (fromSite(e) || fromLocal(e) ? backupState() : null));
+ipcMain.handle('flowi:backup-pick', async (e) => {
+  if (!fromSite(e)) return null;
+  // (FLOWI_TEST_PICK: the folder a test "chooses", since a test cannot click the Windows dialog.)
+  const picked = process.env.FLOWI_TEST_PICK ? { canceled: false, filePaths: [process.env.FLOWI_TEST_PICK] }
+    : await dialog.showOpenDialog(win, { title: 'FLOWI zaxira uchun papka', defaultPath: app.getPath('documents'), properties: ['openDirectory', 'createDirectory'] });
+  if (picked.canceled || !picked.filePaths[0]) return null;
+  const dir = path.basename(picked.filePaths[0]) === 'FLOWI zaxira' ? picked.filePaths[0] : path.join(picked.filePaths[0], 'FLOWI zaxira');
+  fs.mkdirSync(dir, { recursive: true });
+  saveConfig({ backupDir: dir });
+  return backupState();
+});
+ipcMain.handle('flowi:backup-write', (e, name, bytes) => {
+  if (!fromSite(e)) return { ok: false, error: 'Ruxsat yo\'q' };
+  if (!cfg.backupDir) return { ok: false, error: 'Papka tanlanmagan' };
+  if (!backupName(name) || !(bytes instanceof Uint8Array) || bytes.length < 100 || bytes.length > 1024 * 1024 * 1024) return { ok: false, error: 'Noto\'g\'ri fayl' };
+  try {
+    fs.mkdirSync(cfg.backupDir, { recursive: true });
+    // Written beside it first, then renamed: a half-written file never takes the place of a good one.
+    const tmp = path.join(cfg.backupDir, `${name}.yozilmoqda`);
+    fs.writeFileSync(tmp, bytes);
+    fs.renameSync(tmp, path.join(cfg.backupDir, name));
+    for (const old of backupFiles().slice(BACKUP_KEEP)) { try { fs.rmSync(path.join(cfg.backupDir, old)); } catch { /* in use */ } }
+    saveConfig({ backupLast: Date.now() });
+    return { ok: true, name, dir: cfg.backupDir };
+  } catch (err) { return { ok: false, error: err.message }; }
+});
+ipcMain.handle('flowi:backup-list', (e) => (fromSite(e) ? backupFiles() : []));
+ipcMain.handle('flowi:backup-read', (e, name) => {
+  if (!fromSite(e) || !backupName(name) || !cfg.backupDir) return null;
+  try { return new Uint8Array(fs.readFileSync(path.join(cfg.backupDir, name))); } catch { return null; }
+});
+ipcMain.handle('flowi:backup-forget', (e) => { if (fromSite(e)) saveConfig({ backupDir: '', backupLast: 0 }); return backupState(); });
+ipcMain.handle('flowi:backup-open', (e) => { if ((fromSite(e) || fromLocal(e)) && cfg.backupDir) shell.openPath(cfg.backupDir); });
+
 ipcMain.handle('flowi:info', (e) => (fromSite(e) || fromLocal(e) ? { version: app.getVersion(), silent: !!cfg.silent } : null));
 ipcMain.handle('flowi:settings', (e) => (fromLocal(e) ? { ...cfg, version: app.getVersion() } : null));
 ipcMain.handle('flowi:printers', async (e) => {

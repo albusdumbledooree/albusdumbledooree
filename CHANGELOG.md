@@ -2,6 +2,15 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.26.2 — Windows dasturida papkaga zaxira (FLOWI Windows 1.2.0)
+- **FLOWI Windows dasturi 1.2.0**: Sozlamalar → Zaxira → "Papkani tanlash" — Windows'ning o'z oynasi ochiladi; tanlangan papkada
+  "FLOWI zaxira" ichiga har 3 soatda biznesning to'liq bazasi yoziladi (oxirgi 60 tasi saqlanadi). Ruxsat so'ralmaydi,
+  dastur qayta yoqilganda ham papka esda qoladi; "Papkani ochish", "Papkadagi nusxalar" (tiklash uchun) ham ishlaydi.
+  Avval dastur ichidagi brauzer (Chromium 108) papkaga yoza olmasdi — endi faylni dasturning o'zi yozadi.
+- Eski dastur (1.1.x) ochilsa, Zaxira bo'limida "dasturni yangilang" degan yozuv chiqadi.
+- Windows dasturi va eski Chrome'da yuqori menyu va bo'limlar tagidagi qo'pol kulrang aylantirish chizig'i
+  yashirildi / ingichka qilindi.
+
 ## 1.26.1 — Mijoz cheki o'qishga qulayroq
 - Taom bitta qatorda: **nomi — soni — summasi** ("2 x 35 000" degan alohida qator yo'q), tepasida "Nomi / Soni / Summa".
 - Bir xil taom bir necha marta urilgan bo'lsa, chekda bitta qator: "Non — 2 — 10 000", "Saboy idish — 4 — 20 000".
