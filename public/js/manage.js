@@ -1290,7 +1290,7 @@ Views.staff = {
         <td class="actions">${u.active ? '' : `<span class="chip">${t('Bloklangan')}</span>`} ${canEditRole(u.role) ? icon('chevron-right', 18) : ''}</td></tr>`).join('')}
       </table></div></div>
       <p class="small muted" style="margin-top:12px">${icon('info', 14)} ${t("Dasturga kirmaydigan xodimlarni ham qo'shing (tandirchi, idishchi, qorovul…) — ularning maoshi ham xarajatga va sof foydaga kiradi. Ular tarif limitiga kirmaydi.")}
-        ${sellsAtCounter() ? '' : `<br>${icon('info', 14)} ${t("Ofitsantni xonaga biriktirish: Sozlamalar → Xonalar.")}`}
+        ${sellsAtCounter() ? '' : App.settings.room_assign === 'assigned' ? `<br>${icon('info', 14)} ${t("Ofitsantni xonaga biriktirish: Sozlamalar → Xonalar.")}` : `<br>${icon('info', 14)} ${t("Xonalar biriktirilmaydi: bo'sh xonani kim birinchi ochsa, chek yopilguncha o'shaniki (Sozlamalar → Ruxsatlar).")}`}
         ${App.user.role === 'owner' ? `<br>${icon('eye', 14)} ${t("PIN ustiga bossangiz, PIN va parol ko'rinadi (faqat sizga). Eski PIN xodim keyingi safar kirganda yoki yangi PIN qo'yilganda ko'rinadi.")}` : ''}</p>`;
   },
   bind(root, { users }) {
@@ -1932,6 +1932,10 @@ Views.settings = {
   tab_rights() {
     const s = App.settings;
     return `<form id="rights-form" class="card">
+      ${isShop() || App.biz === 'fastfood' ? '' : `<div class="switch-row"><span>${icon('door-open', 24)}</span><div class="grow"><b>${t('Ofitsant xonalari')}</b>
+        <span class="small muted">${t("\"Kim birinchi ochsa\": bo'sh xonani istalgan ofitsant ochadi, chek yopilguncha xona o'shaniki, boshqalar faqat ko'radi. \"Biriktirilgan\": ofitsant faqat Sozlamalar → Xonalar'da unga berilgan xonalarda ishlaydi.")}</span></div>
+        <select name="room_assign" style="max-width:220px"><option value="open" ${s.room_assign !== 'assigned' ? 'selected' : ''}>${t('Kim birinchi ochsa')}</option>
+          <option value="assigned" ${s.room_assign === 'assigned' ? 'selected' : ''}>${t('Faqat biriktirilgan xonalar')}</option></select></div>`}
       <div class="switch-row"><span style="color:var(--red)">${icon('ban', 24)}</span><div class="grow"><b>${t('Ofitsant yuborilgan taomni bekor qila oladi')}</b>
         <span class="small muted">${t("Faqat siz bergan maxsus kod bilan. O'chiq bo'lsa — faqat kassir yoki boshliq bekor qiladi.")}</span></div>
         <input type="checkbox" name="waiter_cancel" ${s.waiter_cancel ? 'checked' : ''}></div>

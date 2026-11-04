@@ -14,7 +14,7 @@
  */
 const { HttpError, str, int } = require('./util');
 const { ticket, bill } = require('./escpos');
-const { billRaster } = require('./raster');
+const { billRaster, ticketRaster } = require('./raster');
 const MIN = 60 * 1000;
 const CATCH_UP = 3 * 60 * MIN; // missed tickets older than this are not printed any more
 const ONLINE = 90 * 1000; // a printer that asked within this time is "on"
@@ -169,8 +169,10 @@ function createPrint(db, { now, events, audit, settings, newToken, devicePrefix 
         if (!x) { skipTo = r.id; continue; }
         const job = { ...x, late: now() - r.created_at > 2 * MIN };
         // The guest's bill: a picture in the business's font (or plain text for a printer that cannot print pictures).
-        const bytes = x.kind !== 'bill' ? ticket(job, { width: width(p), label: p.label })
-          : p.plain ? bill(job, { width: width(p) }) : billRaster(job, { paper: p.paper === 58 ? 58 : 80, logo: logoOf(x.shop) });
+        // Kitchen tickets too: a picture in the same font (plain text for a printer that cannot print pictures).
+        const paper = p.paper === 58 ? 58 : 80;
+        const bytes = x.kind !== 'bill' ? (p.plain ? ticket(job, { width: width(p), label: p.label }) : ticketRaster(job, { paper, label: p.label }))
+          : p.plain ? bill(job, { width: width(p) }) : billRaster(job, { paper, logo: logoOf(x.shop) });
         out.push({ printer_id: p.id, upto: r.id, kind: p.kind, target: p.kind === 'net' ? p.ip : p.sys_name, port: p.port || 9100, data: bytes.toString('base64') });
         skipTo = null;
         break; // one ticket per printer per round: printed in order, each acknowledged

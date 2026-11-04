@@ -49,6 +49,9 @@ test('full order flow: waiter -> kitchen -> waiter -> cashier -> report', async 
   const chef = await login('oshpaz', '1234');
   const cashier = await login('kassir', 'kassir123');
 
+  // These tests use rooms given to each waiter (the "assigned" way); "whoever opens first" has its own test below.
+  assert.equal((await call('GET', '/api/me', owner)).data.settings.room_assign, 'open', 'the default: whoever opens first');
+  await call('PUT', '/api/settings', owner, { room_assign: 'assigned' });
   const allRooms = (await call('GET', '/api/rooms', waiter)).data;
   const rooms = allRooms.filter((r) => r.mine);
   assert.equal(rooms.length, 4, 'four rooms are the waiter\'s own');
@@ -2054,6 +2057,9 @@ test('FLOWI Printer program: several printers on one computer (USB and LAN), nam
   assert.equal((await call('POST', '/api/printers/net', boss, { device_id: kassa.id, ip: '192.168.1.abc!', label: 'X' })).status, 400);
   const net = (await call('POST', '/api/printers/net', boss, { device_id: kassa.id, ip: '192.168.1.120', port: 9100, label: 'Shashlikchi', cats: [kebabCat.id] })).data;
   assert.ok(net.id);
+  // These first tickets are read as text: both printers set to "plain text" (pictures are checked further down).
+  await call('PUT', `/api/printers/${usb.id}`, boss, { plain: true });
+  await call('PUT', `/api/printers/${net.id}`, boss, { plain: true });
   // An order: soup and kebab — each to its own printer, as ESC/POS bytes.
   const room = (await call('GET', '/api/rooms', boss)).data[0];
   await call('PUT', `/api/rooms/${room.id}`, boss, { waiter_ids: [waiterU.id] });
@@ -2101,10 +2107,12 @@ test('FLOWI Printer program: several printers on one computer (USB and LAN), nam
   })();
   const logo = (await call('POST', '/api/assets', boss, { kind: 'logo', data: `data:image/png;base64,${tinyPng.toString('base64')}` })).data;
   await call('PUT', '/api/settings', boss, { receipt_logo_id: logo.id, receipt_logo: true });
-  await call('PUT', `/api/printers/${usb.id}`, boss, { on: true, bill: true, orders: true });
+  await call('PUT', `/api/printers/${usb.id}`, boss, { on: true, bill: true, orders: true, plain: false });
   const o2 = (await call('POST', '/api/orders', waiter, { room_id: room.id })).data;
   await call('POST', `/api/orders/${o2.id}/items`, waiter, { items: [{ dish_id: soup.id, qty: 1 }] });
-  await call('POST', '/api/device/agent-ack', token, { printer_id: usb.id, upto: (await call('GET', '/api/device/agent-jobs', token)).data.jobs[0].upto });
+  const kj = (await call('GET', '/api/device/agent-jobs', token)).data.jobs[0];
+  assert.ok(Buffer.from(kj.data, 'base64').includes(Buffer.from([0x1d, 0x76, 0x30, 0])), 'the kitchen ticket is a picture too');
+  await call('POST', '/api/device/agent-ack', token, { printer_id: usb.id, upto: kj.upto });
   assert.equal((await call('POST', `/api/orders/${o2.id}/print`, waiter)).data.sent_to.name, 'Oshxona');
   jobs = (await call('GET', '/api/device/agent-jobs', token)).data.jobs;
   const pic = Buffer.from(jobs[0].data, 'base64');
@@ -2597,4 +2605,32 @@ test('section names on the guest check: off by default, the boss can switch them
   assert.equal((await call('GET', '/api/me', boss)).data.settings.receipt_group, false);
   assert.equal((await call('PUT', '/api/settings', boss, { receipt_group: true })).data.receipt_group, true);
   assert.equal((await call('PUT', '/api/settings', boss, { receipt_group: false })).data.receipt_group, false);
+});
+
+test('rooms "whoever opens first": any free room is open to every waiter; once opened it is theirs until closed', async () => {
+  const boss = await login('ega', 'ega123');
+  const jasur = await login('jasur', '1234');
+  const bobur = await login('bobur', '1234');
+  await call('PUT', '/api/settings', boss, { room_assign: 'open' });
+  const all = (await call('GET', '/api/rooms', jasur)).data;
+  const free = all.filter((r) => !r.order);
+  assert.ok(free.length > 4 && free.every((r) => r.mine), 'every free room is open to the waiter');
+  // A room Jasur was never given: he opens it and it is his.
+  const room = free.find((r) => !(r.waiters || []).some((w) => w.name.includes('Jasur')));
+  const o = (await call('POST', '/api/orders', jasur, { room_id: room.id, guests: 2 })).data;
+  assert.equal(o.waiter.name.includes('Jasur'), true);
+  await call('POST', `/api/orders/${o.id}/items`, jasur, { items: [{ dish_id: (await dish(jasur, 'Patir')).id, qty: 1 }] });
+  // Bobur sees it as somebody else's: he can look, not write, not take it over.
+  const seen = (await call('GET', '/api/rooms', bobur)).data.find((r) => r.id === room.id);
+  assert.equal(seen.mine, false);
+  assert.ok(seen.order.waiter_name.includes('Jasur'));
+  assert.equal((await call('GET', `/api/orders/${o.id}`, bobur)).data.readonly, true);
+  assert.equal((await call('POST', '/api/orders', bobur, { room_id: room.id })).status, 409);
+  assert.equal((await call('POST', `/api/orders/${o.id}/items`, bobur, { items: [{ dish_id: (await dish(bobur, 'Patir')).id, qty: 1 }] })).status, 403);
+  // Closed: the room is free for anyone again.
+  await call('POST', `/api/orders/${o.id}/close`, boss, { paid_cash: 1e6 });
+  const again = (await call('POST', '/api/orders', bobur, { room_id: room.id })).data;
+  assert.ok(again.waiter.name.includes('Bobur'));
+  await call('POST', `/api/orders/${again.id}/cancel`, boss, { reason: '' });
+  await call('PUT', '/api/settings', boss, { room_assign: 'assigned' });
 });

@@ -755,10 +755,23 @@ function printReceipt(o, s = App.settings) {
 }
 
 // Kitchen ticket: big place name, dishes and notes — no prices.
+// Kitchen ticket (the same look as the FLOWI Printer picture): the place big, then each dish — name first, the count
+// at the right, in large letters — with its choices (+) and note (*). No prices.
 function printKitchenTicket(tk) {
-  printDoc(`${t('Buyurtma')} #${tk.order_id}`, `${tk.cancel ? `<div class="c huge inv">${t('BEKOR QILINDI')}</div>` : ''}${tk.deleted ? `<div class="c big">${t("BUTUN CHEK O'CHIRILDI")}</div>${tk.reason ? `<div class="c">${t('Sabab')}: ${esc(tk.reason)}</div>` : ''}` : ''}${tk.reprint ? `<div class="c big inv">${t('QAYTA CHOP ETILDI')}</div>` : ''}${tk.late ? `<div class="c big">${t('KECHIKIB CHIQDI')} (${fmtTime(tk.at)})</div>` : ''}<div class="c huge">${esc(tk.room)}</div>
-    <div class="c">${t('Chek')} #${tk.order_id} · ${esc(tk.waiter || '')}${tk.by && tk.by !== tk.waiter ? ` (${esc(tk.by)})` : ''} · ${fmtTime(tk.at || Date.now())}</div><hr>
-    <table>${tk.items.map((i) => `<tr class="big"><td style="white-space:nowrap;padding-right:8px">${i.qty} ×</td><td>${esc(i.name)}${modsText(i) ? `<br>+ ${esc(modsText(i))}` : ''}${i.note ? `<br><small>* ${esc(i.note)}</small>` : ''}</td></tr>`).join('')}</table><hr>`, 'kitchen');
+  const mark = (txt) => `<div class="kt-band">${txt}</div>`;
+  printDoc(`${t('Buyurtma')} #${tk.order_id}`, `<style>
+      .kt-band{background:#000;color:#fff !important;text-align:center;font-size:20px;font-weight:900;padding:4px 0;margin-bottom:4px}
+      .kt-room{text-align:center;font-size:26px;font-weight:900;line-height:1.2}.kt-sub{text-align:center}
+      .kt-head{display:flex;justify-content:space-between}.kt-it{display:flex;justify-content:space-between;gap:8px;font-size:19px;font-weight:900;line-height:1.25;margin-top:4px}
+      .kt-it span:last-child{white-space:nowrap}.kt-note{padding-left:14px}</style>
+    ${tk.test ? mark(t('SINOV')) : ''}${tk.cancel ? mark(t('BEKOR QILINDI')) : ''}
+    ${tk.deleted ? `<div class="c">${t("BUTUN CHEK O'CHIRILDI")}</div>${tk.reason ? `<div class="c">${t('Sabab')}: ${esc(tk.reason)}</div>` : ''}` : ''}
+    ${tk.reprint ? mark(t('QAYTA CHOP ETILDI')) : ''}${tk.late ? `<div class="c">${t('KECHIKIB CHIQDI')} (${fmtTime(tk.at)})</div>` : ''}
+    <div class="kt-room">${esc(tk.room)}</div>
+    <div class="kt-sub">${t('Chek')} #${tk.order_id} - ${esc(tk.waiter || '')}${tk.by && tk.by !== tk.waiter ? ` (${esc(tk.by)})` : ''} - ${fmtTime(tk.at || Date.now())}</div><hr>
+    <div class="kt-head"><span>${t('Nomi')}</span><span>${t('Soni')}</span></div><hr>
+    ${tk.items.map((i) => `<div class="kt-it"><span>${esc(i.name)}</span><span>${i.qty}</span></div>${modsText(i) ? `<div class="kt-note">+ ${esc(modsText(i))}</div>` : ''}${i.note ? `<div class="kt-note">* ${esc(i.note)}</div>` : ''}`).join('')}<hr>`,
+  'kitchen', App.settings, true);
 }
 
 // Shrinks a picture before upload (a phone photo can be 8 MB; the desktop needs ~300 KB).

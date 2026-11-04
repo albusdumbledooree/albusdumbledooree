@@ -2,6 +2,14 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.28.0 — Xonalar "kim birinchi ochsa", oshxona qog'ozi yangi uslubda
+- **Xonalarni ofitsantga biriktirish shart emas**: bo'sh xonani istalgan ofitsant ochadi, chek yopilguncha xona o'shaniki;
+  boshqa ofitsantlar uni xira ko'radi (kimniki va summasi), faqat ko'ra oladi, taom ura olmaydi. Chek yopilgach xona yana bo'sh.
+  Sozlamalar → Ruxsatlar → "Ofitsant xonalari": "Kim birinchi ochsa" (hamma bizneslarda yoqildi) yoki "Faqat biriktirilgan xonalar".
+- **Oshxona qog'ozi** mijoz cheki uslubida (rasm, DejaVu Sans Mono): tepada katta xona nomi, ostida chek, ofitsant, vaqt;
+  har taom — **avval nomi, o'ngda soni**, katta harflarda; qo'shimcha tanlov (+) va izoh (*) ostida; otkazda qora fonda
+  "BEKOR QILINDI". FLOWI Printer, Windows dasturi va brauzerda bir xil. "Oddiy matn" belgisi bu qog'ozga ham ishlaydi.
+
 ## 1.27.2 — Chekda bo'lim nomlari yo'q
 - Mijoz chekida bo'lim nomlari (1-TAOM, SHASHLIKLAR…) endi chiqmaydi — taomlar bitta ro'yxat. Hamma bizneslarda bir marta
   o'chirildi; xohlagan Sozlamalar → Ko'rinish → Chek → "Taomlarni bo'limlar bo'yicha guruhlash" bilan qayta yoqadi.

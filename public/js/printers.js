@@ -48,7 +48,7 @@ Object.assign(Views.settings, {
             <label class="field">${t("Qog'oz kengligi")}<select name="paper"><option value="80" ${p.paper !== 58 ? 'selected' : ''}>80 mm</option><option value="58" ${p.paper === 58 ? 'selected' : ''}>58 mm</option></select></label></div>
           ${printerRoles(p, cats, 'pcat')}
           <label class="check small" style="margin-top:8px"><input type="checkbox" name="plain" ${p.plain ? 'checked' : ''}>
-            ${t("Mijoz chekini oddiy matn qilib chiqarish (printer rasm chiqara olmasa)")}</label>
+            ${t("Oddiy matn qilib chiqarish (printer rasm chiqara olmasa)")}</label>
           <div class="row" style="gap:8px;margin-top:10px"><button class="btn sm primary">${icon('check', 16)} ${t('Saqlash')}</button>
             <button type="button" class="btn sm" data-ptest="${p.id}">${icon('printer', 16)} ${t("Sinov qog'ozi")}</button>
             <button type="button" class="icon-btn danger" data-pdel="${p.id}" title="${esc(t("O'chirish"))}">${icon('trash-2', 18)}</button></div></div></form>`;

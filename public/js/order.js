@@ -231,7 +231,7 @@ function checkPane({ order, room, cart, takeaway, readonly: ro }) {
         ${order.service_amount ? `<span>${esc(serviceLabel(order))}</span><span class="right">${money(order.service_amount)}</span>` : ''}
         <span class="total">${t('Jami')}</span><span class="total right">${money(total)}</span>
         ${share ? `<span class="share">${t('{0} kishi — har biriga', order.guests)}</span><span class="share right">${money(share)}</span>` : ''}</div>` : ''}
-      ${ro ? `<div class="ro-note">${icon('lock', 16)} ${t("Bu xona sizga biriktirilmagan — faqat ko'rish")}</div>`
+      ${ro ? `<div class="ro-note">${icon('lock', 16)} ${App.settings.room_assign === 'assigned' ? t("Bu xona sizga biriktirilmagan — faqat ko'rish") : t("Bu xonani boshqa ofitsant ochgan — faqat ko'rish")}</div>`
         : cart.lines.length
         ? `<button class="btn primary lg block" id="send" style="margin-top:12px">${icon('send', 20)} ${t('Yuborish')} · ${money(subtotalPending)}</button>`
         : order ? `<div class="order-actions">
@@ -272,7 +272,7 @@ const OrderView = {
     return `<div class="order">
       ${checkPane({ ...d, cart })}
       ${UI.drawer ? '<div class="drawer-back" id="drawer-back"></div>' : ''}
-      ${d.readonly ? `<section class="menu-area ro-area">${emptyState('lock', `${t('Bu xona sizga biriktirilmagan')}<br><span class="small muted">${t("Chekni faqat ko'rishingiz mumkin. Taom urish uchun xona sizga biriktirilishi kerak.")}</span><br><button class="btn" id="back" style="margin-top:14px">${icon('arrow-left', 18)} ${t('Orqaga')}</button>`)}</section>` : `<section class="menu-area">
+      ${d.readonly ? `<section class="menu-area ro-area">${emptyState('lock', `${App.settings.room_assign === 'assigned' ? `${t('Bu xona sizga biriktirilmagan')}<br><span class="small muted">${t("Chekni faqat ko'rishingiz mumkin. Taom urish uchun xona sizga biriktirilishi kerak.")}</span>` : `${t('Bu xonani boshqa ofitsant ochgan')}<br><span class="small muted">${t("Chekni faqat ko'rishingiz mumkin. Chek yopilgach, xona yana bo'sh bo'ladi.")}</span>`}<br><button class="btn" id="back" style="margin-top:14px">${icon('arrow-left', 18)} ${t('Orqaga')}</button>`)}</section>` : `<section class="menu-area">
         ${catSide(menu)}
         <div class="dish-area">
           <div class="menu-bar"><button class="btn" id="back">${icon('arrow-left', 18)} ${t('Orqaga')}</button>

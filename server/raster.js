@@ -271,4 +271,55 @@ function billRaster(job, { paper = 80, logo = null } = {}) {
   return c.escpos();
 }
 
-module.exports = { billRaster, decodePng, logoBits, Canvas };
+/* A kitchen ticket as a picture (same font as the bill): the place big on top, the check, waiter and time under it,
+   then each dish — name first, the count at the right, in large letters a cook reads from a step away — with its
+   choices (+) and note (*). A cancellation / deleted check / reprint / late ticket gets its mark on top. */
+function ticketRaster(job, { paper = 80, label = '' } = {}) {
+  const W = paper === 58 ? 384 : 576;
+  const M = paper === 58 ? 8 : 14;
+  const c = new Canvas(W);
+  const S = FONT.sizes[24]; const B = FONT.sizes[34]; const H = FONT.sizes[46];
+  const small = Math.floor((W - 2 * M) / S.w);
+  const bigCols = Math.floor((W - 2 * M) / B.w);
+  const center = (str, size) => { const f = FONT.sizes[size]; for (const r of wrap(str, Math.floor((W - 2 * M) / f.w))) { c.text(Math.round((W - r.length * f.w) / 2), c.y, r, size); c.y += f.h + (size === 24 ? 6 : 4); } };
+  // A black band with white letters (BEKOR QILINDI…).
+  const band = (str) => {
+    const f = B; const h = f.h + 12;
+    for (let y = 0; y < h; y++) c.bar(M, W - M, c.y + y, 1);
+    const x0 = Math.round((W - str.length * f.w) / 2);
+    const tmp = new Canvas(W); tmp.text(x0, 6, str, 34);
+    for (let y = 0; y < tmp.rows.length && y < h; y++) for (let x = 0; x < W; x++) if (tmp.rows[y][x >> 3] & (0x80 >> (x & 7))) c.rows[c.y + y][x >> 3] &= ~(0x80 >> (x & 7));
+    c.y += h + 8;
+  };
+  const dashes = () => { c.bar(M, W - M, c.y + 7, 3, 10, 6); c.y += 18; };
+  c.y = 8;
+  if (job.test) band('SINOV');
+  if (job.cancel) band('BEKOR QILINDI');
+  if (job.deleted) { center("BUTUN CHEK O'CHIRILDI", 24); if (job.reason) center(`Sabab: ${job.reason}`, 24); }
+  if (job.reprint) band('QAYTA CHOP ETILDI');
+  if (job.late) center(`KECHIKIB CHIQDI (${hm(job.at)})`, 24);
+  center(job.room || '', 46);
+  center([job.order_id ? `Chek #${job.order_id}` : '', job.waiter || '', job.by && job.by !== job.waiter ? `(${job.by})` : '', hm(job.at || Date.now())].filter(Boolean).join(' - '), 24);
+  dashes();
+  c.text(M, c.y, 'Nomi', 24); c.text(W - M - 4 * S.w, c.y, 'Soni', 24); c.y += S.h + 4;
+  dashes();
+  for (const it of job.items || []) {
+    const q = String(it.qty);
+    // The name takes all the room the count leaves (2 big letters for "1", 3 for "12").
+    const rows = wrap(it.name, bigCols - Math.max(2, q.length + 1));
+    rows.forEach((r, n) => {
+      c.text(M, c.y, r, 34);
+      if (n === 0) c.text(W - M - q.length * B.w, c.y, q, 34);
+      c.y += B.h + 2;
+    });
+    if (it.mods) for (const r of wrap(`+ ${it.mods}`, small - 2)) { c.text(M + 2 * S.w, c.y, r, 24); c.y += S.h + 2; }
+    if (it.note) for (const r of wrap(`* ${it.note}`, small - 2)) { c.text(M + 2 * S.w, c.y, r, 24); c.y += S.h + 2; }
+    c.y += 6;
+  }
+  dashes();
+  if (label) center(label, 24);
+  c.y += 16;
+  return c.escpos();
+}
+
+module.exports = { billRaster, ticketRaster, decodePng, logoBits, Canvas };

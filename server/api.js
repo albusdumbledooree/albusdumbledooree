@@ -146,7 +146,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     out.receipt_logo = out.receipt_logo !== '0';
     // The check's look: logo width (% of the paper), dishes under their sections, the "per person" line.
     out.receipt_logo_size = Math.min(100, Math.max(20, Number(out.receipt_logo_size) || 50));
-    out.receipt_group = out.receipt_group === '1'; // section names on the check: off unless the boss switches them on
+    out.receipt_group = out.receipt_group === '1';
+    out.room_assign = out.room_assign === 'assigned' ? 'assigned' : 'open'; // section names on the check: off unless the boss switches them on
     out.receipt_per_person = out.receipt_per_person !== '0';
     out.receipt_logo_id = out.receipt_logo_id ? Number(out.receipt_logo_id) : null;
     out.staff_meal_price = out.staff_meal_price === 'cost' ? 'cost' : 'menu';
@@ -493,7 +494,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   // ---------- Settings ----------
   function updateSettings({ user, body }) {
-    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'receipt_logo_size', 'receipt_group', 'receipt_per_person',
+    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'receipt_logo_size', 'receipt_group', 'receipt_per_person', 'room_assign',
       'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo',
       'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', 'cashback_pct', 'qr_order', 'qr_from', 'qr_to',
       'geo_lat', 'geo_lng', 'geo_radius', 'work_from', 'expense_groups', 'staff_types', ...GEO_FLAGS, ...OWNER_SETTINGS];
@@ -534,6 +535,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       if (k.startsWith('perm_') || k === 'finance_lock') v = v ? '1' : '0';
       if (k === 'logo' || k === 'receipt_logo_id') v = v ? String(assetId(v, 'logo')) : '';
       if (k === 'receipt_logo' || k === 'receipt_group' || k === 'receipt_per_person') v = v ? '1' : '0';
+      if (k === 'room_assign') v = v === 'assigned' ? 'assigned' : 'open';
       if (k === 'receipt_logo_size') v = int(v, "Logotip o'lchami", { min: 20, max: 100 });
       // Lines under the check: several, each printed on its own line.
       if (k === 'receipt_footer') v = String(v ?? '').replace(/\r/g, '').split('\n').map((x) => x.trim().slice(0, 64)).slice(0, 8).join('\n').trim();
@@ -768,6 +770,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   }
 
   // ---------- Rooms ----------
+  /* How waiters get rooms (Settings → Ruxsatlar): 'open' (the default) — any free room is anyone's: whoever opens it first
+     has it until the check is closed; 'assigned' — only the rooms the boss gave to the waiter (Settings → Xonalar). */
+  const openRooms = () => settings().room_assign !== 'assigned';
   function waiterRoomIds(userId) {
     return q('SELECT room_id FROM room_waiters WHERE user_id = ?').all(userId).map((r) => r.room_id);
   }
@@ -775,7 +780,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   function listRooms({ user, query }) {
     let rooms = q("SELECT * FROM rooms WHERE type != 'soboy' AND (active = 1 OR ? = 1) ORDER BY CAST(number AS INTEGER), number").all(query.all ? 1 : 0);
     // A waiter sees every room: their own to work in; the others greyed out, only to look at (who has it, how much).
-    const mineIds = user.role === 'waiter' && !query.all ? new Set(waiterRoomIds(user.id)) : null;
+    const free = openRooms();
+    const mineIds = user.role === 'waiter' && !query.all ? new Set(free ? [] : waiterRoomIds(user.id)) : null;
     const waiters = q("SELECT rw.room_id, u.id, u.name FROM room_waiters rw JOIN users u ON u.id = rw.user_id WHERE u.active = 1").all();
     const openOrders = q("SELECT o.*, u.name waiter_name FROM orders o JOIN users u ON u.id = o.waiter_id WHERE o.status = 'open'").all();
     const counts = q(`SELECT i.order_id, i.status, COUNT(*) c, SUM(i.price * i.qty) s FROM order_items i
@@ -795,7 +801,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
         summary = { id: order.id, guests: order.guests, opened_at: order.opened_at, waiter_id: order.waiter_id,
           waiter_name: order.waiter_name, bill_requested: order.bill_requested, printed: order.print_count, subtotal, items: st };
       }
-      const mine = !mineIds || mineIds.has(r.id) || (order && order.waiter_id === user.id);
+      const mine = !mineIds || (free && !order) || mineIds.has(r.id) || (order && order.waiter_id === user.id);
       return { ...r, waiters: waiters.filter((w) => w.room_id === r.id).map(({ id, name }) => ({ id, name })),
         order: summary, reservations: resv.filter((x) => x.room_id === r.id), mine: !!mine };
     });
@@ -1073,7 +1079,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     if (user.role !== 'waiter') return;
     if (order.waiter_id === user.id) return;
     if (order.takeaway) throw new HttpError(403, 'Bu buyurtma sizga tegishli emas');
-    if (waiterRoomIds(user.id).includes(order.room_id)) return;
+    if (!openRooms() && waiterRoomIds(user.id).includes(order.room_id)) return;
     throw new HttpError(403, 'Bu buyurtma sizga tegishli emas');
   }
 
@@ -1125,7 +1131,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       if (query.to) { where += ' AND COALESCE(o.closed_at, o.opened_at) < ?'; params.push(Number(query.to)); }
     }
     if (user.role === 'waiter') {
-      where += ' AND (o.waiter_id = ? OR o.room_id IN (SELECT room_id FROM room_waiters WHERE user_id = ?))';
+      where += openRooms() ? ' AND (o.waiter_id = ? OR ? = 0)' : ' AND (o.waiter_id = ? OR o.room_id IN (SELECT room_id FROM room_waiters WHERE user_id = ?))';
       params.push(user.id, user.id);
     }
     const rows = q(`SELECT o.*, r.name room_name, r.number room_number, w.name waiter_name, c.name cashier_name, cu.name customer_name, cu.phone customer_phone
@@ -1206,14 +1212,19 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       events.publish('rooms');
       return orderDetails(id);
     }
-    if (user.role === 'waiter' && !waiterRoomIds(user.id).includes(roomId)) throw new HttpError(403, 'Bu xona sizga biriktirilmagan');
-    const existing = q("SELECT id FROM orders WHERE room_id = ? AND status = 'open'").get(roomId);
-    if (existing) return orderDetails(existing.id);
+    const free = openRooms();
+    if (user.role === 'waiter' && !free && !waiterRoomIds(user.id).includes(roomId)) throw new HttpError(403, 'Bu xona sizga biriktirilmagan');
+    const existing = q("SELECT id, waiter_id FROM orders WHERE room_id = ? AND status = 'open'").get(roomId);
+    if (existing) {
+      // Someone else opened it first: it is theirs until the check is closed.
+      if (user.role === 'waiter' && free && existing.waiter_id !== user.id) throw new HttpError(409, `${room.name} band — boshqa ofitsant ochgan`);
+      return orderDetails(existing.id);
+    }
     let waiterId = user.id;
-    if (user.role !== 'waiter') {
+    if (user.role !== 'waiter' && !free) {
       const assigned = q("SELECT u.id FROM room_waiters rw JOIN users u ON u.id = rw.user_id WHERE rw.room_id = ? AND u.active = 1").get(roomId);
       waiterId = body.waiter_id ? int(body.waiter_id, 'Ofitsant', { min: 1 }) : assigned ? assigned.id : user.id;
-    }
+    } else if (user.role !== 'waiter' && body.waiter_id) waiterId = int(body.waiter_id, 'Ofitsant', { min: 1 });
     const id = q('INSERT INTO orders (room_id, waiter_id, guests, note, opened_at) VALUES (?, ?, ?, ?, ?)').run(
       roomId, waiterId, int(body.guests, 'Mehmonlar', { min: 1, max: 1000, def: 1 }), str(body.note, 'Izoh', { max: 300 }), now()
     ).lastInsertRowid;
