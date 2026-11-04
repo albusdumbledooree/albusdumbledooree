@@ -2,6 +2,10 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.30.1 — Telefonda "Qurilmani ulash" oynasi ekrandan chiqib ketmaydi
+
+- Logotipi bor bizneslarda telefonda yuqori qatorga (FLOWI, logotip, klaviatura, til) joy yetmay, oyna o'ng tomonga chiqib ketardi. Endi tugmalar ikkinchi qatorga tushadi va oyna ekranga to'liq sig'adi.
+
 ## 1.30.0 — "To'lov va yordam" Telegram boti
 
 - Platformada yangi tugma (🤲 belgisi): alohida botning tokeni kiritiladi va bot sizning Telegramingizga ulanadi. Karta raqami va karta egasi shu yerda yoziladi.

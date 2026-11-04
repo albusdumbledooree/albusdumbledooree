@@ -311,7 +311,11 @@ tr.clickable:hover td { background: var(--panel-2); }
 .staff-tile.nopin { opacity: .6; }
 .setup-wrap { min-height: 100vh; display: grid; place-items: center; padding: 16px; background: linear-gradient(160deg, #12304d, #061423); }
 .setup { width: min(440px, 100%); }
-.setup .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.setup .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+/* A business logo + the keyboard and language buttons do not fit one phone line: the buttons move to the next line. */
+.setup .brand .grow { min-width: 0; flex: 1 1 150px; }
+.setup .brand .setup-logo { flex: none; }
+.setup { min-width: 0; }
 .setup .brand .flowi, .login .brand .flowi { color: var(--brand); margin-bottom: 6px; }
 .setup .brand .muted { display: block; }
 
