@@ -109,13 +109,13 @@ function tenantCard(t) {
 function mainHtml() {
   return `<header class="ptop">${flowiLogo(22)}<b class="hide-xs">Platforma</b>${P.release ? `<span class="chip">v${esc(P.release)}</span>` : ''}<span class="grow"></span>
       <span class="muted small hide-xs">${esc(P.admin.name)}</span>
-      <button class="btn sm" id="pplans" title="Tariflar va narxlar">${icon('star', 16)} <span class="hide-xs">Tariflar</span></button>
+      <div class="ptools"><button class="btn sm" id="pplans" title="Tariflar va narxlar">${icon('star', 16)} <span class="hide-xs">Tariflar</span></button>
       <button class="icon-btn ${P.tg.chat_id ? '' : 'warn-dot'}" id="ptg" title="Telegram bot (arizalar)">${icon('send')}</button>
       <button class="icon-btn ${P.hb.chat_id ? '' : 'warn-dot'}" id="phb" title="To'lov va yordam boti">${icon('hand-coins')}${P.hb.pending ? `<span class="badge">${P.hb.pending}</span>` : ''}</button>
       <button class="icon-btn" id="psettings" title="Yordam kontakti">${icon('life-buoy')}</button>
       <button class="icon-btn" id="pseo" title="Google va Yandex">${icon('search')}</button>
       <button class="icon-btn" id="pw" title="Parol">${icon('key-round')}</button>
-      <button class="icon-btn" id="logout" title="Chiqish">${icon('log-out')}</button></header>
+      <button class="icon-btn" id="logout" title="Chiqish">${icon('log-out')}</button></div></header>
   <main class="pmain">
     <div class="seg ptabs"><button class="${P.tab === 'biz' ? 'active' : ''}" data-tab="biz">${icon('store', 16)} Bizneslar</button>
       <button class="${P.tab === 'leads' ? 'active' : ''}" data-tab="leads">${icon('inbox', 16)} Arizalar${P.leads && P.leads.counts.new ? ` <span class="badge">${P.leads.counts.new}</span>` : ''}</button>

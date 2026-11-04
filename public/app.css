@@ -630,6 +630,13 @@ table.att .today { background: var(--primary-soft); }
 .ptop { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 10px; height: 60px; padding: 0 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .ptop .flowi { color: var(--brand); }
 .ptop b { padding-left: 12px; border-left: 1px solid var(--line); font-size: 17px; }
+.ptools { display: flex; align-items: center; gap: 8px; }
+/* Phone: the buttons go to their own line under the logo, spread over the width (they never push the page wider). */
+@media (max-width: 720px) {
+  .ptop { height: auto; flex-wrap: wrap; row-gap: 8px; padding-top: 8px; padding-bottom: 8px; }
+  .ptools { width: 100%; justify-content: space-between; gap: 4px; }
+  .ptools .icon-btn, .ptools .btn.sm { width: 42px; min-width: 42px; height: 42px; padding: 0; justify-content: center; }
+}
 .pmain { max-width: 1400px; margin: 0 auto; padding: 20px; }
 .pmain .kpis { margin-bottom: 18px; }
 .ptools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
@@ -665,7 +672,7 @@ table.att .today { background: var(--primary-soft); }
 .chip.plan-biznes { background: rgba(37, 99, 235, .16); color: #1d4ed8; }
 .chip.plan-pro { background: rgba(147, 51, 234, .16); color: #7e22ce; }
 @media (max-width: 600px) {
-  .ptop { padding: 0 12px; }
+  .ptop { padding-left: 12px; padding-right: 12px; }
   .pmain { padding: 14px 12px; }
   .hide-xs { display: none; }
   .ptools .btn.primary { margin-left: 0; width: 100%; }
