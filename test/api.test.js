@@ -2661,3 +2661,128 @@ test('rooms "whoever opens first": any free room is open to every waiter; once o
   await call('POST', `/api/orders/${again.id}/cancel`, boss, { reason: '' });
   await call('PUT', '/api/settings', boss, { room_assign: 'assigned' });
 });
+
+test("To'lov va yordam boti: the business links with one tap, questions go to the owner and answers come back, card and cash payments move the term", async () => {
+  const http = require('node:http');
+  const TOKEN = '777777:HelpBotTokenABCDEFGHIJKLmnop_1';
+  const calls = [];
+  const updates = [];
+  let uid = 1;
+  let mid = 500;
+  const tg = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      const [, token, method] = /^\/bot([^/]+)\/(\w+)$/.exec(req.url) || [];
+      const body = raw ? JSON.parse(raw) : {};
+      const ok = (result) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, result })); };
+      if (token !== TOKEN) { res.writeHead(401); return res.end(JSON.stringify({ ok: false, description: 'Unauthorized' })); }
+      calls.push({ method, body });
+      if (method === 'getMe') return ok({ id: 7, username: 'flowi_pay_bot' });
+      if (method === 'getUpdates') return setTimeout(() => ok(updates.splice(0)), 60);
+      if (method === 'sendMessage' || method === 'copyMessage') return ok({ message_id: ++mid });
+      return ok(true);
+    });
+  });
+  await new Promise((r) => tg.listen(0, r));
+  process.env.TELEGRAM_API = `http://127.0.0.1:${tg.address().port}`;
+  const waitFor = async (fn, what) => {
+    for (let i = 0; i < 120; i++) { const v = await fn(); if (v) return v; await new Promise((r) => setTimeout(r, 50)); }
+    throw new Error(`timeout: ${what} ${JSON.stringify(calls.filter((c) => c.method !== "getUpdates").slice(-8).map((c) => `${c.method}:${c.body.chat_id}:${String(c.body.text || c.body.caption || '').slice(0, 40)}`))}`);
+  };
+  const OWNER = 4242; const ALI = 9001; const STRANGER = 9002;
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  try {
+    // Before the bot is set up the business sees nothing to press.
+    const boss = await login('ega', 'ega123', 'demo');
+    assert.equal((await call('GET', '/api/helpbot', boss)).data.ready, false);
+    assert.equal((await call('POST', '/api/helpbot/link', boss)).status, 409);
+    assert.equal((await call('GET', '/api/helpbot', await login('jasur', '1234'))).status, 403, 'a waiter cannot');
+
+    // Token (the applications bot's token is refused), then the owner's chat with the one-time code, then the card.
+    assert.equal((await call('PUT', '/api/platform/helpbot', admin, { token: 'nope' })).status, 400);
+    const st = (await call('PUT', '/api/platform/helpbot', admin, { token: TOKEN })).data;
+    assert.equal(st.bot, 'flowi_pay_bot');
+    updates.push({ update_id: uid++, message: { message_id: 1, chat: { id: OWNER, type: 'private', first_name: 'Otabek' }, from: { first_name: 'Otabek' }, text: `/start ${st.link_code}` } });
+    await waitFor(async () => (await call('GET', '/api/platform/helpbot', admin)).data.chat_id === OWNER, 'admin linked');
+    assert.equal((await call('PUT', '/api/platform/helpbot', admin, { card_number: '1234' })).status, 400);
+    const card = (await call('PUT', '/api/platform/helpbot', admin, { card_number: '8600123412341234', card_owner: 'Otabek X' })).data;
+    assert.equal(card.card_number, '8600 1234 1234 1234');
+    assert.equal(card.chat_id, OWNER, 'saving the card keeps the bot');
+
+    // The boss links from the program: a one-time link; whoever opens it is tied to this business.
+    const link = (await call('POST', '/api/helpbot/link', boss)).data;
+    const code = /start=(h\w+)$/.exec(link.url)[1];
+    assert.match(link.url, /^https:\/\/t\.me\/flowi_pay_bot\?start=h\w+$/);
+    updates.push({ update_id: uid++, message: { message_id: 2, chat: { id: ALI, type: 'private', first_name: 'Ali' }, from: { first_name: 'Ali', username: 'ali_aka' }, text: `/start ${code}` } });
+    await waitFor(() => calls.find((c) => c.method === 'sendMessage' && String(c.body.chat_id) === String(ALI) && /Ulandi/.test(c.body.text)), 'client linked');
+    assert.deepEqual((await call('GET', '/api/helpbot', boss)).data.chats.map((c) => c.name), ['Ali']);
+    assert.ok(calls.some((c) => String(c.body.chat_id) === String(OWNER) && /Botga ulandi/.test(c.body.text)), 'the owner is told');
+
+    // A question → the owner's chat, with who wrote it; the owner's reply → back to Ali.
+    updates.push({ update_id: uid++, message: { message_id: 3, chat: { id: ALI, type: 'private' }, from: { first_name: 'Ali', username: 'ali_aka' }, text: 'Printer <chek> chiqarmayapti' } });
+    const q1 = await waitFor(() => calls.find((c) => c.method === 'sendMessage' && String(c.body.chat_id) === String(OWNER) && /Printer &lt;chek&gt;/.test(c.body.text)), 'question relayed');
+    assert.match(q1.body.text, /Demo/);
+    assert.match(q1.body.text, /@ali_aka/);
+    // The message id the fake gave the relayed question: the one right after it was sent.
+    const helpRow = await waitFor(() => calls.find((c) => c.method === 'sendMessage' && String(c.body.chat_id) === String(ALI) && /yetkazildi/.test(c.body.text)), 'ack');
+    assert.ok(helpRow);
+    const relayedId = 500 + calls.filter((c) => c.method === 'sendMessage' || c.method === 'copyMessage').indexOf(q1) + 1;
+    updates.push({ update_id: uid++, message: { message_id: 10, chat: { id: OWNER, type: 'private' }, from: { first_name: 'Otabek' }, text: 'Printerni qayta yoqing', reply_to_message: { message_id: relayedId } } });
+    await waitFor(() => calls.find((c) => c.method === 'sendMessage' && String(c.body.chat_id) === String(ALI) && /FLOWI yordam:<\/b>\nPrinterni qayta yoqing/.test(c.body.text)), 'answer delivered');
+
+    // A stranger (not linked) may ask too, but cannot pay; buttons of a payment work only from the owner's chat.
+    updates.push({ update_id: uid++, message: { message_id: 4, chat: { id: STRANGER, type: 'private' }, from: { first_name: 'Vali' }, text: "💳 To'lash" } });
+    await waitFor(() => calls.find((c) => String(c.body.chat_id) === String(STRANGER) && /Avval biznesingizni ulang/.test(c.body.text)), 'not linked');
+
+    // Card: the card shows, the receipt photo goes to the owner with the buttons; "+3 oy" moves the term.
+    const before = (await call('GET', '/api/platform/tenants', admin)).data.find((x) => x.code === 'demo');
+    updates.push({ update_id: uid++, callback_query: { id: 'c1', from: { id: ALI, first_name: 'Ali' }, data: 'pay:card', message: { message_id: 20, chat: { id: ALI } } } });
+    await waitFor(() => calls.find((c) => String(c.body.chat_id) === String(ALI) && /8600 1234 1234 1234/.test(c.body.text) && /Otabek X/.test(c.body.text)), 'card shown');
+    updates.push({ update_id: uid++, message: { message_id: 5, chat: { id: ALI, type: 'private' }, from: { first_name: 'Ali' }, photo: [{ file_id: 'p1' }] } });
+    const receipt = await waitFor(() => calls.find((c) => c.method === 'copyMessage' && String(c.body.chat_id) === String(OWNER) && c.body.reply_markup && /karta/.test(c.body.caption)), 'receipt to owner');
+    const payData = receipt.body.reply_markup.inline_keyboard.flat().map((b) => b.callback_data);
+    const payId = Number(/^pd:(\d+):1$/.exec(payData[0])[1]);
+    assert.deepEqual(payData, [`pd:${payId}:1`, `pd:${payId}:3`, `pd:${payId}:no`]);
+    // Someone else pressing the owner's button: nothing happens.
+    updates.push({ update_id: uid++, callback_query: { id: 'c2', from: { id: ALI }, data: `pd:${payId}:3`, message: { message_id: 30, chat: { id: ALI } } } });
+    updates.push({ update_id: uid++, callback_query: { id: 'c3', from: { id: OWNER, first_name: 'Otabek' }, data: `pd:${payId}:3`, message: { message_id: 31, chat: { id: OWNER } } } });
+    await waitFor(() => calls.find((c) => String(c.body.chat_id) === String(ALI) && /To'lov qabul qilindi: \+3 oy/.test(c.body.text)), 'client told');
+    const after = (await call('GET', '/api/platform/tenants', admin)).data.find((x) => x.code === 'demo');
+    const { addMonths } = require('../server/helpbot');
+    // Three calendar months on from the later of today and the old end.
+    const base = Math.max(Date.now(), before.paid_until || 0);
+    assert.ok(Math.abs(after.paid_until - addMonths(base, 3)) < 60 * 1000, `${after.paid_until} vs ${addMonths(base, 3)}`);
+    assert.equal(calls.find((c) => c.method === 'answerCallbackQuery' && c.body.callback_query_id === 'c2').body.text, 'Bu tugmani faqat admin bosa oladi');
+    // Pressed twice: once only.
+    updates.push({ update_id: uid++, callback_query: { id: 'c4', from: { id: OWNER }, data: `pd:${payId}:1`, message: { message_id: 31, chat: { id: OWNER } } } });
+    await waitFor(() => calls.find((c) => c.method === 'answerCallbackQuery' && c.body.callback_query_id === 'c4'), 'twice');
+    assert.equal(calls.find((c) => c.body.callback_query_id === 'c4').body.text, 'Allaqachon tasdiqlangan');
+    assert.equal((await call('GET', '/api/platform/tenants', admin)).data.find((x) => x.code === 'demo').paid_until, after.paid_until);
+
+    // Cash: the owner is told; "Rad etish" leaves the term as it is.
+    updates.push({ update_id: uid++, callback_query: { id: 'c5', from: { id: ALI, first_name: 'Ali' }, data: 'pay:cash', message: { message_id: 21, chat: { id: ALI } } } });
+    const cash = await waitFor(() => calls.find((c) => c.method === 'sendMessage' && String(c.body.chat_id) === String(OWNER) && /naqd/.test(c.body.text) && c.body.reply_markup), 'cash to owner');
+    const cashId = Number(/^pd:(\d+):/.exec(cash.body.reply_markup.inline_keyboard[0][0].callback_data)[1]);
+    updates.push({ update_id: uid++, callback_query: { id: 'c6', from: { id: OWNER }, data: `pd:${cashId}:no`, message: { message_id: 40, chat: { id: OWNER } } } });
+    await waitFor(() => calls.find((c) => String(c.body.chat_id) === String(ALI) && /tasdiqlanmadi/.test(c.body.text)), 'rejected');
+    // The history in the platform; a payment written by hand.
+    const hist = (await call('GET', `/api/platform/tenants/${after.id}/payments`, admin)).data;
+    assert.deepEqual(hist.payments.map((p) => `${p.method}:${p.status}:${p.months}`), ['cash:rejected:0', 'card:approved:3']);
+    assert.equal((await call('POST', `/api/platform/tenants/${after.id}/payments`, admin, { months: 5 })).status, 400);
+    const man = (await call('POST', `/api/platform/tenants/${after.id}/payments`, admin, { months: 1 })).data;
+    assert.equal(man.paid_until, addMonths(after.paid_until, 1));
+
+    // Reminders: two days before the end, once.
+    const soon = Date.now() + 2 * 864e5;
+    await call('PUT', `/api/platform/tenants/${after.id}`, admin, { paid_until: soon });
+    await server.platform.helpRemindTick({ anyHour: true });
+    await server.platform.helpRemindTick({ anyHour: true });
+    assert.equal(calls.filter((c) => String(c.body.chat_id) === String(ALI) && /3 kundan keyin/.test(c.body.text || '')).length, 1);
+    await call('PUT', `/api/platform/tenants/${after.id}`, admin, { paid_until: before.paid_until });
+  } finally {
+    await call('DELETE', '/api/platform/helpbot', admin);
+    delete process.env.TELEGRAM_API;
+    tg.close();
+  }
+});

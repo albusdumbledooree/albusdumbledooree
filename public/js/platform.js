@@ -2,7 +2,7 @@
 /* Platform panel for the site owner: create businesses, give each boss a login, track subscriptions,
    open any business as its boss, restore it from a backup, set the support contact. */
 
-const P = { admin: null, tenants: [], search: '', filter: 'all', modules: {}, types: {}, plans: {}, terms: {}, tab: 'biz', leads: null, leadStatus: '', leadQ: '', tg: {} };
+const P = { admin: null, tenants: [], search: '', filter: 'all', modules: {}, types: {}, plans: {}, terms: {}, tab: 'biz', leads: null, leadStatus: '', leadQ: '', tg: {}, hb: {} };
 const DAY_MS = 24 * 60 * MIN;
 const TOKEN_KEY = 'cp_ptoken';
 const TYPE_ICONS = { choyxona: 'house', restoran: 'utensils', fastfood: 'sandwich', market: 'shopping-cart', clothing: 'shirt', doors: 'door-open' };
@@ -90,7 +90,7 @@ function tenantCard(t) {
       ${t.shared && t.shared.length ? `<span>${icon('triangle-alert', 15)}</span><span class="small warn" title="Oxirgi 7 kunda bu hisoblar band paytida boshqa qurilmadan ochilgan">Hisob almashib ishlatilyapti: ${t.shared.map((x) => `${esc(x.name)} (${x.c} marta)`).join(', ')}</span>` : ''}
       <span>${icon('send', 15)}</span><span class="small"><a href="#" data-tgopen="${t.id}">${t.telegram && t.telegram.chats.length
         ? `Telegram: ${t.telegram.chats.map(esc).join(', ')}${t.telegram.report_time ? ` · ${esc(t.telegram.report_time)}` : ' · hisobot o\'chiq'}` : '<span class="muted">Telegram ulanmagan</span>'}</a></span>
-      <span>${icon('calendar', 15)}</span><span>${due}${t.plan_info.read_only ? ' <span class="chip red">Faqat ko\'rish</span>' : ''}</span>
+      <span>${icon('calendar', 15)}</span><span>${due}${t.plan_info.read_only ? ' <span class="chip red">Faqat ko\'rish</span>' : ''} · <a href="#" class="small" data-payopen="${t.id}">To'lovlar</a></span>
       <span>${icon('layers', 15)}</span><span class="small">Bo'limlar: ${t.plan_info.modules.filter((m) => !(t.disabled_modules || []).includes(m)).length}/${mods} · Oshxona: ${esc({ full: "to'liq", notify: 'xabar', off: "o'chiq" }[t.kitchen_mode] || t.kitchen_mode)}</span>
       ${t.support && t.support.text ? `<span>${icon('life-buoy', 15)}</span><span class="small">${esc(t.support.text)}</span>` : ''}
     </div>
@@ -111,6 +111,7 @@ function mainHtml() {
       <span class="muted small hide-xs">${esc(P.admin.name)}</span>
       <button class="btn sm" id="pplans" title="Tariflar va narxlar">${icon('star', 16)} <span class="hide-xs">Tariflar</span></button>
       <button class="icon-btn ${P.tg.chat_id ? '' : 'warn-dot'}" id="ptg" title="Telegram bot (arizalar)">${icon('send')}</button>
+      <button class="icon-btn ${P.hb.chat_id ? '' : 'warn-dot'}" id="phb" title="To'lov va yordam boti">${icon('hand-coins')}${P.hb.pending ? `<span class="badge">${P.hb.pending}</span>` : ''}</button>
       <button class="icon-btn" id="psettings" title="Yordam kontakti">${icon('life-buoy')}</button>
       <button class="icon-btn" id="pseo" title="Google va Yandex">${icon('search')}</button>
       <button class="icon-btn" id="pw" title="Parol">${icon('key-round')}</button>
@@ -325,6 +326,91 @@ async function telegramDialog() {
     setTimeout(tick, 2500);
   }
 }
+// ---------- "To'lov va yordam" bot: businesses pay and ask questions; the owner answers from their own Telegram ----------
+async function helpbotDialog() {
+  let st;
+  try { st = await GET('/api/platform/helpbot'); } catch (e) { return toastError(e); }
+  P.hb = st;
+  const cardForm = `<div class="card" style="margin-top:12px"><b>${icon('credit-card', 16)} To'lov kartasi</b>
+      <p class="small muted" style="margin:4px 0 10px">Mijoz «Karta orqali» ni bossa, shu karta chiqadi. Keyin u chek rasmini yuboradi.</p>
+      <div class="form-grid"><label class="field">Karta raqami<input name="card_number" inputmode="numeric" autocomplete="off" value="${esc(st.card_number)}" placeholder="8600 0000 0000 0000"></label>
+        <label class="field">Karta egasi<input name="card_owner" value="${esc(st.card_owner)}" placeholder="Ism Familiya"></label></div>
+      <button type="button" class="btn sm primary" id="hb-card" style="margin-top:8px">${icon('save', 16)} Saqlash</button></div>`;
+  const body = !st.configured ? `
+      <p class="small muted" style="margin:0 0 10px">Bu — arizalar botidan <b>alohida</b> bot: mijozlar (bizneslar) shu bot orqali to'lov qiladi va yordam so'raydi.</p>
+      <ol class="stack" style="padding-left:20px;margin:0 0 12px">
+        <li>Telegramda <a href="https://t.me/BotFather" target="_blank" rel="noopener"><b>@BotFather</b></a> → yangi botingizni tanlang (yoki <b>/newbot</b>) → <b>API Token</b>.</li>
+        <li>Tokenni shu yerga joylang va "Saqlash" ni bosing. Tokenni hech kimga yubormang.</li></ol>
+      <label class="field">Bot tokeni<input name="token" autocomplete="off" spellcheck="false" placeholder="7012345678:AAH…"></label>`
+    : !st.chat_id ? `
+      <p>Bot: <b>@${esc(st.bot)}</b> ✅ — endi uni o'zingizning Telegramingizga ulang:</p>
+      <a class="btn primary" href="https://t.me/${esc(st.bot)}?start=${esc(st.link_code)}" target="_blank" rel="noopener">${icon('send', 18)} O'zimning Telegramimga ulash</a>
+      <p class="small muted" style="margin-top:12px">Tugma ishlamasa, botga shu xabarni yozing: <b>/start ${esc(st.link_code)}</b><br>Kod bir martalik. Ulangach bu oyna o'zi yangilanadi.</p>
+      <p class="small muted" id="hb-wait">${icon('clock', 14)} Kutilmoqda…</p>${cardForm}`
+    : `
+      <p>Bot: <b>@${esc(st.bot)}</b> → <b>${esc(st.chat_title || st.chat_id)}</b> ✅</p>
+      <div class="kpis" style="margin:10px 0"><div class="kpi"><div class="kpi-ic">${icon('users', 20)}</div><div><div class="label">Ulangan mijozlar</div><div class="value">${st.linked_chats}</div></div></div>
+        <div class="kpi ${st.pending ? 'warn' : ''}"><div class="kpi-ic">${icon('hand-coins', 20)}</div><div><div class="label">Kutilayotgan to'lovlar</div><div class="value">${st.pending}</div></div></div></div>
+      <p class="small muted">Mijozning savoli shu chatga keladi — javob berish uchun uning xabariga <b>reply</b> qilib yozing.
+        To'lov xabari ostidagi <b>+1 oy</b> / <b>+3 oy</b> tugmasi muddatni o'zi uzaytiradi va mijozga xabar beradi.
+        Mijozlar dasturda <b>Sozlamalar → Mening tarifim → «Telegram botga ulanish»</b> orqali ulanadi.</p>
+      ${!st.card_number ? `<div class="notice warn slim">${icon('triangle-alert', 16)} Karta raqami kiritilmagan — «Karta orqali» to'lov ishlamaydi.</div>` : ''}
+      ${cardForm}
+      ${st.error ? `<div class="notice red" style="margin-top:10px">${icon('triangle-alert', 16)} ${esc(st.error)}</div>` : ''}`;
+  const form = openModal({
+    title: `${icon('hand-coins')} To'lov va yordam boti`,
+    body,
+    actions: !st.configured
+      ? [{ label: 'Bekor', onClick: () => {} }, { label: 'Saqlash', cls: 'primary', onClick: async (f) => {
+        await PUT('/api/platform/helpbot', { token: f.token.value.trim() }); helpbotDialog(); return false;
+      } }]
+      : [{ label: "Botni o'chirish", cls: 'red-text', onClick: async () => {
+        if (!confirm("Bot uzilsinmi? Yozishmalar va to'lovlar tarixi saqlanib qoladi.")) return false;
+        await DEL('/api/platform/helpbot'); P.hb = await GET('/api/platform/helpbot'); render(); toast('Bot uzildi', 'ok');
+      } },
+      ...(st.chat_id ? [{ label: 'Boshqa chatga ulash', onClick: async () => { await POST('/api/platform/helpbot/relink'); helpbotDialog(); return false; } },
+        { label: 'Sinov xabari', cls: 'primary', icon: 'send', onClick: async () => { await POST('/api/platform/helpbot/test'); toast('Yuborildi — Telegramni tekshiring', 'ok'); return false; } }]
+        : [{ label: 'Yopish', onClick: () => {} }])],
+  });
+  const cb = form.querySelector('#hb-card');
+  if (cb) cb.onclick = async () => {
+    try { P.hb = await PUT('/api/platform/helpbot', { card_number: form.card_number.value, card_owner: form.card_owner.value }); toast('Saqlandi', 'ok'); }
+    catch (e) { toastError(e); }
+  };
+  if (st.configured && !st.chat_id) {
+    const tick = async () => {
+      if (!document.body.contains(form)) return;
+      try { const s2 = await GET('/api/platform/helpbot'); if (s2.chat_id) { P.hb = s2; toast('Bot ulandi ✅', 'ok'); helpbotDialog(); render(); return; } } catch { /* keep waiting */ }
+      setTimeout(tick, 2500);
+    };
+    setTimeout(tick, 2500);
+  }
+}
+// A business's payments: from the bot (card / cash) and the ones written here by hand.
+async function tenantPayments(t) {
+  let d;
+  try { d = await GET(`/api/platform/tenants/${t.id}/payments`); } catch (e) { return toastError(e); }
+  const M = { card: '💳 Karta', cash: '💵 Naqd', manual: '✍️ Qo\'lda' };
+  const S = { pending: '<span class="chip orange">kutilmoqda</span>', approved: '<span class="chip green">tasdiqlangan</span>', rejected: '<span class="chip red">rad etilgan</span>' };
+  const rows = d.payments.map((p) => `<tr><td class="small">${fmtDate(p.created_at)}<br><span class="muted">${fmtTime(p.created_at)}</span></td>
+      <td style="white-space:nowrap">${M[p.method] || esc(p.method)}<br>${S[p.status] || esc(p.status)}</td>
+      <td class="num" style="white-space:nowrap">${p.months ? `<b>+${p.months} oy</b>` : '—'}<br><span class="small muted">${p.amount ? num(p.amount) : ''}</span></td>
+      <td class="small">${p.until_after ? `${fmtDate(p.until_after)} gacha` : ''}${p.by_name ? `<br><span class="muted">${esc(p.by_name)}</span>` : ''}</td></tr>`).join('');
+  openModal({
+    title: `${icon('hand-coins')} ${esc(t.name)} — to'lovlar`,
+    body: `<p class="small muted" style="margin:0 0 10px">Muddat: <b>${t.paid_until ? `${fmtDate(t.paid_until)} gacha` : 'belgilanmagan'}</b>
+        · Botga ulangan: <b>${d.help.chats.length ? d.help.chats.map((c) => esc(c.name || c.username)).join(', ') : "yo'q"}</b></p>
+      ${rows ? `<div class="table-wrap"><table><tr><th>Sana</th><th>Usul</th><th>Muddat · summa</th><th>Natija</th></tr>${rows}</table></div>` : `<p class="muted">Hali to'lov yo'q.</p>`}
+      <div class="card" style="margin-top:12px"><b>Naqd pulni qo'lda yozish</b>
+        <p class="small muted" style="margin:4px 0 8px">Pulni o'zingiz olgan bo'lsangiz: muddat shu kundan (yoki muddat tugaydigan kundan) uzayadi.</p>
+        <div class="row" style="gap:8px"><button type="button" class="btn" data-man="1">+1 oy</button><button type="button" class="btn" data-man="3">+3 oy</button></div></div>`,
+    actions: [{ label: 'Yopish', onClick: () => {} }],
+  }).querySelectorAll('[data-man]').forEach((b) => b.onclick = async () => {
+    if (!confirm(`${t.name}: +${b.dataset.man} oy yozilsinmi?`)) return;
+    try { await POST(`/api/platform/tenants/${t.id}/payments`, { months: Number(b.dataset.man) }); closeModal(); await load(); render(); tenantPayments(P.tenants.find((x) => x.id === t.id)); toast('Yozildi', 'ok'); }
+    catch (e) { toastError(e); }
+  });
+}
 async function reloadTg() { try { P.tg = await GET('/api/platform/telegram'); render(); } catch (e) { toastError(e); } }
 function kpiP(label, value, sub, ic, cls = '') {
   return `<div class="kpi ${cls}"><div class="kpi-ic">${icon(ic, 22)}</div><div><div class="label">${label}</div><div class="value">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div></div>`;
@@ -333,7 +419,7 @@ function emptyState(ic, text) { return `<div class="empty">${icon(ic, 56)}<div>$
 
 async function load() {
   [P.tenants, P.modules, P.types, { release: P.release }, { plans: P.plans, terms: P.terms }] = await Promise.all([GET('/api/platform/tenants'),
-    GET('/api/platform/modules'), GET('/api/platform/types'), GET('/api/platform/release'), GET('/api/platform/plans'), loadLeads()]);
+    GET('/api/platform/modules'), GET('/api/platform/types'), GET('/api/platform/release'), GET('/api/platform/plans'), loadLeads(), GET('/api/platform/helpbot').then((x) => { P.hb = x; }).catch(() => {})]);
 }
 
 // ---------- Forms ----------
@@ -492,6 +578,7 @@ function bind(root) {
   root.querySelector('#pseo').onclick = seoDialog;
   root.querySelector('#pplans').onclick = plansDialog;
   root.querySelector('#ptg').onclick = telegramDialog;
+  root.querySelector('#phb').onclick = helpbotDialog;
   root.querySelectorAll('[data-tab]').forEach((b) => b.onclick = async () => {
     P.tab = b.dataset.tab;
     if (P.tab === 'versions' && !P.changelog) { try { P.changelog = await GET('/api/platform/changelog'); } catch (e) { toastError(e); P.changelog = { versions: [] }; } }
@@ -508,6 +595,7 @@ function bind(root) {
   root.querySelectorAll('[data-term]').forEach((b) => b.onclick = () => termDialog(byId(b.dataset.term)));
   root.querySelectorAll('[data-more]').forEach((b) => b.onclick = () => moreMenu(byId(b.dataset.more)));
   root.querySelectorAll('[data-tgopen]').forEach((a) => a.onclick = (e) => { e.preventDefault(); tenantTelegram(byId(a.dataset.tgopen)); });
+  root.querySelectorAll('[data-payopen]').forEach((a) => a.onclick = (e) => { e.preventDefault(); tenantPayments(byId(a.dataset.payopen)); });
 }
 
 // Subscription term: add or take away days, a week (e.g. a bonus), months or a year, or pick the date.

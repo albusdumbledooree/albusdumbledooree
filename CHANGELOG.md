@@ -2,6 +2,18 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.30.0 — "To'lov va yordam" Telegram boti
+
+- Platformada yangi tugma (🤲 belgisi): alohida botning tokeni kiritiladi va bot sizning Telegramingizga ulanadi. Karta raqami va karta egasi shu yerda yoziladi.
+- Mijoz dasturda **Sozlamalar → Mening tarifim → «Telegram botga ulanish»** tugmasini bosadi. Bot ochiladi va uning biznesiga o'zi bog'lanadi, kod terish shart emas.
+- Botda uchta tugma bor: **💳 To'lash**, **📅 Tarifim**, **🆘 Yordam**.
+- **Yordam:** mijozning xabari (matn, rasm, ovoz) sizga "qaysi biznes, kim" degan sarlavha bilan keladi. Siz unga *reply* qilib javob yozasiz va javob mijozga boradi.
+- **Karta orqali to'lov:** mijozga karta chiqadi, u chek rasmini yuboradi. Chek sizga **+1 oy / +3 oy / Rad etish** tugmalari bilan keladi. Tasdiqlansa, muddat o'zi uzayadi va mijozga xabar boradi.
+- **Naqd to'lov:** sizga xabar keladi. Pulni olgach, o'sha tugmalar bilan tasdiqlaysiz.
+- Muddat tugashiga 3 kun va 1 kun qolganda, shuningdek tugagan kuni mijozga eslatma boradi (soat 9:00–21:00 oralig'ida).
+- Platformadagi biznes kartochkasida yangi **«To'lovlar»** tarixi bor. Naqd pulni u yerda qo'lda ham yozish mumkin (+1 / +3 oy).
+- Barcha yozishmalar va to'lovlar serverda saqlanadi.
+
 ## 1.29.1 — Dostavka: tekshiruvdan keyingi tuzatishlar
 
 - Dostavka chekida telefon/manzil yozilayotganda boshqa qurilmadan o'zgarish kelsa (jonli yangilanish), yozilgan matn o'chib ketmaydi.

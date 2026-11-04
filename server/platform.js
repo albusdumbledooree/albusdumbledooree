@@ -16,6 +16,7 @@ const { createApi, MODULES, BUSINESS_TYPES, SHOP_TYPES } = require('./api');
 const { createHub } = require('./events');
 const { snapshot, listTenantBackups, stampNow } = require('./backup');
 const { createLeads } = require('./leads');
+const { createHelpBot } = require('./helpbot');
 const { createSecretBox } = require('./secret');
 const { verifyInput } = require('./seo');
 const { hashPassword, verifyPassword, newToken, HttpError, str, int } = require('./util');
@@ -142,7 +143,7 @@ function createPlatform(dataDir) {
     const db = open(file);
     const hub = createHub();
     ctx = { id, db, hub, row, file };
-    ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row, plan: () => planFor(ctx.row), branches: () => branchesOf(id), file, telegram: telegramFor(id), secret });
+    ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row, plan: () => planFor(ctx.row), branches: () => branchesOf(id), file, telegram: telegramFor(id), helpbot: helpbot.forTenant(id), secret });
     contexts.set(id, ctx);
     return ctx;
   }
@@ -190,6 +191,14 @@ function createPlatform(dataDir) {
 
   // Applications from the front page and the owner's Telegram bot.
   const leads = createLeads({ pdb, pget, pset, now });
+  // The second bot: payments and questions of the businesses (Telegram → admin chat; "+1 oy" moves the term).
+  const helpbot = createHelpBot({ pdb, pget, pset, now, tenant: (id) => q('SELECT * FROM tenants WHERE id = ?').get(id), planFor: (row) => planFor(row),
+    setPaidUntil: (id, ms) => {
+      q('UPDATE tenants SET paid_until = ? WHERE id = ?').run(ms, id);
+      refresh(id);
+      if (contexts.has(id)) contexts.get(id).hub.publish('settings');
+    },
+    changed: (id) => { if (contexts.has(id)) contexts.get(id).hub.publish('settings'); } });
 
   // ---------- Versions: the change list (CHANGELOG.md) and the day each version first ran on this server ----------
   const ROOT = path.join(__dirname, '..');
@@ -212,6 +221,7 @@ function createPlatform(dataDir) {
     return { versions };
   }
   leads.start();
+  helpbot.start();
 
   // ---------- A business owner's Telegram: the morning list of tasks, a reminder an hour before a task ----------
   pdb.exec(`CREATE TABLE IF NOT EXISTS tenant_telegram (
@@ -359,7 +369,7 @@ function createPlatform(dataDir) {
       return null;
     } finally { desktopBusy = false; }
   }
-  const remindTimer = setInterval(() => { remindTick().catch(() => {}); tgBackupTick().catch(() => {}); }, 5 * 60 * 1000);
+  const remindTimer = setInterval(() => { remindTick().catch(() => {}); tgBackupTick().catch(() => {}); helpbot.remindTick().catch(() => {}); }, 5 * 60 * 1000);
   const desktopTimer = setInterval(() => { desktopTick().catch(() => {}); }, 60 * 60 * 1000);
   const desktopFirst = setTimeout(() => { desktopTick().catch(() => {}); }, 2 * 60 * 1000);
   desktopTimer.unref(); desktopFirst.unref();
@@ -890,6 +900,14 @@ function createPlatform(dataDir) {
     ['POST', '/api/platform/telegram/relink', true, leads.relink],
     ['POST', '/api/platform/telegram/test', true, leads.test],
     ['DELETE', '/api/platform/telegram', true, leads.unlink],
+    // "To'lov va yordam" bot: the token, the admin chat, the card; payments of one business; a payment taken by hand.
+    ['GET', '/api/platform/helpbot', true, () => helpbot.status()],
+    ['PUT', '/api/platform/helpbot', true, helpbot.setToken],
+    ['POST', '/api/platform/helpbot/relink', true, helpbot.relink],
+    ['POST', '/api/platform/helpbot/test', true, helpbot.test],
+    ['DELETE', '/api/platform/helpbot', true, helpbot.unlink],
+    ['GET', '/api/platform/tenants/:id/payments', true, ({ params }) => ({ payments: helpbot.forTenant(params.id).payments(), help: helpbot.forTenant(params.id).status() })],
+    ['POST', '/api/platform/tenants/:id/payments', true, ({ params, body, admin }) => helpbot.manualPayment(params.id, Number(body.months), admin && admin.name)],
   ].map(([method, pattern, auth, handler]) => ({
     method, auth, handler, re: new RegExp('^' + pattern.replace(':id', '(\\d+)') + '$'),
   }));
@@ -909,6 +927,7 @@ function createPlatform(dataDir) {
 
   function close() {
     leads.stop();
+    helpbot.stop();
     clearInterval(remindTimer);
     clearInterval(desktopTimer);
     clearTimeout(desktopFirst);
@@ -916,7 +935,7 @@ function createPlatform(dataDir) {
     pdb.close();
   }
 
-  return { handle, byCode, byToken, byGuestKey, remindTick, tgBackupTick, sendBackups, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, seoVerify, desktopTick, submitLead: leads.submit };
+  return { handle, byCode, byToken, byGuestKey, remindTick, tgBackupTick, sendBackups, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, seoVerify, desktopTick, submitLead: leads.submit, helpRemindTick: (o) => helpbot.remindTick(o) };
 }
 
 module.exports = { createPlatform };

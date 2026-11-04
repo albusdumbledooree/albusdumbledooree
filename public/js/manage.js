@@ -1577,6 +1577,10 @@ Views.settings = {
     if (tab === 'printers') data.pr = await GET('/api/printers/setup');
     if (tab === 'qr') data.qr = await GET('/api/qr');
     if (tab === 'telegram') data.tg = await telegramSettingsHtml();
+    if (tab === 'plan') data.help = await GET('/api/helpbot').catch(() => null);
+    else delete UI.helpUrl;
+    // Linked meanwhile (the bot tells the program): show who is linked instead of the link.
+    if (data.help && UI.helpUrl && data.help.chats.length > UI.helpBase) delete UI.helpUrl;
     if (tab === 'audit') data.rows = await GET('/api/audit?limit=300');
     if (tab === 'backup') [data.local, data.folder] = await Promise.all([LocalBackup.all(), FolderBackup.status()]);
     if (tab === 'me' && App.user.role !== 'owner' && moduleOn('payroll')) data.pay = await GET('/api/my/payroll').catch(() => null);
@@ -2093,7 +2097,7 @@ Views.settings = {
   },
 
   // The boss sees the plan, the term and how much of the plan is used; closed parts lead to the support contact.
-  tab_plan() {
+  tab_plan({ help }) {
     const p = App.plan;
     const left = p.paid_until ? Math.floor((p.paid_until - Date.now()) / (24 * 60 * MIN)) : null;
     const mods = Object.entries(App.modulesAll || {});
@@ -2119,10 +2123,24 @@ Views.settings = {
         }).join('')}</div>
         <p class="small muted" style="margin-top:14px">${icon('info', 14)} ${t("Sotuv, buyurtmalar, oshxona, kassa, menyu va xodimlar barcha tariflarda bor. Tarifni o'zgartirish yoki to'lov uchun:")}</p>
         ${supportHtml()}
-      </div>`;
+      </div>
+      ${help && help.ready ? `<div class="card help-bot" style="margin-top:16px">
+        <div class="row" style="gap:12px;align-items:center;flex-wrap:nowrap"><span class="plan-badge" style="background:#229ED9">${icon('send', 24)}</span>
+          <div class="grow"><h2 style="margin:0">${t("To'lov va yordam boti")}</h2>
+            <div class="small muted">${t("Telegramda: to'lov qilish (karta yoki naqd), muddatni ko'rish, savol berish. Muddat tugashidan oldin eslatadi.")}</div></div></div>
+        ${help.chats.length ? `<p class="small" style="margin:12px 0 0">${icon('circle-check', 15)} ${t('Ulangan')}: <b>${help.chats.map((c) => esc(c.name || (c.username ? `@${c.username}` : 'Telegram'))).join(', ')}</b></p>` : ''}
+        ${UI.helpUrl ? `<div class="stack" style="margin-top:12px"><a class="btn primary lg" href="${esc(UI.helpUrl)}" target="_blank" rel="noopener">${icon('send', 20)} ${t('Telegramni ochish')}</a>
+            <p class="small muted" style="margin:0">${t("Telegram ochilgach «Start» ni bosing. Havola bir martalik; boshqa odamga ham yuborsangiz bo'ladi")}: <code class="tg-url">${esc(UI.helpUrl)}</code></p></div>`
+          : `<button class="btn ${help.chats.length ? '' : 'primary lg'}" id="help-link" style="margin-top:12px">${icon('send', 20)} ${help.chats.length ? t("Yana bir kishini ulash") : t('Telegram botga ulanish')}</button>`}
+      </div>` : ''}`;
   },
   bind_plan(root) {
     root.querySelectorAll('[data-upgrade]').forEach((b) => b.onclick = () => upgradeDialog(b.dataset.upgrade));
+    const hl = root.querySelector('#help-link');
+    if (hl) hl.onclick = async () => {
+      hl.disabled = true;
+      try { const r = await POST('/api/helpbot/link'); UI.helpBase = r.chats.length; UI.helpUrl = r.url; refreshView(true); } catch (e) { toastError(e); hl.disabled = false; }
+    };
   },
 
   tab_me({ pay }) {

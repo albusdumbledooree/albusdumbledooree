@@ -73,7 +73,7 @@ function routeModule(pattern) {
 // opts.hub: live-event hub of this choyxona; opts.tokenPrefix marks which choyxona a session token belongs to;
 // opts.tenant(): the choyxona's platform record (code, name, paid_until); opts.plan(): its plan (sections, staff limit);
 // opts.file: its database file.
-function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () => null, branches = () => [], file = null, telegram = null, secret = NO_BOX } = {}) {
+function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () => null, branches = () => [], file = null, telegram = null, helpbot = null, secret = NO_BOX } = {}) {
   const events = hub;
   // Shared devices (the staff-list screen) get tokens of their own: "d<choyxona>_…".
   const devicePrefix = tokenPrefix.replace(/^t/, 'd');
@@ -2364,6 +2364,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['DELETE', '/api/telegram', ['owner'], tgApi('unlink')],
     ['PUT', '/api/telegram/report', ['owner'], ({ user, body }) => { if (!telegram) throw new HttpError(404, 'Topilmadi'); return tgApi('status')({ user }) && telegram.setReport(body.time); }],
     ['POST', '/api/telegram/report', ['owner'], tgApi('report')],
+    // FLOWI's own "To'lov va yordam" bot: the boss links their Telegram with one tap (the link carries a one-time code).
+    ['GET', '/api/helpbot', MANAGERS, () => { if (!helpbot) throw new HttpError(404, 'Topilmadi'); return helpbot.status(); }],
+    ['POST', '/api/helpbot/link', MANAGERS, () => { if (!helpbot) throw new HttpError(404, 'Topilmadi'); return helpbot.link(); }],
     ['GET', '/api/tasks', ALL, tasks.list],
     ['POST', '/api/tasks', ['owner', 'admin', 'cashier'], tasks.create],
     ['PUT', '/api/tasks/:id', MANAGERS, tasks.update],
