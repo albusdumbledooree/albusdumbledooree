@@ -2089,6 +2089,39 @@ test('FLOWI Printer program: several printers on one computer (USB and LAN), nam
   assert.deepEqual(jobs.map((j) => j.printer_id), [usb.id]);
   assert.ok(Buffer.from(jobs[0].data, 'base64').toString('latin1').includes('SINOV'));
   await call('POST', '/api/device/agent-ack', token, { printer_id: usb.id, upto: jobs[0].upto });
+  // The guest's bill on the Kassa printer: a picture (GS v 0, 576 dots across), with the check logo when it is a PNG.
+  const zlib = require('node:zlib');
+  const tinyPng = (() => {
+    const crcT = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+    const crc = (b) => { let c = 0xffffffff; for (const x of b) c = crcT[(c ^ x) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+    const chunk = (t, d) => { const l = Buffer.alloc(4); l.writeUInt32BE(d.length); const td = Buffer.concat([Buffer.from(t), d]); const cr = Buffer.alloc(4); cr.writeUInt32BE(crc(td)); return Buffer.concat([l, td, cr]); };
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(20, 0); ihdr.writeUInt32BE(10, 4); ihdr[8] = 8; ihdr[9] = 0;
+    const raw = Buffer.alloc(21 * 10); for (let y = 0; y < 10; y++) for (let x = 0; x < 20; x++) raw[y * 21 + 1 + x] = x < 10 ? 0 : 255;
+    return Buffer.concat([Buffer.from([0x89, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+  })();
+  const logo = (await call('POST', '/api/assets', boss, { kind: 'logo', data: `data:image/png;base64,${tinyPng.toString('base64')}` })).data;
+  await call('PUT', '/api/settings', boss, { receipt_logo_id: logo.id, receipt_logo: true });
+  await call('PUT', `/api/printers/${usb.id}`, boss, { on: true, bill: true, orders: true });
+  const o2 = (await call('POST', '/api/orders', waiter, { room_id: room.id })).data;
+  await call('POST', `/api/orders/${o2.id}/items`, waiter, { items: [{ dish_id: soup.id, qty: 1 }] });
+  await call('POST', '/api/device/agent-ack', token, { printer_id: usb.id, upto: (await call('GET', '/api/device/agent-jobs', token)).data.jobs[0].upto });
+  assert.equal((await call('POST', `/api/orders/${o2.id}/print`, waiter)).data.sent_to.name, 'Oshxona');
+  jobs = (await call('GET', '/api/device/agent-jobs', token)).data.jobs;
+  const pic = Buffer.from(jobs[0].data, 'base64');
+  const at = pic.indexOf(Buffer.from([0x1d, 0x76, 0x30, 0]));
+  assert.ok(at > 0, 'a raster picture');
+  assert.equal(pic[at + 4] | (pic[at + 5] << 8), 72, '576 dots across');
+  assert.ok(pic.length > 20000);
+  await call('POST', '/api/device/agent-ack', token, { printer_id: usb.id, upto: jobs[0].upto });
+  // "Plain text" for a printer that cannot print pictures.
+  await call('PUT', `/api/printers/${usb.id}`, boss, { plain: true });
+  assert.equal((await call('GET', '/api/printers/setup', boss)).data.agents[0].printers.find((p) => p.id === usb.id).plain, true);
+  await call('POST', `/api/orders/${o2.id}/print`, waiter);
+  jobs = (await call('GET', '/api/device/agent-jobs', token)).data.jobs;
+  const txt = Buffer.from(jobs[0].data, 'base64').toString('latin1');
+  assert.ok(txt.includes('JAMI') && !txt.includes('\x1dv0'));
+  await call('POST', '/api/device/agent-ack', token, { printer_id: usb.id, upto: jobs[0].upto });
+  await call('POST', `/api/orders/${o2.id}/close`, boss, { paid_cash: 1e6 });
   // Another business's computer cannot acknowledge this one's printer; a removed computer's key stops working.
   assert.equal((await call('POST', '/api/device/agent-ack', token, { printer_id: 99999, upto: 1 })).status, 404);
   await call('PUT', '/api/settings', boss, { print_agent: false });
@@ -2542,4 +2575,19 @@ test('the bill on paper (ESC/POS): one row per dish with its count, same dishes 
   assert.ok(lines.some((l) => /^Taomlar\s+20 000$/.test(l)) && lines.some((l) => /^Xizmat haqi \(10 kishi\)\s+10\s+20 000$/.test(l)));
   assert.ok(!/Naqd|Karta/.test(out), 'no payment method');
   assert.ok(out.includes('\x1b3'), 'wider line spacing');
+});
+
+test('the bill picture: 80 and 58 mm, the font has every letter of the check (Latin, Cyrillic, Uzbek), a PNG logo', () => {
+  const { billRaster, decodePng } = require('../server/raster');
+  const FONT = require('../server/receipt-font');
+  for (const size of [24, 34, 46]) for (const ch of "AZaz09 'O'g'ЎўҚқҒғҲҳЖжЁё№—«»") assert.ok(FONT.sizes[size].glyphs[ch], `${size}px ${ch}`);
+  const order = { id: 5, status: 'closed', room: { name: 'Zal 1' }, waiter: { name: 'Madina' }, guests: 2, opened_at: Date.now(), closed_at: Date.now(),
+    items: [{ name: 'Шашлык', qty: 1, price: 30000, status: 'served' }, { name: 'Non', qty: 2, price: 5000, status: 'served' }], subtotal: 40000, service_amount: 0, total: 40000 };
+  for (const [paper, bytes] of [[80, 72], [58, 48]]) {
+    const out = billRaster({ order, shop: { name: 'Sam Osh' } }, { paper });
+    const at = out.indexOf(Buffer.from([0x1d, 0x76, 0x30, 0]));
+    assert.equal(out[at + 4], bytes);
+    assert.deepEqual([...out.subarray(-4)], [0x1d, 0x56, 0x42, 0x00], 'ends with a cut');
+  }
+  assert.equal(decodePng(Buffer.from('not a png')), null);
 });

@@ -14,6 +14,7 @@
  */
 const { HttpError, str, int } = require('./util');
 const { ticket, bill } = require('./escpos');
+const { billRaster } = require('./raster');
 const MIN = 60 * 1000;
 const CATCH_UP = 3 * 60 * MIN; // missed tickets older than this are not printed any more
 const ONLINE = 90 * 1000; // a printer that asked within this time is "on"
@@ -142,6 +143,14 @@ function createPrint(db, { now, events, audit, settings, newToken, devicePrefix 
     return { ok: true, enabled: agentOn() };
   }
   const width = (p) => (p.paper === 58 ? 32 : 48);
+  // The check's logo (a PNG the boss uploaded) for the bill picture; none when switched off or not a PNG.
+  function logoOf(shop) {
+    if (!shop || shop.receipt_logo === false) return null;
+    const id = shop.receipt_logo_id || shop.logo;
+    if (!id) return null;
+    const a = q('SELECT mime, data FROM assets WHERE id = ?').get(Number(id));
+    return a && a.mime === 'image/png' ? Buffer.from(a.data) : null;
+  }
   // The tickets for every printer of this computer, drawn as ESC/POS bytes.
   function agentJobs({ device }) {
     if (!device.agent) throw new HttpError(403, 'Bu qurilma printer dasturi emas');
@@ -158,9 +167,11 @@ function createPrint(db, { now, events, audit, settings, newToken, devicePrefix 
         const data = JSON.parse(r.data);
         const x = r.printer_id ? data : forDevice(prnView(p), data);
         if (!x) { skipTo = r.id; continue; }
-        const draw = x.kind === 'bill' ? bill : ticket;
-        out.push({ printer_id: p.id, upto: r.id, kind: p.kind, target: p.kind === 'net' ? p.ip : p.sys_name, port: p.port || 9100,
-          data: draw({ ...x, late: now() - r.created_at > 2 * MIN }, { width: width(p), label: p.label }).toString('base64') });
+        const job = { ...x, late: now() - r.created_at > 2 * MIN };
+        // The guest's bill: a picture in the business's font (or plain text for a printer that cannot print pictures).
+        const bytes = x.kind !== 'bill' ? ticket(job, { width: width(p), label: p.label })
+          : p.plain ? bill(job, { width: width(p) }) : billRaster(job, { paper: p.paper === 58 ? 58 : 80, logo: logoOf(x.shop) });
+        out.push({ printer_id: p.id, upto: r.id, kind: p.kind, target: p.kind === 'net' ? p.ip : p.sys_name, port: p.port || 9100, data: bytes.toString('base64') });
         skipTo = null;
         break; // one ticket per printer per round: printed in order, each acknowledged
       }
@@ -189,7 +200,7 @@ function createPrint(db, { now, events, audit, settings, newToken, devicePrefix 
       id: d.id, name: d.name, online: d.print_seen > now() - ONLINE, seen: d.print_seen || null, version: d.agent_version || '',
       printers: q('SELECT * FROM printers WHERE device_id = ? ORDER BY kind DESC, id').all(d.id).map((p) => ({
         id: p.id, kind: p.kind, sys_name: p.sys_name, port_name: p.port_name, ip: p.ip, port: p.port, label: p.label, on: !!p.on_, all: !!p.print_all,
-        cats: catsOf({ print_cats: p.cats }), bill: !!p.bill, orders: (p.orders ?? 1) === 1, paper: p.paper || 80, error: p.error_at > (p.printed_at || 0) ? p.error : '',
+        cats: catsOf({ print_cats: p.cats }), bill: !!p.bill, orders: (p.orders ?? 1) === 1, plain: !!p.plain, paper: p.paper || 80, error: p.error_at > (p.printed_at || 0) ? p.error : '',
         present: p.kind === 'net' || p.seen_at > now() - 5 * MIN,
       })),
     }));
@@ -223,6 +234,7 @@ function createPrint(db, { now, events, audit, settings, newToken, devicePrefix 
     const paper = body.paper === undefined ? p.paper || 80 : Number(body.paper) === 58 ? 58 : 80;
     // Switched on now: start from the next ticket.
     const upto = on && !p.on_ ? maxId() : p.upto;
+    if (body.plain !== undefined) q('UPDATE printers SET plain = ? WHERE id = ?').run(body.plain ? 1 : 0, p.id);
     q('UPDATE printers SET label = ?, on_ = ?, print_all = ?, cats = ?, paper = ?, upto = ?, bill = ?, orders = ?, ip = ?, port = ? WHERE id = ?').run(
       body.label !== undefined ? str(body.label, 'Nomi', { max: 40 }) : p.label, on, body.all === undefined ? p.print_all : body.all ? 1 : 0,
       cats, paper, upto, body.bill === undefined ? p.bill || 0 : body.bill ? 1 : 0, body.orders === undefined ? p.orders ?? 1 : body.orders ? 1 : 0,

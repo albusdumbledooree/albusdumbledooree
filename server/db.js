@@ -784,6 +784,8 @@ CREATE INDEX IF NOT EXISTS idx_work_day ON work_log(day, user_id);
     addCol('printers', 'orders', 'INTEGER NOT NULL DEFAULT 1');
     db.exec("UPDATE printers SET cats = 'all' WHERE cats IN ('', '[]')");
   }
+  // The guest's bill goes to a printer as a picture (same font and spacing on every printer); 1 = as plain text (very old printers).
+  addCol('printers', 'plain', 'INTEGER NOT NULL DEFAULT 0');
   addCol('transactions', 'fixed_month', 'TEXT');
   // A deleted check (the guest left): who deleted it and what was on it; it stays in the reports.
   addCol('orders', 'cancelled_by', 'INTEGER');

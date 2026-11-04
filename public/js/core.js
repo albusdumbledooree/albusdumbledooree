@@ -603,8 +603,30 @@ function bindKeypad(root, { maxLen, masked = true, onChange, onFull }) {
 // Thermal printers (58/80 mm) work through the normal system printer driver.
 // With Chrome started as "chrome --kiosk-printing" receipts print without the dialog.
 // kind: 'receipt' or 'kitchen' — inside the FLOWI program for Windows each goes to its own printer, with no dialog.
+/* The guest's check is printed in DejaVu Sans Mono Bold (the same letters as the FLOWI Printer bill picture).
+   The font goes inside the printed page itself, so it is there at the moment of printing (no network wait). */
+const ReceiptFont = {
+  data: null,
+  load() {
+    if (this.data || this.loading) return;
+    this.loading = fetch('/fonts/DejaVuSansMono-Bold.ttf').then((r) => (r.ok ? r.arrayBuffer() : null)).then((buf) => {
+      if (!buf) return;
+      let bin = '';
+      const a = new Uint8Array(buf);
+      for (let i = 0; i < a.length; i += 0x8000) bin += String.fromCharCode.apply(null, a.subarray(i, i + 0x8000));
+      this.data = btoa(bin);
+    }).catch(() => {}).finally(() => { this.loading = null; });
+  },
+  css() {
+    const src = this.data ? `url(data:font/ttf;base64,${this.data}) format("truetype")` : `url(${location.origin}/fonts/DejaVuSansMono-Bold.ttf) format("truetype")`;
+    return `@font-face{font-family:"FLOWI Chek";src:${src};font-weight:700}`;
+  },
+};
+setTimeout(() => ReceiptFont.load(), 1500);
+
 // The paper page around a check or ticket. Thermal printers fade thin letters: a bold sans font in pure black prints clearly.
-function docHtml(title, body, s = App.settings || {}) {
+// mono: the guest's check in the receipt font (wider line spacing, columns that line up).
+function docHtml(title, body, s = App.settings || {}, mono = false) {
   const narrow = String(s.receipt_width) === '58';
   const logo = Math.min(100, Math.max(20, Number(s.receipt_logo_size) || 50));
   return `<!doctype html><html><head><meta charset="utf-8"><base href="${esc(location.origin)}/"><title>${esc(title)}</title><style>
@@ -626,10 +648,14 @@ function docHtml(title, body, s = App.settings || {}) {
     .foot{text-align:center;margin-top:6px;font-family:"Courier New",Consolas,monospace;font-weight:900;white-space:pre-wrap}
     .foot div:last-child{font-size:.9em}
     @page{size:${narrow ? 58 : 80}mm auto;margin:0}
+    ${mono ? `${ReceiptFont.css()}
+    body,td,th,.foot{font-family:"FLOWI Chek","DejaVu Sans Mono",Consolas,"Courier New",monospace !important;font-weight:700}
+    body{font-size:${narrow ? 11.5 : 12.5}px;line-height:1.5}.items td{padding:5px 0}.kv td{padding:4px 0}
+    .name{letter-spacing:.02em}.kv td:last-child{white-space:nowrap}tr.pp{font-size:${narrow ? 11.5 : 12.5}px !important}.pp td{white-space:nowrap}` : ''}
   </style></head><body>${body}</body></html>`;
 }
-function printDoc(title, body, kind = 'receipt', s = App.settings) {
-  const html = docHtml(title, body, s);
+function printDoc(title, body, kind = 'receipt', s = App.settings, mono = false) {
+  const html = docHtml(title, body, s, mono);
   if (window.flowiDesktop) {
     window.flowiDesktop.print(html, { kind }).then((r) => { if (!r || !r.ok) { toast(`${t('Chop etilmadi')}: ${(r && r.error) || ''}`, 'warn'); printInFrame(html); } })
       .catch(() => printInFrame(html));
@@ -714,7 +740,7 @@ function receiptBody(o, s = App.settings) {
       ${o.service_amount ? `<tr><td>${t('Xizmat haqi')}${o.service_type === 'per_guest' ? ` (${t('{0} kishi', o.guests)})` : ` ${o.service_pct}%`}</td><td class="q">${o.service_type === 'per_guest' ? o.guests : ''}</td><td class="s">${num(o.service_amount)}</td></tr>` : ''}
       ${o.discount ? `<tr><td>${t('Chegirma')}</td><td class="q"></td><td class="s">−${num(o.discount)}</td></tr>` : ''}</table>
     <hr class="thick"><table class="kv jami"><tr><td>${t('JAMI')}:</td><td>${num(o.total)}</td></tr></table><hr class="thick">
-    ${share ? `<table class="kv"><tr class="big"><td>${t('{0} kishi — har biriga', o.guests)}:</td><td>${num(share)}</td></tr></table>` : ''}
+    ${share ? `<table class="kv"><tr class="big pp"><td>${t('{0} kishi — har biriga', o.guests)}:</td><td>${num(share)}</td></tr></table>` : ''}
     ${o.advance || o.balance > 0 || (o.payments || []).length ? `<hr><table class="kv">
       ${o.customer ? `<tr><td colspan="2">${t('Mijoz')}: ${esc(o.customer.name)} ${esc(o.customer.phone || '')}</td></tr>` : ''}
       ${o.advance ? `<tr><td>${t("Avans (bosh to'lov)")}:</td><td>${num(o.advance)}</td></tr>` : ''}
@@ -725,7 +751,7 @@ function receiptBody(o, s = App.settings) {
     ${foot.length ? `<div class="foot">${foot.map((x) => `<div>${esc(x)}</div>`).join('')}</div>` : ''}`;
 }
 function printReceipt(o, s = App.settings) {
-  printDoc(`${t('Chek')} #${o.id}`, receiptBody(o, s), 'receipt', s);
+  printDoc(`${t('Chek')} #${o.id}`, receiptBody(o, s), 'receipt', s, true);
 }
 
 // Kitchen ticket: big place name, dishes and notes — no prices.

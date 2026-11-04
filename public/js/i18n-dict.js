@@ -1354,6 +1354,7 @@
   "Papkaga avtomatik zaxira uchun FLOWI dasturini yangilang: Ctrl+Shift+S → Yangilanish (1.2.0 yoki yangisi).": ["Для автоматической копии в папку обновите программу FLOWI: Ctrl+Shift+S → Обновление (1.2.0 или новее).", "For automatic backups into a folder, update the FLOWI program: Ctrl+Shift+S → Update (1.2.0 or newer)."],
   "Papkani ochish": ["Открыть папку", "Open the folder"],
   "Saqlanmadi": ["Не сохранено", "Not saved"],
+  "Mijoz chekini oddiy matn qilib chiqarish (printer rasm chiqara olmasa)": ["Печатать чек гостя простым текстом (если принтер не печатает картинки)", "Print the guest bill as plain text (if the printer cannot print pictures)"],
     "Kamera topilmadi": ["Камера не найдена", "No camera found"],
     "BUTUN CHEK O'CHIRILDI": ["ЧЕК УДАЛЁН ПОЛНОСТЬЮ","WHOLE CHECK DELETED"],
     "Diqqat! {0}. Butun chek o'chirildi.": ["Внимание! {0}. Чек удалён полностью.","Attention! {0}. The whole check was deleted."],

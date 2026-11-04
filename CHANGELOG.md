@@ -2,6 +2,15 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.27.0 — Mijoz cheki rasm bo'lib chiqadi: o'z shrifti, keng qatorlar
+- **FLOWI Printer orqali mijoz cheki endi rasm bo'lib chiqadi**: shrift DejaVu Sans Mono (qalin), qatorlar orasi keng,
+  ustunlar tekis — har qanday 80 / 58 mm printerda bir xil (avval printerning o'z shrifti va oralig'i edi, uni buyruq
+  bilan o'zgartirib bo'lmaydi). Chek tepasida **logotip** ham chiqadi (PNG, o'lchami Sozlamalar → Ko'rinish → Chek'dan).
+  Kassa kompyuteridagi FLOWI Printer dasturini yangilash shart emas.
+- Juda eski printer rasm chiqara olmasa: Printerlar → shu printerda "Mijoz chekini oddiy matn qilib chiqarish".
+- Windows dasturi va brauzer chekida ham shu shrift (shrift chek ichiga joylanadi — chop etish paytida yo'qolmaydi).
+- Oshxona qog'ozlari o'zgarmadi.
+
 ## 1.26.2 — Windows dasturida papkaga zaxira (FLOWI Windows 1.2.0)
 - **FLOWI Windows dasturi 1.2.0**: Sozlamalar → Zaxira → "Papkani tanlash" — Windows'ning o'z oynasi ochiladi; tanlangan papkada
   "FLOWI zaxira" ichiga har 3 soatda biznesning to'liq bazasi yoziladi (oxirgi 60 tasi saqlanadi). Ruxsat so'ralmaydi,

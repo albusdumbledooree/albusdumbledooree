@@ -1511,7 +1511,7 @@ function bindReceiptSettings(root, save) {
     frame.style.width = `${width === '58' ? 210 : 300}px`;
     // The preview is as tall as the check itself (measured from its content, so a shorter 58 mm check shrinks it again).
     frame.onload = () => { try { frame.style.height = `${Math.ceil(frame.contentDocument.body.getBoundingClientRect().height) + 8}px`; } catch { /* preview only */ } };
-    frame.srcdoc = docHtml(t('Chek'), receiptBody(sampleCheck(), d), d);
+    frame.srcdoc = docHtml(t('Chek'), receiptBody(sampleCheck(), d), d, true);
   };
   f.receipt_logo_size.oninput = draw;
   f.receipt_group.onchange = f.receipt_per_person.onchange = draw;
