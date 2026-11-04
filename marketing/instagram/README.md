@@ -189,6 +189,54 @@ Cheklar, menyu, xodimlar, hisobotlar — hech qachon yo'qolmaydi.
 #xavfsizlik #zaxira #biznes #choyxona #restoran #uzbekistan #чайхана
 ```
 
+## Ovozli reels (HyperFrames, 2-versiya)
+
+r1 va r2 qayta yasaldi: o'zbekcha ovoz (Edge TTS: r1 — Sardor, r2 — Madina), so'zma-so'z yonadigan
+subtitr, kod bilan sintez qilingan musiqa va SFX (litsenziya muammosi yo'q). Eski r1/r2 o'rniga shularni qo'ying.
+
+| Fayl | Uzunlik | Muqova |
+|---|---|---|
+| r1-kassa.mp4 | 21 s | r1-kassa-cover.jpg |
+| r2-buyurtma-yoli.mp4 | 18 s | r2-buyurtma-yoli-cover.jpg |
+| *-musiqasiz.mp4 | — | ovoz + SFX, musiqasiz: Instagram'da trenddagi musiqani 10–15% balandlikda qo'shish uchun |
+
+Viral bo'lishi uchun: birinchi 1 soniyada savol (hook), har 1–2 soniyada yangi kadr, ovozsiz ham tushunarli subtitr,
+oxirida bitta aniq harakat ("Havola profilda"). Post qilganda Instagram'da **"Trial reels"** (faqat obunachi
+bo'lmaganlarga) bilan avval sinab ko'ring; musiqasiz versiyaga trend musiqa qo'shish ko'pincha qamrovni oshiradi.
+
+### r1-kassa — matn
+```
+Kechqurun kassada pul yetmayaptimi? 💸 Sababi — 3 ta 👇
+
+1️⃣ Qog'ozdagi buyurtma yo'qoladi
+2️⃣ Bekor qilingan taom hech qayerda yozilmaydi
+3️⃣ Oy oxirida foyda qancha — hech kim bilmaydi
+
+FLOWI'da buyurtma soniyada oshxonada, har bir amal tarixda, foyda har kuni ko'rinadi.
+
+🎁 7 kun bepul — o'zimiz ulab beramiz. Havola profilda yoki Direct'ga "FLOWI" deb yozing.
+Sizda qaysi biri bor: 1, 2 yoki 3? Izohda yozing 👇
+
+#choyxona #restoran #kafe #biznes #tadbirkor #kassa #toshkent #uzbekistan #чайхана #ресторан
+```
+
+### r2-buyurtma-yoli — matn
+```
+Bir buyurtmaning yo'li 👀 Ofitsant → Oshxona → Kassa → Siz
+
+Qog'oz yo'q. Adashish yo'q. Hamma bir xil ma'lumotni ko'radi.
+
+🎁 7 kun bepul · flowi.uz · havola profilda
+Ofitsantingizga yuboring 👇
+
+#ofitsant #oshxona #choyxona #restoran #kafe #biznes #uzbekistan #чайхана #ресторан
+```
+
+**Qayta yasash** (`marketing/hyperframes`): ovoz `python3 tools/vo.py uz-UZ-SardorNeural "matn" flowi-reels/assets/r1.mp3 +12%`
+(muhitda proksi orqali, `SSL_CERT_FILE` bilan), keyin `sh tools/render.sh` — kompozitsiya (`tools/build.js`),
+musiqa/SFX (`tools/audio.py`) va render. Har bir kadr ovozdagi so'z vaqtiga bog'langan, matn o'zgarsa ham sinxron qoladi
+(so'zlar tartibi o'zgarsa, `build.js`dagi so'z raqamlarini yangilang).
+
 ## Reklama (pullik)
 
 - **Qaysi postni:** r1 reels (muammo → yechim). 3 kundan keyin qaysi post ko'proq saqlangan yoki ulashilgan bo'lsa, o'shani.
