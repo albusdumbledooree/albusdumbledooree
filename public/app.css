@@ -559,6 +559,12 @@ table.list tr.selected td .ic { color: #fff; }
 .ticket .timer .late, .late { color: var(--red); }
 .ticket .acts { display: flex; gap: 8px; margin-top: 10px; }
 .ticket .acts .btn { flex: 1; }
+/* Very small phones (320 px): the big kitchen button gets its own line; long buttons in a row may wrap their words. */
+@media (max-width: 420px) {
+  .ticket .acts { flex-wrap: wrap; }
+  .ticket .acts .btn.lg { flex-basis: 100%; }
+  .row > .btn, .row > label.btn { max-width: 100%; white-space: normal; text-align: center; height: auto; }
+}
 
 /* ---------- Toasts, modals, banners ---------- */
 /* Bottom centre, so notices never cover the top bar buttons. */
@@ -630,13 +636,14 @@ table.att .today { background: var(--primary-soft); }
 .ptop { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 10px; height: 60px; padding: 0 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .ptop .flowi { color: var(--brand); }
 .ptop b { padding-left: 12px; border-left: 1px solid var(--line); font-size: 17px; }
-.ptools { display: flex; align-items: center; gap: 8px; }
+.ptop-tools { display: flex; align-items: center; gap: 8px; }
 /* Phone: the buttons go to their own line under the logo, spread over the width (they never push the page wider). */
 @media (max-width: 720px) {
   .ptop { height: auto; flex-wrap: wrap; row-gap: 8px; padding-top: 8px; padding-bottom: 8px; }
-  .ptools { width: 100%; justify-content: space-between; gap: 4px; }
-  .ptools .icon-btn, .ptools .btn.sm { width: 42px; min-width: 42px; height: 42px; padding: 0; justify-content: center; }
+  .ptop-tools { width: 100%; justify-content: space-between; gap: 4px; }
+  .ptop-tools .icon-btn, .ptop-tools .btn.sm { width: 42px; min-width: 42px; height: 42px; padding: 0; justify-content: center; }
 }
+@media (max-width: 360px) { .ptop-tools .icon-btn, .ptop-tools .btn.sm { width: 36px; min-width: 36px; height: 36px; } .ptop-tools { flex-wrap: nowrap; } }
 .pmain { max-width: 1400px; margin: 0 auto; padding: 20px; }
 .pmain .kpis { margin-bottom: 18px; }
 .ptools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
