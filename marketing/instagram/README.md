@@ -35,16 +35,16 @@ Choyxona · Restoran · Fast food · Do'kon uchun dastur
 Highlight'ni Metricool ochib bera olmaydi: storis chiqqandan keyin Instagram ilovasida
 storis → "Highlight" → yangi → nom → "Edit cover" → muqova rasmini tanlash.
 
-## Jadval (Toshkent vaqti)
+## Jadval (Toshkent vaqti) — hammasi Metricool'da rejalashtirilgan
 
 | Sana | Vaqt | Tur | Fayl |
 |---|---|---|---|
-| 5-noyabr, Pa | 19:00 | Reels | r1-muammolar.mp4 |
+| 5-noyabr, Pa | 19:00 | Reels | r1-kassa.mp4 |
 | 5-noyabr, Pa | 20:30 | Storis | s1.jpg |
 | 6-noyabr, Ju | 20:00 | Karusel | p1-1 … p1-5 |
 | 8-noyabr, Ya | 20:00 | Post | p2.jpg |
 | 8-noyabr, Ya | 21:00 | Storis | s3.jpg |
-| 10-noyabr, Se | 19:00 | Reels | r2-yol.mp4 |
+| 10-noyabr, Se | 19:00 | Reels | r2-buyurtma-yoli.mp4 |
 | 12-noyabr, Pa | 20:00 | Karusel | p3-1 … p3-3 |
 | 12-noyabr, Pa | 21:00 | Storis | s2.jpg |
 | 14-noyabr, Sh | 20:00 | Post | p4.jpg |
