@@ -2,6 +2,7 @@
 /* Rooms (the cashier's "Kassa" too), takeaway, the order screen with the check on the left, payment, ready dishes. */
 
 const Carts = {}; // context key -> { lines: [{dish_id, name, price, qty, note}], guests, label }
+const DvDrafts = {}; // open delivery check id -> { name, phone, address } typed but not saved yet
 const UI = { category: 'all', search: '', drawer: false, section: store('cp_section') || '' };
 
 // Takeaway checks: the cashier, the boss, couriers; a plain waiter only works in rooms (fast food: everyone).
@@ -212,7 +213,8 @@ function checkPane({ order, room, cart, takeaway, couriers, readonly: ro }) {
   const items = order ? order.items : [];
   const subtotalPending = cart.lines.reduce((s, c) => s + c.price * c.qty, 0);
   const guests = order ? order.guests : cart.guests || 1;
-  const dv = order ? (order.delivery ? { name: order.label, phone: order.phone, address: order.address } : null) : cart.delivery;
+  const dr = order ? DvDrafts[order.id] || {} : {};
+  const dv = order ? (order.delivery ? { name: dr.name ?? order.label, phone: dr.phone ?? order.phone, address: dr.address ?? order.address } : null) : cart.delivery;
   // Delivery: the customer's name, phone and address are all optional; the cashier also picks the courier.
   const pickCourier = dv && !order && !isCourier() && couriers && couriers.length;
   const head = dv
@@ -369,12 +371,23 @@ const OrderView = {
       if (!order) { cart.label = label.value; return; }
       try { await PUT(`/api/orders/${order.id}`, { label: label.value }); } catch (e) { toastError(e); }
     };
+    /* Delivery fields: what is typed is kept at once (a live refresh redraws the screen while someone types), and an
+       open check saves it when the field is left — also when it was typed on the on-screen keyboard. */
     [['#dv-name', 'name', 'label'], ['#dv-phone', 'phone', 'phone'], ['#dv-addr', 'address', 'address'], ['#dv-courier', 'courier_id', null]].forEach(([sel, field, put]) => {
       const el = pane.querySelector(sel);
-      if (el) el.onchange = async () => {
-        if (!order) { cart.delivery[field] = el.value; return; }
-        try { await PUT(`/api/orders/${order.id}`, { [put]: el.value }); toast(t('Saqlandi'), 'ok'); } catch (e) { toastError(e); }
+      if (!el) return;
+      if (!order) { el.oninput = el.onchange = () => { cart.delivery[field] = el.value; }; return; }
+      const save = async () => {
+        const dr = DvDrafts[order.id];
+        if (!dr || dr[field] === undefined) return;
+        const v = dr[field];
+        delete dr[field];
+        const key = field === 'name' ? 'label' : field;
+        if (v === (order[key] || '')) return;
+        try { await PUT(`/api/orders/${order.id}`, { [put]: v }); order[key] = v; toast(t('Saqlandi'), 'ok'); } catch (e) { toastError(e); }
       };
+      el.oninput = () => { (DvDrafts[order.id] = DvDrafts[order.id] || {})[field] = el.value; };
+      el.onchange = save; el.onblur = save;
     });
     // Ask how many guests when a free room is opened.
     if (!order && !d.takeaway && !cart.guests && !cart.asking) askGuests(cart, rerender);
@@ -632,7 +645,7 @@ Views.ready = {
   render({ items }) {
     return `<div class="page-head"><h1>${t('Tayyor taomlar')}</h1></div>
       ${items.length ? `<div class="stack">${items.map((i) => `<div class="card row">
-        <div class="grow"><b style="font-size:18px">${esc(i.takeaway ? t('Olib ketish') : i.room_number)}</b> · ${esc(i.room_name)}<br>
+        <div class="grow">${i.takeaway ? `<b style="font-size:18px">${icon(i.delivery ? 'truck' : 'shopping-bag', 16)} ${esc(i.room_name)}</b>` : `<b style="font-size:18px">${esc(i.room_number)}</b> · ${esc(i.room_name)}`}<br>
           <span style="font-size:18px;font-weight:700">${i.qty}× ${esc(i.name)}</span><br>
           <span class="muted small">${icon('clock', 13)} <b data-since="${i.ready_at}"></b></span></div>
         <button class="btn ok lg" data-serve="${i.id}">${icon('hand', 20)} ${t('Oldim')}</button></div>`).join('')}</div>`

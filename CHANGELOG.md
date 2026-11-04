@@ -2,6 +2,13 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.29.1 — Dostavka: tekshiruvdan keyingi tuzatishlar
+
+- Dostavka chekida telefon/manzil yozilayotganda boshqa qurilmadan o'zgarish kelsa (jonli yangilanish), yozilgan matn o'chib ketmaydi.
+- Ekrandagi klaviatura bilan yozilgan telefon/manzil ham saqlanadi (maydondan chiqqanda).
+- Dostavka yoki olib ketish chekini xonaga o'tkazganda u endi zal cheki bo'ladi (hisobotda "Dostavka" bo'lib qolmaydi).
+- Ofitsantning "Tayyor taomlar" ro'yxatida "Olib ketish · Dostavka #N" deb chalkash yozilardi — endi faqat "Dostavka #N".
+
 ## 1.29.0 — Dostavka alohida: "Olib ketish" bilan aralashmaydi
 
 - Dostavchikda "Olib ketish" o'rniga 🚚 **Dostavka** bo'limi: uning hamma cheklari "Dostavka #N" bo'lib yuradi.

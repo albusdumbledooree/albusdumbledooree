@@ -1744,7 +1744,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const room = q("SELECT * FROM rooms WHERE id = ? AND active = 1 AND type != 'soboy'").get(roomId);
     if (!room) throw new HttpError(404, 'Xona topilmadi');
     if (q("SELECT 1 FROM orders WHERE room_id = ? AND status = 'open'").get(roomId)) throw new HttpError(409, `${room.name} band`);
-    q('UPDATE orders SET room_id = ?, takeaway = 0 WHERE id = ?').run(roomId, o.id);
+    // A counter check moved to a room becomes a hall check (no longer counted as takeaway or delivery).
+    q('UPDATE orders SET room_id = ?, takeaway = 0, delivery = 0 WHERE id = ?').run(roomId, o.id);
     audit(user, 'order_transfer', `#${o.id} → ${room.name}`);
     events.publish('rooms');
     events.publish('kitchen');
