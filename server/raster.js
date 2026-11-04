@@ -227,7 +227,7 @@ function billRaster(job, { paper = 80, logo = null } = {}) {
     cols3(i.name, i.qty, sum(i.qty * i.price));
     if (modsOf(i)) for (const r of wrap(`+ ${modsOf(i)}`, cols - 2)) { c.y -= 6; line(`  ${r}`); }
   };
-  if (s.receipt_group !== false && merged.some((i) => i.category_name)) {
+  if (s.receipt_group === true && merged.some((i) => i.category_name)) {
     const groups = new Map();
     for (const i of merged) {
       const k = i.category_name || 'Boshqa';

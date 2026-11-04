@@ -146,7 +146,7 @@ function bill(job, { width = 48 } = {}) {
   bold(true); cols('Nomi', 'Soni', 'Summa'); bold(false);
   text('-'.repeat(width));
   // Under their sections (BAR, OSHXONA…) when the boss chose so in the check settings.
-  if (s.receipt_group !== false && merged.some((i) => i.category_name)) {
+  if (s.receipt_group === true && merged.some((i) => i.category_name)) {
     const groups = new Map();
     for (const i of merged) {
       const k = i.category_name || 'Boshqa';

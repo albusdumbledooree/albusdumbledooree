@@ -553,6 +553,11 @@ CREATE INDEX IF NOT EXISTS idx_guest_req ON guest_requests(status, room_id);
     dish_id INTEGER NOT NULL REFERENCES dishes(id) ON DELETE CASCADE, group_id INTEGER NOT NULL REFERENCES modifier_groups(id) ON DELETE CASCADE,
     PRIMARY KEY (dish_id, group_id))`);
   addCol('order_items', 'mods', "TEXT NOT NULL DEFAULT ''");
+  // 1.27.2: section names on the guest's check are off by default; once switched off for every business (on again in the check settings).
+  if (!db.prepare("SELECT 1 FROM settings WHERE key = 'receipt_group_v2'").get()) {
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('receipt_group', '0')").run();
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('receipt_group_v2', '1')").run();
+  }
   // Who cancelled a dish and when (shown in the checks report next to the cancelled line).
   addCol('order_items', 'cancelled_at', 'INTEGER');
   addCol('order_items', 'cancelled_by', 'INTEGER');

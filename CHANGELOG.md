@@ -2,6 +2,10 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.27.2 — Chekda bo'lim nomlari yo'q
+- Mijoz chekida bo'lim nomlari (1-TAOM, SHASHLIKLAR…) endi chiqmaydi — taomlar bitta ro'yxat. Hamma bizneslarda bir marta
+  o'chirildi; xohlagan Sozlamalar → Ko'rinish → Chek → "Taomlarni bo'limlar bo'yicha guruhlash" bilan qayta yoqadi.
+
 ## 1.27.1 — Chek ixchamroq, kassir doim yoziladi
 - Mijoz chekida qatorlar biroz yaqinroq (chek ~17% qisqa), lekin bir-biriga tegmaydi.
 - "Kassir: …" doim chiqadi: yopilgan chekda pulni olgan kassir, to'lovdan oldingi hisob chekida "Chek"ni bosgan xodim.

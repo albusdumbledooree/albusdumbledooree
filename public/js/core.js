@@ -712,7 +712,7 @@ function receiptBody(o, s = App.settings) {
   const row = (i) => `<tr><td>${esc(i.name)}${modsText(i) ? `<br><small>+ ${esc(modsText(i))}</small>` : ''}</td><td class="q">${i.qty}</td><td class="s">${num(i.qty * i.price)}</td></tr>`;
   let lines;
   const named = live.filter((i) => i.category_name);
-  if (s.receipt_group !== false && named.length) {
+  if (s.receipt_group === true && named.length) {
     const groups = new Map();
     for (const i of live) {
       const k = i.category_name || '';

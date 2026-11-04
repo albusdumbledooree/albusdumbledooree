@@ -146,7 +146,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     out.receipt_logo = out.receipt_logo !== '0';
     // The check's look: logo width (% of the paper), dishes under their sections, the "per person" line.
     out.receipt_logo_size = Math.min(100, Math.max(20, Number(out.receipt_logo_size) || 50));
-    out.receipt_group = out.receipt_group !== '0';
+    out.receipt_group = out.receipt_group === '1'; // section names on the check: off unless the boss switches them on
     out.receipt_per_person = out.receipt_per_person !== '0';
     out.receipt_logo_id = out.receipt_logo_id ? Number(out.receipt_logo_id) : null;
     out.staff_meal_price = out.staff_meal_price === 'cost' ? 'cost' : 'menu';

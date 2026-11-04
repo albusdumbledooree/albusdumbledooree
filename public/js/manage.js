@@ -1681,7 +1681,7 @@ Views.settings = {
         <div class="rc-range"><span class="small muted">${t('Kichik')}</span><input type="range" name="receipt_logo_size" min="20" max="100" step="5" value="${s.receipt_logo_size || 50}"><span class="small muted">${t('Katta')}</span><b id="rc-size">${s.receipt_logo_size || 50}%</b></div>
         <h3>${t("Qog'oz kengligi")}</h3>
         <div class="seg" id="rc-width">${['80', '58'].map((w) => `<button type="button" data-w="${w}" class="${String(s.receipt_width || '80') === w ? 'active' : ''}">${w} mm</button>`).join('')}</div>
-        <label class="check" style="margin-top:14px"><input type="checkbox" name="receipt_group" ${s.receipt_group !== false ? 'checked' : ''}> ${t("Taomlarni bo'limlar bo'yicha guruhlash (BAR, OSHXONA…)")}</label>
+        <label class="check" style="margin-top:14px"><input type="checkbox" name="receipt_group" ${s.receipt_group ? 'checked' : ''}> ${t("Taomlarni bo'limlar bo'yicha guruhlash (BAR, OSHXONA…)")}</label>
         <label class="check" style="margin-top:8px"><input type="checkbox" name="receipt_per_person" ${s.receipt_per_person !== false ? 'checked' : ''}> ${t('"{0} kishi — har biriga" qatori', 'N')}</label>
         <h3>${t('Chek ostidagi yozuvlar')}</h3>
         <span class="small muted">${t('Har bir qator alohida chiqadi')}</span>

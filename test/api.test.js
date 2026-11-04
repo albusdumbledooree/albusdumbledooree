@@ -2591,3 +2591,10 @@ test('the bill picture: 80 and 58 mm, the font has every letter of the check (La
   }
   assert.equal(decodePng(Buffer.from('not a png')), null);
 });
+
+test('section names on the guest check: off by default, the boss can switch them on', async () => {
+  const boss = await login('ega', 'ega123');
+  assert.equal((await call('GET', '/api/me', boss)).data.settings.receipt_group, false);
+  assert.equal((await call('PUT', '/api/settings', boss, { receipt_group: true })).data.receipt_group, true);
+  assert.equal((await call('PUT', '/api/settings', boss, { receipt_group: false })).data.receipt_group, false);
+});
