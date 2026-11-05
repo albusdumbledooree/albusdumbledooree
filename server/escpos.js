@@ -122,6 +122,11 @@ function bill(job, { width = 48 } = {}) {
   const place = o.delivery ? `Dostavka #${o.id}` : o.takeaway ? `Olib ketish #${o.id}` : (o.room && o.room.name) || '';
   pair(`Chek #${o.id}${o.status !== 'closed' ? ' (hisob)' : ''}`, place);
   if (o.waiter && !o.takeaway) pair(`Ofitsant: ${o.waiter.name}`, `Mehmon: ${o.guests}`);
+  if (o.delivery) {
+    for (const [k, v] of [['Mijoz', o.label], ['Tel', o.phone], ['Manzil', o.address], ['Dostavchik', o.waiter && o.waiter.name]]) {
+      if (v) for (const r of wrap(`${k}: ${v}`, width)) text(r);
+    }
+  }
   text(`Ochildi: ${dt(o.opened_at)}`);
   if (o.closed_at) text(`Yopildi: ${dt(o.closed_at)}`);
   text('-'.repeat(width));

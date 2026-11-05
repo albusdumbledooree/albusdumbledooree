@@ -2,6 +2,12 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.31.2 — Dostavka chekida mijoz ma'lumoti
+
+- Dostavka chekida endi: **Mijoz** (ismi), **Tel**, **Manzil** (uzun bo'lsa keyingi qatorga o'tadi) va **Dostavchik** (kim olib boradi). Faqat to'ldirilganlari chiqadi.
+- Printer cheki (rasm), oddiy matnli chek va brauzer cheki — uchalasida ham.
+- Brauzer chekida dostavka uchun "Ofitsant" va "Mehmonlar" qatorlari chiqmaydi (o'rniga "Dostavchik").
+
 ## 1.31.1 — Chek ixchamroq: tepa-pastda bo'sh joy yo'q
 
 - Chek va oshxona qog'ozi oxirida printerga ketadigan "yana 4 qator sur" buyrug'i olib tashlandi: printer endi kesish joyigacha suradi va kesadi. Tepada ham dastur qo'shadigan bo'sh joy yo'q (qolgan ozgina joy — printerning o'z kallagi va pichog'i orasidagi masofa).

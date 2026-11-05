@@ -1377,6 +1377,7 @@
   "Telegram ochilgach «Start» ni bosing. Havola bir martalik; boshqa odamga ham yuborsangiz bo'ladi": ["В Telegram нажмите «Start». Ссылка одноразовая; можно отправить её другому человеку", "In Telegram press «Start». The link works once; you may send it to someone else"],
   "Yana bir kishini ulash": ["Подключить ещё одного человека", "Link one more person"],
   "Telegram botga ulanish": ["Подключить Telegram-бот", "Connect the Telegram bot"],
+  "Dostavchik": ["Курьер", "Courier"],
   "Kamera topilmadi": ["Камера не найдена", "No camera found"],
     "BUTUN CHEK O'CHIRILDI": ["ЧЕК УДАЛЁН ПОЛНОСТЬЮ","WHOLE CHECK DELETED"],
     "Diqqat! {0}. Butun chek o'chirildi.": ["Внимание! {0}. Чек удалён полностью.","Attention! {0}. The whole check was deleted."],

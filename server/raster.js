@@ -211,6 +211,12 @@ function billRaster(job, { paper = 80, logo = null } = {}) {
   const place = o.delivery ? `Dostavka #${o.id}` : o.takeaway ? `Olib ketish #${o.id}` : (o.room && o.room.name) || '';
   line(`Chek #${o.id}${o.status !== 'closed' ? ' (hisob)' : ''}`, { right: place });
   if (o.waiter && !o.takeaway) line(`Ofitsant: ${o.waiter.name}`, { right: `Mehmon: ${o.guests}` });
+  // A delivery: whom it goes to and who takes it (each only when filled in; a long address wraps).
+  if (o.delivery) {
+    for (const [k, v] of [['Mijoz', o.label], ['Tel', o.phone], ['Manzil', o.address], ['Dostavchik', o.waiter && o.waiter.name]]) {
+      if (v) for (const r of wrap(`${k}: ${v}`, cols)) line(r);
+    }
+  }
   line(`Ochildi: ${dt(o.opened_at)}`);
   if (o.closed_at) line(`Yopildi: ${dt(o.closed_at)}`);
   dashes();

@@ -640,7 +640,7 @@ function docHtml(title, body, s = App.settings || {}, mono = false) {
     .inv{background:#000;color:#fff !important;padding:3px 0}
     .name{font-size:${narrow ? 17 : 21}px;font-weight:900;text-align:center;letter-spacing:.06em;text-transform:uppercase;margin:2px 0 1px}
     .addr{text-align:center;font-size:.9em;margin-bottom:6px}
-    .kv td:last-child{text-align:right}
+    .kv td:last-child{text-align:right}.kv .wrap{white-space:normal;display:inline-block}
     .items td{padding:4px 0}.kv td{padding:3px 0}
     .items th{border-bottom:2px solid #000;padding-bottom:3px}.items .q{text-align:center;width:16%}.items .s{text-align:right;width:28%;white-space:nowrap}
     .items .sec td{padding-top:6px;text-decoration:underline;text-transform:uppercase;font-weight:900}
@@ -725,10 +725,13 @@ function receiptBody(o, s = App.settings) {
   const counter = o.takeaway && sellsAtCounter();
   const kv = [
     [t('Sana'), fmtDateTime(o.closed_at || Date.now())],
-    ...(counter ? [] : [[roleName('waiter'), esc(o.waiter.name)]]),
+    ...(counter || o.delivery ? [] : [[roleName('waiter'), esc(o.waiter.name)]]),
     [t('Chek №'), `${o.id}${o.status !== 'closed' ? ` (${t('hisob')})` : ''}`],
-    [o.takeaway ? t('Joy') : t('Stol'), esc(o.takeaway ? placeName(o) : `${o.room.number}, ${o.room.name}`)],
-    ...(counter ? [] : [[t('Mehmonlar'), o.guests]]),
+    [o.takeaway ? t('Joy') : t('Stol'), esc(o.delivery ? `${t('Dostavka')} #${o.id}` : o.takeaway ? placeName(o) : `${o.room.number}, ${o.room.name}`)],
+    ...(counter || o.delivery ? [] : [[t('Mehmonlar'), o.guests]]),
+    // A delivery: the customer, phone, address and the courier (only what was filled in).
+    ...(o.delivery ? [[t('Mijoz'), o.label], [t('Telefon'), o.phone], [t('Manzil'), o.address], [t('Dostavchik'), o.waiter && o.waiter.name]]
+      .filter(([, v]) => v).map(([k, v]) => [k, `<span class="wrap">${esc(v)}</span>`]) : []),
   ];
   const foot = String(s.receipt_footer || '').split('\n').map((x) => x.trim()).filter(Boolean);
   return `${receiptLogo(s)}

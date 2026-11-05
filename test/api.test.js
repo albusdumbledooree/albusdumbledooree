@@ -2801,3 +2801,19 @@ test('front page: the free days set in the platform are written everywhere on th
     await call('PUT', '/api/platform/plans', admin, { plans, terms });
   }
 });
+
+test('a delivery bill shows the customer, phone, address and the courier (picture and plain text)', () => {
+  const { bill } = require('../server/escpos');
+  const { billRaster } = require('../server/raster');
+  const order = { id: 9, status: 'closed', takeaway: 1, delivery: 1, label: 'Dilshod', phone: '+998901234567', address: 'Chilonzor 9-kvartal, 14-uy', waiter: { name: 'Sardor' },
+    opened_at: Date.now(), closed_at: Date.now(), guests: 1, subtotal: 10000, total: 10000, items: [{ name: 'Non', qty: 2, price: 5000 }] };
+  const text = bill({ order, shop: { name: 'X' } }).toString('latin1');
+  for (const s of ['Mijoz: Dilshod', 'Tel: +998901234567', 'Manzil: Chilonzor 9-kvartal, 14-uy', 'Dostavchik: Sardor']) assert.ok(text.includes(s), s);
+  // Nothing is fed before the cut: the paper ends right after the last line.
+  assert.ok(!text.includes('\x1bd\x04'));
+  const pic = billRaster({ order, shop: { name: 'X' } }, { paper: 80 });
+  assert.deepEqual([...pic.subarray(-4)], [0x1d, 0x56, 0x42, 0x00]);
+  // An empty phone / address is simply left out.
+  const short = bill({ order: { ...order, phone: '', address: '' }, shop: { name: 'X' } }).toString('latin1');
+  assert.ok(!short.includes('Tel:') && !short.includes('Manzil:'));
+});
