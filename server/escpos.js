@@ -82,7 +82,7 @@ function ticket(job, { width = 48, label = '' } = {}) {
   }
   text('-'.repeat(width));
   if (label) { align(1); text(label); align(0); }
-  raw(ESC, 0x64, 4); // feed 4 lines
+
   raw(GS, 0x56, 0x42, 0x00); // cut
   return Buffer.from(b);
 }
@@ -175,7 +175,6 @@ function bill(job, { width = 48 } = {}) {
   if (o.cashier) text(`Kassir: ${o.cashier.name}`);
   if (s.receipt_footer) { align(1); for (const line of String(s.receipt_footer).split('\n')) for (const r of wrap(line, width)) text(r); align(0); }
   raw(ESC, 0x32); // line spacing back to the printer's own
-  raw(ESC, 0x64, 4);
   raw(GS, 0x56, 0x42, 0x00);
   return Buffer.from(b);
 }

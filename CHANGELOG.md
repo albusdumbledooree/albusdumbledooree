@@ -2,6 +2,16 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.31.1 — Chek ixchamroq: tepa-pastda bo'sh joy yo'q
+
+- Chek va oshxona qog'ozi oxirida printerga ketadigan "yana 4 qator sur" buyrug'i olib tashlandi: printer endi kesish joyigacha suradi va kesadi. Tepada ham dastur qo'shadigan bo'sh joy yo'q (qolgan ozgina joy — printerning o'z kallagi va pichog'i orasidagi masofa).
+- Qatorlar orasi qisqardi (38 → 34 nuqta).
+- JAMI kichikroq (46 → 40).
+- Chek ostidagi yozuvlar (masalan "DASTAVKA: 94-…") kattaroq (24 → 30).
+- "N kishi — har biriga" qatori kattaroq va qalinroq (soni ham, summasi ham).
+- Brauzer orqali chiqadigan chekda ham xuddi shunday.
+- Natija: zal cheki ~15%, olib ketish ~18%, oshxona qog'ozi ~19% qisqa — qog'oz tejaladi.
+
 ## 1.31.0 — flowi.uz sayti yangilandi
 
 - "Imkoniyatlar" bo'limiga 3 ta yangi kartochka qo'shildi: **Dostavka**, **Taom qo'shimchalari** (modifikatorlar), **Boshliq paneli**.

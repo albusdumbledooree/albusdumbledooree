@@ -631,7 +631,7 @@ function docHtml(title, body, s = App.settings || {}, mono = false) {
   const logo = Math.min(100, Math.max(20, Number(s.receipt_logo_size) || 50));
   return `<!doctype html><html><head><meta charset="utf-8"><base href="${esc(location.origin)}/"><title>${esc(title)}</title><style>
     *{color:#000 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;box-sizing:border-box}
-    body{font:700 ${narrow ? 12 : 13.5}px/1.35 Arial,"Segoe UI",Tahoma,sans-serif;width:${narrow ? 48 : 72}mm;margin:0 auto;padding:3mm 0;color:#000;-webkit-font-smoothing:none;background:#fff}
+    body{font:700 ${narrow ? 12 : 13.5}px/1.35 Arial,"Segoe UI",Tahoma,sans-serif;width:${narrow ? 48 : 72}mm;margin:0 auto;padding:0;color:#000;-webkit-font-smoothing:none;background:#fff}
     h1{font-size:${narrow ? 16 : 19}px;font-weight:900;text-align:center;margin:0}.c{text-align:center}.r{text-align:right;white-space:nowrap}
     table{width:100%;border-collapse:collapse}td,th{padding:2px 0;vertical-align:top;font-weight:700;text-align:left}small{font-size:.92em;font-weight:700}
     hr{border:0;border-top:2px dashed #000;margin:6px 0}hr.thick{border-top:3px solid #000;margin:5px 0}
@@ -644,14 +644,14 @@ function docHtml(title, body, s = App.settings || {}, mono = false) {
     .items td{padding:4px 0}.kv td{padding:3px 0}
     .items th{border-bottom:2px solid #000;padding-bottom:3px}.items .q{text-align:center;width:16%}.items .s{text-align:right;width:28%;white-space:nowrap}
     .items .sec td{padding-top:6px;text-decoration:underline;text-transform:uppercase;font-weight:900}
-    .jami td{font-size:${narrow ? 19 : 24}px;font-weight:900;padding:3px 0}
-    .foot{text-align:center;margin-top:6px;font-family:"Courier New",Consolas,monospace;font-weight:900;white-space:pre-wrap}
-    .foot div:last-child{font-size:.9em}
+    .jami td{font-size:${narrow ? 16.5 : 21}px;font-weight:900;padding:2px 0}
+    .foot{text-align:center;margin-top:4px;font-family:"Courier New",Consolas,monospace;font-weight:900;white-space:pre-wrap;font-size:1.25em;line-height:1.25}
+    tr.pp td{font-size:${narrow ? 14.5 : 17}px;font-weight:900}
     @page{size:${narrow ? 58 : 80}mm auto;margin:0}
     ${mono ? `${ReceiptFont.css()}
     body,td,th,.foot{font-family:"FLOWI Chek","DejaVu Sans Mono",Consolas,"Courier New",monospace !important;font-weight:700}
-    body{font-size:${narrow ? 11.5 : 12.5}px;line-height:1.4}.items td{padding:3px 0}.kv td{padding:2px 0}
-    .name{letter-spacing:.02em}.kv td:last-child{white-space:nowrap}tr.pp{font-size:${narrow ? 11.5 : 12.5}px !important}.pp td{white-space:nowrap}` : ''}
+    body{font-size:${narrow ? 11.5 : 12.5}px;line-height:1.25}.items td{padding:2px 0}.kv td{padding:1px 0}
+    .name{letter-spacing:.02em}.kv td:last-child{white-space:nowrap}tr.pp td{font-size:${narrow ? 14.5 : 15.5}px !important;white-space:nowrap}` : ''}
   </style></head><body>${body}</body></html>`;
 }
 function printDoc(title, body, kind = 'receipt', s = App.settings, mono = false) {

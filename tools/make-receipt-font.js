@@ -10,7 +10,7 @@ const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
 
 const ROOT = path.join(__dirname, '..');
-const SIZES = [24, 34, 46]; // text, the business's name, JAMI
+const SIZES = [24, 30, 34, 40, 46]; // text, the footer and "per person", the business's name, JAMI, the kitchen's place
 const CHARS = [
   ...Array.from({ length: 95 }, (_, i) => String.fromCharCode(32 + i)),
   ...'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюяЎўҚқҒғҲҳ',

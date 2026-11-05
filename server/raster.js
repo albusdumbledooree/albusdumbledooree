@@ -61,7 +61,7 @@ class Canvas {
       out.push(GS, 0x76, 0x30, 0, this.rowBytes & 0xff, this.rowBytes >> 8, bh & 0xff, bh >> 8);
       for (let r = top; r < top + bh; r++) for (const b of this.rows[r]) out.push(b);
     }
-    out.push(ESC, 0x64, 4, GS, 0x56, 0x42, 0x00);
+    out.push(GS, 0x56, 0x42, 0x00);
     return Buffer.from(out);
   }
 }
@@ -158,7 +158,7 @@ function billRaster(job, { paper = 80, logo = null } = {}) {
   const c = new Canvas(W);
   const F = FONT.sizes[24]; const cw = F.w;
   const cols = Math.floor((W - 2 * M) / cw);
-  const ROW = 38; // one line of text (29 dots) with the space under it
+  const ROW = 34; // one line of text (29 dots) with the space under it
   const line = (str, { center = false, right = '', underline = false } = {}) => {
     let txt = String(str);
     // Too long for both on one line: the left part on its own line, the right one under it (nothing is cut off).
@@ -194,7 +194,7 @@ function billRaster(job, { paper = 80, logo = null } = {}) {
     });
   };
 
-  c.y = 10;
+  c.y = 0;
   if (job.late) line(`KECHIKIB CHIQDI (${hm(job.at)})`, { center: true });
   if (logo && s.receipt_logo !== false) {
     const pct = Math.min(100, Math.max(20, Number(s.receipt_logo_size) || 50));
@@ -247,13 +247,17 @@ function billRaster(job, { paper = 80, logo = null } = {}) {
   }
   if (o.discount) cols3('Chegirma', '', `-${sum(o.discount)}`);
   double();
-  const J = FONT.sizes[46];
+  const J = FONT.sizes[40];
   const total = sum(o.total);
-  c.text(M, c.y + 6, 'JAMI', 46);
-  c.text(W - M - total.length * J.w, c.y + 6, total, 46);
+  c.text(M, c.y + 6, 'JAMI', 40);
+  c.text(W - M - total.length * J.w, c.y + 6, total, 40);
   c.y += J.h + 8;
   double();
-  if (o.guests > 1 && !o.takeaway && s.receipt_per_person !== false) line(`${o.guests} kishi - har biriga`, { right: sum(Math.round(o.total / o.guests)) });
+  if (o.guests > 1 && !o.takeaway && s.receipt_per_person !== false) {
+    const Q = FONT.sizes[30]; const each = sum(Math.round(o.total / o.guests));
+    const left = `${o.guests} kishi - har biriga`;
+    c.text(M, c.y + 4, left, 30); c.text(W - M - each.length * Q.w, c.y + 4, each, 30); c.y += Q.h + 8;
+  }
   // An advance sale: what was paid ahead, later payments, what is left.
   if (o.advance || o.balance > 0 || (o.payments || []).length) {
     dashes();
@@ -266,8 +270,11 @@ function billRaster(job, { paper = 80, logo = null } = {}) {
   // Who took the money; on a bill before payment — who printed it.
   const kassir = o.cashier ? o.cashier.name : job.by;
   if (kassir) line(`Kassir: ${kassir}`);
-  for (const r of String(s.receipt_footer || '').split('\n').map((x) => x.trim()).filter(Boolean).flatMap((x) => wrap(x, cols))) line(r, { center: true });
-  c.y += 20;
+  const FT = FONT.sizes[30];
+  for (const r of String(s.receipt_footer || '').split('\n').map((x) => x.trim()).filter(Boolean).flatMap((x) => wrap(x, Math.floor((W - 2 * M) / FT.w)))) {
+    c.text(Math.round((W - r.length * FT.w) / 2), c.y + 2, r, 30); c.y += FT.h + 4;
+  }
+  c.y += 4;
   return c.escpos();
 }
 
@@ -292,7 +299,7 @@ function ticketRaster(job, { paper = 80, label = '' } = {}) {
     c.y += h + 8;
   };
   const dashes = () => { c.bar(M, W - M, c.y + 7, 3, 10, 6); c.y += 18; };
-  c.y = 8;
+  c.y = 0;
   if (job.test) band('SINOV');
   if (job.cancel) band('BEKOR QILINDI');
   if (job.deleted) { center("BUTUN CHEK O'CHIRILDI", 24); if (job.reason) center(`Sabab: ${job.reason}`, 24); }
@@ -318,7 +325,7 @@ function ticketRaster(job, { paper = 80, label = '' } = {}) {
   }
   dashes();
   if (label) center(label, 24);
-  c.y += 16;
+  c.y += 4;
   return c.escpos();
 }
 
