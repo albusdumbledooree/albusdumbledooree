@@ -22,7 +22,17 @@ say "1/6 Zaxira nusxa olinmoqda"
 as_app node --no-warnings scripts/backup.js
 
 say "2/6 Yangi versiya yuklanmoqda ($BRANCH)"
-as_app git fetch --quiet origin "$BRANCH"
+# A steadier download: plain HTTP/1.1 (a long HTTP/2 stream breaks on weak links), and big files the program never
+# uses (videos, pictures over 1 MB in the history) are not downloaded at all; three tries when the line drops.
+as_app git config http.version HTTP/1.1
+as_app git config remote.origin.promisor true
+as_app git config remote.origin.partialclonefilter blob:limit=1m
+fetched=0
+for try in 1 2 3; do
+  if as_app git fetch --quiet origin "$BRANCH"; then fetched=1; break; fi
+  echo "Aloqa uzildi — qayta urinish ($try/3)…"; sleep 5
+done
+[ "$fetched" = 1 ] || { echo "Yangi versiyani yuklab bo'lmadi (internet). Sayt eski versiyada ishlayapti, hech narsa o'zgarmadi."; exit 1; }
 NEXT="$(as_app git rev-parse "origin/$BRANCH")"
 if [ "$PREV" = "$NEXT" ]; then
   echo "Yangi versiya yo'q — hammasi joyida."
