@@ -645,7 +645,7 @@ function docHtml(title, body, s = App.settings || {}, mono = false) {
     .items th{border-bottom:2px solid #000;padding-bottom:3px}.items .q{text-align:center;width:16%}.items .s{text-align:right;width:28%;white-space:nowrap}
     .items .sec td{padding-top:6px;text-decoration:underline;text-transform:uppercase;font-weight:900}
     .jami td{font-size:${narrow ? 16.5 : 21}px;font-weight:900;padding:2px 0}
-    .foot{text-align:center;margin-top:4px;font-family:"Courier New",Consolas,monospace;font-weight:900;white-space:pre-wrap;font-size:1.25em;line-height:1.25}
+    .foot{text-align:center;margin-top:4px;font-family:"Courier New",Consolas,monospace;font-weight:900;white-space:pre-wrap;font-size:1.25em;line-height:1.25;-webkit-text-stroke:.6px #000;text-shadow:.4px 0 0 #000}
     tr.pp td{font-size:${narrow ? 14.5 : 17}px;font-weight:900}
     @page{size:${narrow ? 58 : 80}mm auto;margin:0}
     ${mono ? `${ReceiptFont.css()}

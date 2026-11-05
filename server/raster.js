@@ -278,7 +278,10 @@ function billRaster(job, { paper = 80, logo = null } = {}) {
   if (kassir) line(`Kassir: ${kassir}`);
   const FT = FONT.sizes[30];
   for (const r of String(s.receipt_footer || '').split('\n').map((x) => x.trim()).filter(Boolean).flatMap((x) => wrap(x, Math.floor((W - 2 * M) / FT.w)))) {
-    c.text(Math.round((W - r.length * FT.w) / 2), c.y + 2, r, 30); c.y += FT.h + 4;
+    // Extra bold: drawn three times, a dot apart (the shop's own lines: phones, delivery, Wi-Fi).
+    const fx = Math.round((W - r.length * FT.w) / 2) - 1;
+    for (const dx of [0, 1, 2]) c.text(fx + dx, c.y + 2, r, 30);
+    c.text(fx + 1, c.y + 3, r, 30); c.y += FT.h + 5;
   }
   c.y += 4;
   return c.escpos();

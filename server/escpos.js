@@ -178,7 +178,8 @@ function bill(job, { width = 48 } = {}) {
   if (o.guests > 1 && !o.takeaway && s.receipt_per_person !== false) pair(`${o.guests} kishi - har biriga`, sum(Math.round(o.total / o.guests)));
   text('-'.repeat(width));
   if (o.cashier) text(`Kassir: ${o.cashier.name}`);
-  if (s.receipt_footer) { align(1); for (const line of String(s.receipt_footer).split('\n')) for (const r of wrap(line, width)) text(r); align(0); }
+  // The shop's own lines under the check: bold and double-struck, so they stand out.
+  if (s.receipt_footer) { align(1); bold(true); raw(ESC, 0x47, 1); for (const line of String(s.receipt_footer).split('\n')) for (const r of wrap(line, width)) text(r); raw(ESC, 0x47, 0); bold(false); align(0); }
   raw(ESC, 0x32); // line spacing back to the printer's own
   raw(GS, 0x56, 0x42, 0x00);
   return Buffer.from(b);

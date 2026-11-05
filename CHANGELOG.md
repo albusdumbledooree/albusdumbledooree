@@ -2,6 +2,10 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.31.3 — Chek ostidagi yozuvlar qalin
+
+- Chek ostidagi qo'shimcha yozuvlar (masalan "DASTAVKA: 94-…") hamma chek turida qalinroq: printer cheki (rasm), oddiy matnli chek va brauzer cheki.
+
 ## 1.31.2 — Dostavka chekida mijoz ma'lumoti
 
 - Dostavka chekida endi: **Mijoz** (ismi), **Tel**, **Manzil** (uzun bo'lsa keyingi qatorga o'tadi) va **Dostavchik** (kim olib boradi). Faqat to'ldirilganlari chiqadi.
