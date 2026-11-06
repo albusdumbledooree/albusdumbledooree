@@ -636,7 +636,7 @@ function docHtml(title, body, s = App.settings || {}, mono = false) {
     table{width:100%;border-collapse:collapse}td,th{padding:2px 0;vertical-align:top;font-weight:700;text-align:left}small{font-size:.92em;font-weight:700}
     hr{border:0;border-top:2px dashed #000;margin:6px 0}hr.thick{border-top:3px solid #000;margin:5px 0}
     .big{font-size:${narrow ? 14 : 17}px;font-weight:900}.huge{font-size:${narrow ? 19 : 24}px;font-weight:900}
-    .logo{display:block;margin:0 auto 4px;width:${logo}%;height:auto;filter:grayscale(1) contrast(1.8)}
+    .logo{display:block;margin:0 auto 2px;width:${logo}%;height:auto;filter:grayscale(1) contrast(1.8)}
     .inv{background:#000;color:#fff !important;padding:3px 0}
     .name{font-size:${narrow ? 17 : 21}px;font-weight:900;text-align:center;letter-spacing:.06em;text-transform:uppercase;margin:2px 0 1px}
     .addr{text-align:center;font-size:.9em;margin-bottom:6px}
@@ -695,8 +695,38 @@ async function printCheck(orderId) {
 function receiptLogo(s = App.settings) {
   const code = s.code || (App.tenant && App.tenant.code) || (App.info && App.info.code);
   const id = s.receipt_logo_id || s.logo;
-  return s.receipt_logo !== false && id && code ? `<img class="logo" src="/media/${esc(code)}/${id}" alt="">` : '';
+  if (s.receipt_logo === false || !id || !code) return '';
+  const src = `/media/${code}/${id}`;
+  return `<img class="logo" src="${esc(LogoCrop.get(src))}" alt="">`;
 }
+/* A logo file often has an empty margin above and below the drawing; on paper that is a blank strip. The logo is read
+   once, its empty rows (white or transparent) are cut off, and checks use the cut copy (the original until it is ready). */
+const LogoCrop = {
+  done: new Map(),
+  get(src) {
+    if (!this.done.has(src)) { this.done.set(src, src); this.make(src); }
+    return this.done.get(src);
+  },
+  make(src) {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+        const x = c.getContext('2d'); x.drawImage(img, 0, 0);
+        const d = x.getImageData(0, 0, c.width, c.height).data;
+        const ink = (y) => { for (let i = y * c.width * 4, e = i + c.width * 4; i < e; i += 4) if (d[i + 3] > 24 && (d[i] + d[i + 1] + d[i + 2]) / 3 < 235) return true; return false; };
+        let top = 0; while (top < c.height - 1 && !ink(top)) top++;
+        let bot = c.height - 1; while (bot > top && !ink(bot)) bot--;
+        if (top === 0 && bot === c.height - 1) return;
+        const o = document.createElement('canvas'); o.width = c.width; o.height = bot - top + 1;
+        o.getContext('2d').drawImage(c, 0, top, c.width, o.height, 0, 0, c.width, o.height);
+        this.done.set(src, o.toDataURL('image/png'));
+      } catch { /* keep the original */ }
+    };
+    img.src = src;
+  },
+};
+setTimeout(() => { try { if (App.settings) receiptLogo(App.settings); } catch { /* nothing to prepare */ } }, 2000);
 
 /* The guest's check: logo (its width set in Settings), name, address; date, waiter, check number, table, guests;
    the dishes (under their sections when chosen); sums, the total in big letters, per person, payments, advance;
@@ -735,7 +765,7 @@ function receiptBody(o, s = App.settings) {
   ];
   const foot = String(s.receipt_footer || '').split('\n').map((x) => x.trim()).filter(Boolean);
   return `${receiptLogo(s)}
-    <div class="name">${esc(s.name)}</div>${s.address || s.phone ? `<div class="addr">${[s.address, s.phone].filter(Boolean).map(esc).join(' · ')}</div>` : ''}
+    ${s.name ? `<div class="name">${esc(s.name)}</div>` : ''}${s.address || s.phone ? `<div class="addr">${[s.address, s.phone].filter(Boolean).map(esc).join(' · ')}</div>` : ''}
     ${counter ? `<div class="c huge">№ ${o.id}</div>` : ''}
     <table class="kv">${kv.map(([k, v]) => `<tr><td>${k}:</td><td>${v}</td></tr>`).join('')}</table>
     <hr><table class="items"><tr><th>${t('Nomi')}</th><th class="q">${t('Soni')}</th><th class="s">${t('Summa')}</th></tr>${lines}

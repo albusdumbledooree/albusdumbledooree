@@ -113,7 +113,7 @@ function bill(job, { width = 48 } = {}) {
   align(1);
   if (job.late) { bold(true); text(`KECHIKIB CHIQDI (${hm(job.at)})`); bold(false); }
   bold(true); tall(true);
-  for (const r of wrap(s.name || '', width)) text(r);
+  if (s.name) for (const r of wrap(s.name, width)) text(r);
   tall(false); bold(false);
   if (s.address) for (const r of wrap(s.address, width)) text(r);
   if (s.phone) text(s.phone);

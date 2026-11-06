@@ -2,6 +2,13 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.31.4 — Logotip tepa-pastida bo'sh joy yo'q
+
+- Logotip faylining o'zidagi bo'sh chet (tepa va pastdagi oq yoki shaffof qism) chekka chiqmaydi — avtomatik kesiladi. Logotipning ko'rinishi va rangi o'zgarmaydi.
+- Logotip bilan pastdagi chiziq orasi qisqardi.
+- Biznes nomi bo'sh bo'lsa (nom logotipda yozilgan bo'lsa), uning o'rniga bo'sh qator qolmaydi.
+- Printer cheki, oddiy matnli chek va brauzer cheki — hammasida.
+
 ## 1.31.3 — Chek ostidagi yozuvlar qalin
 
 - Chek ostidagi qo'shimcha yozuvlar (masalan "DASTAVKA: 94-…") hamma chek turida qalinroq: printer cheki (rasm), oddiy matnli chek va brauzer cheki.

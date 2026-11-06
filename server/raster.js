@@ -130,7 +130,11 @@ function logoBits(png, tw) {
     if (x + 1 < tw) g[i + 1] += (e * 7) / 16;
     if (y + 1 < th) { if (x) g[i + tw - 1] += (e * 3) / 16; g[i + tw] += (e * 5) / 16; if (x + 1 < tw) g[i + tw + 1] += e / 16; }
   }
-  return { bits, w: tw, h: th };
+  // The empty rows above and below the drawing (a logo file's own margin) are not printed.
+  const used = (y) => { for (let x = 0; x < tw; x++) if (bits[y * tw + x]) return true; return false; };
+  let top = 0; while (top < th - 1 && !used(top)) top++;
+  let bot = th - 1; while (bot > top && !used(bot)) bot--;
+  return { bits: bits.subarray(top * tw, (bot + 1) * tw), w: tw, h: bot - top + 1 };
 }
 
 // Breaks a text into rows of at most `n` characters, at spaces where possible.
@@ -199,11 +203,12 @@ function billRaster(job, { paper = 80, logo = null } = {}) {
   if (logo && s.receipt_logo !== false) {
     const pct = Math.min(100, Math.max(20, Number(s.receipt_logo_size) || 50));
     const img = logoBits(logo, Math.round(((W - 2 * M) * pct) / 100));
-    if (img) { c.image(img.bits, img.w, img.h, c.y); c.y += img.h + 10; }
+    if (img) { c.image(img.bits, img.w, img.h, c.y); c.y += img.h + 4; }
   }
   // The business's name, big, centred (wrapped when long).
   const T = FONT.sizes[34];
-  for (const r of wrap(s.name || '', Math.floor((W - 2 * M) / T.w))) {
+  // No name (a logo that already says it): no empty line for it.
+  for (const r of s.name ? wrap(s.name, Math.floor((W - 2 * M) / T.w)) : []) {
     c.text(Math.round((W - r.length * T.w) / 2), c.y + 4, r, 34); c.y += T.h + 8;
   }
   for (const r of [s.address, s.phone].filter(Boolean).flatMap((x) => wrap(x, cols))) line(r, { center: true });
