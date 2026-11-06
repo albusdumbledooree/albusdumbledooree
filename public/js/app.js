@@ -384,16 +384,9 @@ function renderReadyBanner() {
   const asks = App.workAsks || [];
   if (!items.length && !reqs.length && !asks.length) { el.innerHTML = ''; return; }
   el.innerHTML = `<div class="float-stack">${asks.length ? workAskHtml(asks) : ''}${reqs.length ? guestBannerHtml(reqs) : ''}
-    ${items.length ? `<div class="ready-banner"><div class="rb-head">${icon('bell', 20)} ${t('Tayyor — olib keting!')}</div>
-    ${items.slice(0, 3).map((i) => `<div class="rb-item"><div class="grow"><b>${esc(i.room_name)}</b> · ${i.qty}× ${esc(i.name)}</div>
-      <button class="btn sm" data-banner-serve="${i.id}">${icon('hand', 16)} ${t('Oldim')}</button></div>`).join('')}
-    ${items.length > 3 ? `<a href="#/ready" style="color:#fff">+${items.length - 3}</a>` : ''}</div>` : ''}</div>`;
+    ${items.length ? `<a class="ready-banner rb-slim" href="#/ready"><span class="rb-dot"></span><b>${t('{0} ta taom tayyor', items.length)}</b><span class="rb-go">${t("Ko'rish")} ${icon('arrow-right', 18)}</span></a>` : ''}</div>`;
   bindGuestBanner(el);
   bindWorkAsks(el);
-  el.querySelectorAll('[data-banner-serve]').forEach((b) => b.onclick = async () => {
-    b.disabled = true;
-    try { await POST(`/api/items/${b.dataset.bannerServe}/serve`); await refreshBadges(); refreshSoon(); } catch (e) { toastError(e); }
-  });
 }
 
 // ---------- QR menu: what guests send from the table ----------

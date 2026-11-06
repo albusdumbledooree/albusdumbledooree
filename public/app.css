@@ -563,6 +563,14 @@ table.list tr.selected td .ic { color: #fff; }
 .method { border: 2px solid var(--line); border-radius: 14px; padding: 12px; background: var(--panel); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; font: inherit; font-weight: 700; color: var(--text); }
 .method.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
 .change { font-size: 20px; font-weight: 800; }
+.pay .receipt.tbl .line { grid-template-columns: minmax(0, 1fr) 36px max-content; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.pay .receipt.tbl .line:last-child { border-bottom: 0; }
+.pay .receipt.tbl .line .q { color: var(--text); text-align: center; font-size: 16px; font-weight: 700; }
+.pay-links { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.pay-links .lnk { border: 0; background: none; padding: 4px 0; color: var(--primary); font: inherit; font-weight: 700; font-size: 14.5px; cursor: pointer; white-space: nowrap; }
+.pay-links .lnk.on { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.pay-split { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pay-split.one { grid-template-columns: minmax(0, 1fr); }
 
 /* ---------- Kitchen ---------- */
 .kds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; }
@@ -576,6 +584,8 @@ table.list tr.selected td .ic { color: #fff; }
 .ticket.late { border-left-color: var(--red); background: var(--red-soft); }
 .ticket .t-head { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
 .ticket .t-head b { color: var(--text); font-size: 16px; }
+.ticket .t-print { border: 0; background: transparent; color: var(--muted); width: 36px; height: 36px; margin: -8px -6px -8px 0; border-radius: 10px; display: inline-grid; place-items: center; cursor: pointer; }
+.ticket .t-print:hover, .ticket .t-print:active { background: var(--line); color: var(--text); }
 .ticket .dish-name { font-size: 20px; font-weight: 800; margin: 8px 0 4px; }
 .ticket .dish-name .q { color: var(--orange); margin-right: 6px; }
 .ticket .note { background: var(--orange-soft); color: var(--orange); border-radius: 10px; padding: 6px 10px; font-weight: 650; font-size: 14px; margin: 6px 0; display: flex; gap: 6px; align-items: center; }
@@ -624,6 +634,11 @@ table.list tr.selected td .ic { color: #fff; }
 .ready-banner .rb-item { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,.25); }
 .ready-banner .rb-item:first-of-type { border-top: 0; }
 .ready-banner .btn { background: #fff; color: var(--green); border-color: #fff; }
+.rb-slim { display: flex; align-items: center; gap: 10px; padding: 13px 16px; text-decoration: none; font-size: 16px; }
+.rb-slim .rb-dot { width: 10px; height: 10px; border-radius: 50%; background: #fff; flex: none; animation: rbPulse 1.4s ease-in-out infinite; }
+.rb-slim .rb-go { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-weight: 750; opacity: .95; }
+@keyframes rbPulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .rb-slim .rb-dot { animation: none; } }
 @media (min-width: 861px) { .float-stack { bottom: auto; top: 76px; left: auto; right: 20px; transform: none; width: 420px; } }
 .notice { display: flex; gap: 10px; align-items: center; padding: 12px 14px; border-radius: 14px; background: var(--orange-soft); color: var(--orange); font-weight: 650; margin-bottom: 14px; }
 .notice.red { background: var(--red-soft); color: var(--red); }

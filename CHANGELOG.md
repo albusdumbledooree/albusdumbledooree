@@ -2,6 +2,13 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.33.0 — Oshxona, to'lov oynasi va ofitsant telefoni soddaroq
+
+- Oshxona: kartochkada bitta vaqt (qolgan vaqt, kechiksa qizil), "~15 daq" olib tashlandi; tayyor taomda qisqa "⏳ kutyapti 0:05"; chop etish tugmasi kartochka burchagida kichik belgi; sarlavhadagi ikkinchi Stop-list tugmasi olib tashlandi (yuqori menyuda bor).
+- To'lov oynasi: Naqd / Karta / O'tkazma bosilsa summa o'zi yoziladi (chegirma qo'shilsa ham o'zi to'g'rilanadi). Naqdda bitta katak qoladi — mijoz bergan pulni yozsangiz qaytim chiqadi. Uchta katak faqat "Aralash to'lov"da. Chegirma, Mijoz va "Boshqa" (xodim hisobiga) — kichik havolalar, bosilganda ochiladi. Taomlar ro'yxati jadval ko'rinishida: nomi, soni, summa. To'lov turi tanlanmasa ogohlantiradi.
+- Ofitsant telefoni: katta yashil "Tayyor — olib keting!" oynasi o'rniga pastda ingichka qator "● 3 ta taom tayyor — Ko'rish →", bosilsa tayyor taomlar ro'yxati ochiladi.
+- Xonalar ko'rinishi o'zgarmadi.
+
 ## 1.32.2 — Chek paneli tozaroq
 
 - "1-yuborish · 15:08" ajratgichlari va "Yangi (yuborilmagan)" sarlavhasi olib tashlandi (yangi taomlarni sariq rang ajratadi; qachon yuborilgani — qatorni bosganda).

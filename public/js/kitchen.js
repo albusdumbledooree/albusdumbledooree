@@ -5,19 +5,18 @@ function ticketHtml(i) {
   const notify = App.kitchenMode === 'notify';
   return `<div class="ticket ${i.status}">
     <div class="t-head">${icon(i.delivery ? 'truck' : i.takeaway ? 'shopping-bag' : 'door-open', 16)}<b>${esc(i.room_name)}</b>
-      <span>· ${esc(i.waiter_name)}</span><span class="grow"></span><span class="timer">${icon('clock', 14)} <b data-since="${i.created_at}"></b></span></div>
+      <span>· ${esc(i.waiter_name)}</span><span class="grow"></span>${i.status === 'new' || i.status === 'cooking' ? `<button class="t-print" data-kprint="${i.id}" title="${esc(t('Chop etish'))}" aria-label="${esc(t('Chop etish'))}">${icon('printer', 18)}</button>` : ''}</div>
     <div class="dish-name"><span class="q">${i.qty}×</span>${esc(i.name)}</div>
     ${modsText(i) ? `<div class="note mods-note">${icon('plus', 16)} ${esc(modsText(i))}</div>` : ''}
     ${i.note ? `<div class="note">${icon('sticky-note', 16)} ${esc(i.note)}</div>` : ''}
     <div class="row small muted">
-      ${i.status === 'new' || i.status === 'cooking' ? `<span class="timer">${icon('timer', 14)} <b data-eta="${i.eta_at}"></b></span><span>~${i.prep_minutes} ${t('daq')}</span>` : ''}
-      ${i.status === 'ready' ? `<span>${icon('circle-check', 14)} ${fmtTime(i.ready_at)} · ${t('ofitsant kutilmoqda')} <b data-since="${i.ready_at}"></b></span>` : ''}
-      ${i.status === 'served' ? `<span>${icon('hand', 14)} ${fmtTime(i.served_at)}</span>` : ''}
-      ${i.chef_name ? `<span>${icon('chef-hat', 14)} ${esc(i.chef_name)}</span>` : ''}</div>
+      ${i.status === 'new' || i.status === 'cooking' ? `<span class="timer">${icon('timer', 14)} <b data-eta="${i.eta_at}"></b></span>` : ''}
+      ${i.status === 'ready' ? `<span class="timer">⏳ ${t('kutyapti')} <b data-since="${i.ready_at}"></b></span>` : ''}
+      ${i.status === 'served' ? `<span>${icon('hand', 14)} ${fmtTime(i.served_at)}</span>` : ''}</div>
     ${i.status === 'new' || i.status === 'cooking' ? `<div class="acts">
       ${i.status === 'new' && !notify ? `<button class="btn primary lg" data-accept="${i.id}">${icon('check', 20)} ${t('Qabul qilish')}</button>` : ''}
       <button class="btn ${i.status === 'cooking' || notify ? 'ok lg' : 'lg'}" data-ready="${i.id}" ${i.status === 'new' && !notify ? `title="${esc(t('Darhol tayyor'))}" style="flex:0 0 64px"` : ''}>${icon('circle-check', 20)}${i.status === 'new' && !notify ? '' : ` ${t('Tayyor')}`}</button>
-      <button class="btn lg" data-kprint="${i.id}" title="${esc(t('Chop etish'))}" style="flex:0 0 64px">${icon('printer', 20)}</button></div>` : ''}
+      </div>` : ''}
   </div>`;
 }
 
@@ -30,8 +29,7 @@ Views.kitchen = {
     const done = col(['ready', 'served']).sort((a, b) => (b.ready_at || 0) - (a.ready_at || 0));
     const notify = App.kitchenMode === 'notify';
     return `<div class="page-head"><h1>${t('Oshxona')}</h1>
-      <span class="chip new">${icon('bell', 14)} ${load.pending}</span><span class="chip cooking">${icon('flame', 14)} ${load.cooking}</span>
-      ${moduleOn('stoplist') ? `<a class="btn sm" href="#/stoplist">${icon('ban', 16)} ${t('Stop-list')}</a>` : ''}</div>
+      <span class="chip new">${icon('bell', 14)} ${load.pending}</span><span class="chip cooking">${icon('flame', 14)} ${load.cooking}</span></div>
       <div class="kds">
         ${notify ? '' : `<div class="kds-col"><h2>${icon('bell')} ${t('Yangi')} <span class="badge">${col('new').length}</span></h2>${col('new').map(ticketHtml).join('') || emptyState('check', t("Yangi buyurtma yo'q"))}</div>`}
         <div class="kds-col"><h2>${icon('flame')} ${t('Tayyorlanmoqda')} <span class="badge" style="background:var(--orange)">${col('cooking').length}</span></h2>${col('cooking').map(ticketHtml).join('') || emptyState('chef-hat', t('Hozir hech narsa tayyorlanmayapti'))}</div>

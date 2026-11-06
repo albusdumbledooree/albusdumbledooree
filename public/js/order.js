@@ -592,18 +592,24 @@ function openPayment(order) {
   const pending = App.kitchenMode === 'full' ? order.items.filter((i) => ['new', 'cooking'].includes(i.status)) : [];
   const live = order.items.filter((i) => i.status !== 'cancelled');
   const canDiscount = can('owner', 'admin', 'cashier');
+  let payMode = null; let cashTyped = false;
   const form = openModal({
     title: `${icon('wallet')} ${t("To'lov")} · ${esc(placeName(order))}`, size: 'wide',
     body: `${pending.length ? `<div class="notice">${icon('triangle-alert', 18)} ${t("Tayyor bo'lmagan taomlar: {0}", pending.map((i) => esc(i.name)).join(', '))}</div>` : ''}
       <div class="pay">
-        <div class="receipt">${batches(live).map((b) => b.items.map((i) => `<div class="line"><span class="q">${i.qty}×</span><span class="n">${esc(i.name)}</span><span class="p">${money(i.price * i.qty)}</span></div>`).join('')).join('')}</div>
+        <div class="receipt tbl">${batches(live).map((b) => b.items.map((i) => `<div class="line"><span class="n">${esc(i.name)}</span><span class="q">${i.qty}</span><span class="p">${money(i.price * i.qty)}</span></div>`).join('')).join('')}</div>
         <div class="stack">
           <div class="sum-rows num" id="pay-sums"></div>
-          ${canDiscount ? `<label class="field">${t('Chegirma')} (${esc(App.settings.currency)})<input type="number" name="discount" min="0" value="" placeholder="0"></label>` : ''}
-          ${customerPayHtml()}
-          <div class="methods">${['cash', 'card', 'transfer'].map((m) => `<button type="button" class="method" data-m="${m}">${icon(METHOD_ICONS[m], 26)}${methodName(m)}</button>`).join('')}${staffPayButton()}</div>
+          <div class="methods">${['cash', 'card', 'transfer'].map((m) => `<button type="button" class="method" data-m="${m}">${icon(METHOD_ICONS[m], 26)}${methodName(m)}</button>`).join('')}</div>
+          <div class="pay-links"><button type="button" class="lnk" data-mix>＋ ${t("Aralash to'lov")}</button>
+            ${canDiscount ? `<button type="button" class="lnk" data-open="pay-disc">＋ ${t('Chegirma')}</button>` : ''}
+            ${customerPayHtml() ? `<button type="button" class="lnk" data-open="pay-cust">＋ ${t('Mijoz')}</button>` : ''}
+            ${staffPayButton() ? `<button type="button" class="lnk" data-open="pay-more">⋯ ${t('Boshqa')}</button>` : ''}</div>
+          <div class="form-grid pay-split" id="pay-split" hidden>${['cash', 'card', 'transfer'].map((m) => `<label class="field" data-pm="${m}">${methodName(m)}<input type="number" name="paid_${m}" min="0" placeholder="0"></label>`).join('')}</div>
+          ${canDiscount ? `<label class="field" id="pay-disc" hidden>${t('Chegirma')} (${esc(App.settings.currency)})<input type="number" name="discount" min="0" value="" placeholder="0"></label>` : ''}
+          ${customerPayHtml() ? `<div id="pay-cust" hidden>${customerPayHtml()}</div>` : ''}
+          ${staffPayButton() ? `<div id="pay-more" class="methods" hidden>${staffPayButton()}</div>` : ''}
           ${staffPayBox()}
-          <div class="form-grid" style="grid-template-columns:repeat(3,1fr)">${['cash', 'card', 'transfer'].map((m) => `<label class="field">${methodName(m)}<input type="number" name="paid_${m}" min="0" placeholder="0"></label>`).join('')}</div>
           <div id="pay-change" class="change"></div>
           ${(App.user.perms || {}).print ? `<label class="check"><input type="checkbox" name="print" checked> ${icon('printer', 18)} ${t('Chekni chop etish')}</label>` : ''}
         </div>
@@ -612,6 +618,7 @@ function openPayment(order) {
       const d = formData(f);
       if (staffPay.on && !d.staff_id) { toast(t('Xodimni tanlang'), 'warn'); return false; }
       const m = money3();
+      if (!staffPay.on && !payMode && !m.debt) { toast(t("To'lov turini tanlang"), 'warn'); return false; }
       const r = await POST(`/api/orders/${order.id}/close`, staffPay.on ? { staff_id: Number(d.staff_id) } : {
         discount: Number(d.discount) || 0, paid_cash: Number(d.paid_cash) || 0, paid_card: Number(d.paid_card) || 0, paid_transfer: Number(d.paid_transfer) || 0,
         ...(cust.customer ? { customer_id: cust.customer.id, bonus: m.bonus, paid_debt: m.debt } : {}),
@@ -644,6 +651,14 @@ function openPayment(order) {
         <span style="grid-column:1/-1" class="big-total">${money(staffTotal())}</span>`;
       return staffTotal();
     }
+    // One method chosen: its amount follows the total (discount, bonus). Cash keeps what the cashier typed (for change).
+    if (payMode && payMode !== 'mix') {
+      const due = money3().total;
+      for (const m of ['cash', 'card', 'transfer']) {
+        if (m !== payMode) form[`paid_${m}`].value = '';
+        else if (m !== 'cash' || !cashTyped) form[`paid_${m}`].value = due;
+      }
+    }
     const { discount, bonus, total, paid, debt } = money3();
     const share = order.guests > 1 ? Math.round(total / order.guests) : 0;
     form.querySelector('#pay-sums').innerHTML = `<span>${t('Taomlar')}</span><span class="right">${money(order.subtotal)}</span>
@@ -663,12 +678,27 @@ function openPayment(order) {
   form.addEventListener('change', calc);
   const staffPay = bindStaffPay(form, calc);
   const cust = bindCustomerPay(form, calc);
-  form.querySelectorAll('[data-m]').forEach((b) => b.onclick = () => {
-    staffPay.on = false;
-    const total = calc();
-    form.querySelectorAll('[data-m]').forEach((x) => x.classList.toggle('active', x === b));
-    for (const m of ['cash', 'card', 'transfer']) form[`paid_${m}`].value = m === b.dataset.m ? total : '';
-    calc();
+  // How it is paid: one method (the amount fills itself; cash shows one field for the change) or "Aralash" (all three).
+  const split = form.querySelector('#pay-split');
+  const mixBtn = form.querySelector('[data-mix]');
+  const setMode = (mode) => {
+    payMode = mode; cashTyped = false;
+    form.querySelectorAll('[data-m]').forEach((x) => x.classList.toggle('active', x.dataset.m === mode));
+    mixBtn.classList.toggle('on', mode === 'mix');
+    split.hidden = mode !== 'mix' && mode !== 'cash';
+    split.classList.toggle('one', mode === 'cash');
+    split.querySelectorAll('[data-pm]').forEach((l) => { l.hidden = mode === 'cash' && l.dataset.pm !== 'cash'; });
+    if (mode === 'mix') for (const m of ['cash', 'card', 'transfer']) form[`paid_${m}`].value = '';
+  };
+  form.querySelectorAll('[data-m]').forEach((b) => b.onclick = () => { staffPay.on = false; setMode(b.dataset.m); calc(); });
+  mixBtn.onclick = () => { staffPay.on = false; setMode('mix'); form.querySelector('[data-staff-pay]')?.classList.remove('active'); calc(); form.paid_cash.focus(); };
+  form.paid_cash.addEventListener('input', () => { cashTyped = true; });
+  form.querySelector('[data-staff-pay]')?.addEventListener('click', () => { setMode(null); });
+  form.querySelectorAll('[data-open]').forEach((b) => b.onclick = () => {
+    const box = form.querySelector(`#${b.dataset.open}`);
+    box.hidden = !box.hidden;
+    b.classList.toggle('on', !box.hidden);
+    if (!box.hidden) box.querySelector('input')?.focus();
   });
   calc();
 }
