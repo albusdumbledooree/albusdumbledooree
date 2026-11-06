@@ -2,6 +2,10 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.32.1 — Chek panelida yozuv kichikroq
+
+- Chek jadvalidagi yozuvlar kichikroq (15 → 14), qatorlar zichroq: uzun nomlar ham ko'pincha bitta qatorga sig'adi, ekranga ko'proq taom kiradi.
+
 ## 1.32.0 — Chek paneli jadval ko'rinishida
 
 - Taom urish ekranidagi chek endi jadval: **№ · Nomi · Soni · Summa**. Har bir taom bitta qatorda — telefonda bir ekranga taxminan ikki baravar ko'p taom sig'adi.
