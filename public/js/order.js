@@ -245,9 +245,9 @@ function checkPane({ order, room, cart, takeaway, couriers, readonly: ro }) {
     <div class="cp-body">
       ${items.length || cart.lines.length ? `<div class="tbl-h"><span>№</span><span>${t('Nomi')}</span><span>${t('Soni')}</span><span>${t('Summa')}</span></div>` : ''}
       ${!ro && ready > 1 ? `<button class="btn ok sm block serve-all" id="serve-all">${icon('hand', 16)} ${t('Hammasini oldim')} (${ready})</button>` : ''}
-      ${sent.map((b, n) => `<div class="batch-title">${icon('send', 13)} ${t('{0}-yuborish', n + 1)} · ${fmtTime(b.at)}</div>${b.items.map((i) => lineHtml(i, ro, ++no)).join('')}`).join('')}
+      ${sent.map((b) => b.items.map((i) => lineHtml(i, ro, ++no)).join('')).join('')}
       ${cancelled.length ? `<div class="batch-title">${icon('ban', 13)} ${t('Bekor qilingan')}</div>${cancelled.map((i) => lineHtml(i, ro, '–')).join('')}` : ''}
-      ${cart.lines.length ? `<div class="batch-title" style="color:var(--primary)">${icon('circle-plus', 13)} ${t('Yangi (yuborilmagan)')}</div>
+      ${cart.lines.length ? `<div class="pend-gap"></div>
         ${cart.lines.map((c, idx) => `<div class="row2 pend" data-pline="${idx}" role="button" tabindex="0"><span class="no">${++no}</span>
           <span class="nm">${esc(c.name)}${c.modsText ? `<small class="md">+ ${esc(c.modsText)}</small>` : ''}${c.note ? `<small class="nt">✎ ${esc(c.note)}</small>` : ''}</span>
           <span class="qt"><button data-dec="${idx}" aria-label="−">${icon('minus', 14)}</button><b>${c.qty}</b><button data-inc="${idx}" aria-label="+">${icon('plus', 14)}</button></span>
@@ -420,7 +420,7 @@ const OrderView = {
       if (!it) return;
       const eta = (it.status === 'new' || it.status === 'cooking') && it.eta_at ? ` · ${icon('timer', 14)} <b data-eta="${it.eta_at}"></b>` : '';
       openModal({ title: esc(it.name),
-        body: `<p class="muted"><span class="chip ${it.status}">${statusName(it.status)}</span> ${it.qty} × ${money(it.price)}${eta}${it.note ? `<br>✎ ${esc(it.note)}` : ''}</p>`,
+        body: `<p class="muted"><span class="chip ${it.status}">${statusName(it.status)}</span> ${it.qty} × ${money(it.price)}${eta}<br>${icon('send', 13)} ${t('Yuborildi')}: ${fmtTime(it.created_at)}${it.note ? `<br>✎ ${esc(it.note)}` : ''}</p>`,
         actions: [
           ...(canCancelItem(it) ? [{ label: t('Bekor qilish'), cls: 'red-text', icon: 'x', onClick: () => { setTimeout(() => cancelItemDialog(it), 0); } }] : []),
           ...(it.status === 'ready' ? [{ label: t('Oldim'), cls: 'ok', icon: 'hand', onClick: async () => {

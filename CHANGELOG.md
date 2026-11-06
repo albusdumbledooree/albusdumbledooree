@@ -2,6 +2,11 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.32.2 — Chek paneli tozaroq
+
+- "1-yuborish · 15:08" ajratgichlari va "Yangi (yuborilmagan)" sarlavhasi olib tashlandi (yangi taomlarni sariq rang ajratadi; qachon yuborilgani — qatorni bosganda).
+- Belgilar faqat ikkita: to'q sariq nuqta — oshxonada, yashil nuqta va yashil qator — tayyor. Berilgan taomlar oddiy qator.
+
 ## 1.32.1 — Chek panelida yozuv kichikroq
 
 - Chek jadvalidagi yozuvlar kichikroq (15 → 14), qatorlar zichroq: uzun nomlar ham ko'pincha bitta qatorga sig'adi, ekranga ko'proq taom kiradi.

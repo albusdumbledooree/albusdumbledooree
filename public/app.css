@@ -459,8 +459,10 @@ tr.clickable:hover td { background: var(--panel-2); }
 .cp-body .row2 .nm small.md { color: var(--primary); } .cp-body .row2 .nm small.nt { color: #b45309; font-weight: 700; }
 .cp-body .row2 .qt { text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; }
 .cp-body .row2 .sm { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.cp-body .row2 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: #9aa3b2; }
-.cp-body .row2.new .dot { background: #2156e8; } .cp-body .row2.cooking .dot { background: #f59e0b; } .cp-body .row2.ready .dot { background: #16a34a; }
+/* Only what a waiter acts on is marked: orange — still in the kitchen, green (and a green row) — ready to take. */
+.cp-body .row2 .dot { display: none; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.cp-body .row2.new .dot, .cp-body .row2.cooking .dot { display: inline-block; background: #f59e0b; } .cp-body .row2.ready .dot { display: inline-block; background: #16a34a; }
+.cp-body .pend-gap { height: 6px; }
 .cp-body .row2.ready { background: #ecfdf3; }
 .cp-body .row2.cancelled { opacity: .55; } .cp-body .row2.cancelled .nm, .cp-body .row2.cancelled .sm { text-decoration: line-through; }
 .cp-body .row2.pend { background: #fff7db; border-left: 4px solid #f5b301; padding-left: 4px; border-radius: 6px; margin-bottom: 3px; border-bottom: 0; grid-template-columns: 20px minmax(0, 1fr) 84px max-content; }
