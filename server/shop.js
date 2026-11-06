@@ -12,6 +12,7 @@
  * so the profit report leaves it out (the goods' cost is counted when they are sold).
  */
 const { HttpError, str, int } = require('./util');
+const Units = require('../public/js/units');
 
 const DAY = 24 * 3600 * 1000;
 const METHODS = ['cash', 'card', 'transfer'];
@@ -102,12 +103,14 @@ function createShop(db, { audit, events, now, tasks, moduleOn, settings }) {
   // Running average: old stock at its cost plus the new batch at its full cost.
   function addStock(dish, qty, unitCost) {
     const have = Math.max(0, dish.stock ?? 0);
-    const cost = dish.stock === null || have + qty <= 0 ? unitCost : Math.round((have * (dish.cost || 0) + qty * unitCost) / (have + qty));
+    const avg = dish.stock === null || have + qty <= 0 ? unitCost : (have * (dish.cost || 0) + qty * unitCost) / (have + qty);
+    // A product sold by the box keeps its piece cost to the tiyin; the rest to the sum.
+    const cost = Units.hasUnits(dish) ? Math.round(avg * 100) / 100 : Math.round(avg);
     q('UPDATE dishes SET stock = COALESCE(stock, 0) + ?, cost = ?, available = 1 WHERE id = ?').run(qty, cost, dish.id);
     return cost;
   }
   function purchaseItems(id) {
-    return q('SELECT pi.*, d.name, d.size, d.color, d.material, d.side FROM purchase_items pi JOIN dishes d ON d.id = pi.dish_id WHERE pi.purchase_id = ? ORDER BY pi.id').all(id)
+    return q('SELECT pi.*, d.name, d.size, d.color, d.material, d.side, d.pack_size, d.box_size FROM purchase_items pi JOIN dishes d ON d.id = pi.dish_id WHERE pi.purchase_id = ? ORDER BY pi.id').all(id)
       .map((r) => ({ ...r, label: label(r) }));
   }
   function createPurchase({ user, body }) {
@@ -118,9 +121,14 @@ function createShop(db, { audit, events, now, tasks, moduleOn, settings }) {
     const lines = body.items.map((it) => {
       const d = q('SELECT * FROM dishes WHERE id = ? AND active = 1').get(int(it.dish_id, 'Mol', { min: 1, required: true }));
       if (!d) throw new HttpError(404, 'Mol topilmadi');
-      return { d, qty: int(it.qty, 'Soni', { min: 1, max: 1_000_000, required: true }), price: int(it.price, 'Narxi', { max: 10_000_000_000, required: true }) };
+      const n = int(it.qty, 'Soni', { min: 1, max: 1_000_000, required: true });
+      const p = int(it.price, 'Narxi', { max: 10_000_000_000, required: true });
+      // Tableware comes by the box or the pack: the stock is counted in pieces, the price shared out per piece.
+      const m = it.unit && it.unit !== 'piece' ? Units.mult(d, it.unit) : 1;
+      if (!m) throw new HttpError(400, `"${d.name}" uchun ${it.unit === 'box' ? 'karobka' : 'pachka'} kiritilmagan`);
+      return { d, qty: n * m, price: m > 1 ? p / m : p, total: n * p };
     });
-    const goods = lines.reduce((s, l) => s + l.qty * l.price, 0);
+    const goods = lines.reduce((s, l) => s + l.total, 0);
     const freight = int(body.freight, "Yo'lkira", { max: 10_000_000_000 });
     // Paid now to the supplier; the freight is paid now unless said otherwise.
     const paid = body.paid === undefined || body.paid === '' ? goods : int(body.paid, "To'langan", { max: goods });
@@ -135,13 +143,13 @@ function createShop(db, { audit, events, now, tasks, moduleOn, settings }) {
       let freightLeft = freight;
       lines.forEach((l, i) => {
         // The freight goes to each line by its share of the goods' value (the last line takes the rounding).
-        const share = i === lines.length - 1 ? freightLeft : goods ? Math.round((freight * l.qty * l.price) / goods) : Math.round(freight / lines.length);
+        const share = i === lines.length - 1 ? freightLeft : goods ? Math.round((freight * l.total) / goods) : Math.round(freight / lines.length);
         freightLeft -= share;
-        const unit = l.price + Math.round(share / l.qty);
+        const unit = Units.hasUnits(l.d) ? Math.round((l.price + share / l.qty) * 100) / 100 : l.price + Math.round(share / l.qty);
         q('INSERT INTO purchase_items (purchase_id, dish_id, qty, price, unit_cost) VALUES (?, ?, ?, ?, ?)').run(pid, l.d.id, l.qty, l.price, unit);
         addStock(q('SELECT * FROM dishes WHERE id = ?').get(l.d.id), l.qty, unit);
         q("INSERT INTO stock_moves (dish_id, kind, qty, unit_cost, amount, ref, user_id, created_at) VALUES (?, 'in', ?, ?, ?, ?, ?, ?)")
-          .run(l.d.id, l.qty, unit, unit * l.qty, `purchase:${pid}`, user.id, t);
+          .run(l.d.id, l.qty, unit, Math.round(unit * l.qty), `purchase:${pid}`, user.id, t);
       });
       const out = paid + (freightPaid ? freight : 0);
       if (out > 0) {
@@ -227,8 +235,9 @@ function createShop(db, { audit, events, now, tasks, moduleOn, settings }) {
   // Goods brought back: back in stock at the cost they were sold at.
   function refunded(item, qty, userId, orderId) {
     if (!item.dish_id) return;
+    const um = item.unit_mult || 1;
     q("INSERT INTO stock_moves (dish_id, kind, qty, unit_cost, amount, ref, user_id, created_at) VALUES (?, 'refund', ?, ?, ?, ?, ?, ?)")
-      .run(item.dish_id, qty, item.cost, item.cost * qty, `order:${orderId}`, userId, now());
+      .run(item.dish_id, qty * um, item.cost / um, item.cost * qty, `order:${orderId}`, userId, now());
   }
 
   // ---------- Own barcodes for goods that came without one ----------
@@ -524,7 +533,7 @@ function createShop(db, { audit, events, now, tasks, moduleOn, settings }) {
     const byDish = new Map();
     for (const i of cur.items.filter((x) => x.dish_id)) {
       const r = byDish.get(i.dish_id) || { qty: 0, revenue: 0, profit: 0 };
-      r.qty += i.qty; r.revenue += i.price * i.qty; r.profit += (i.price - i.cost) * i.qty;
+      r.qty += i.qty * (i.unit_mult || 1); r.revenue += i.price * i.qty; r.profit += (i.price - i.cost) * i.qty;
       byDish.set(i.dish_id, r);
     }
     const dishes = q('SELECT * FROM dishes WHERE active = 1').all();
@@ -532,12 +541,14 @@ function createShop(db, { audit, events, now, tasks, moduleOn, settings }) {
       WHERE o.status = 'closed' AND i.status != 'cancelled' AND i.dish_id IS NOT NULL GROUP BY i.dish_id`).all().map((r) => [r.dish_id, r.t]));
     const lastIn = new Map(q("SELECT dish_id, MAX(created_at) t FROM stock_moves WHERE kind IN ('in','import') GROUP BY dish_id").all().map((r) => [r.dish_id, r.t]));
     const rows = dishes.map((d) => ({ id: d.id, name: d.name, variant: variant(d), stock: d.stock, cost: d.cost, price: d.price,
-      ...(byDish.get(d.id) || { qty: 0, revenue: 0, profit: 0 }), last_sale: lastSale.get(d.id) || null, last_in: lastIn.get(d.id) || null, created_at: d.created_at || null }));
+      ...(byDish.get(d.id) || { qty: 0, revenue: 0, profit: 0 }), last_sale: lastSale.get(d.id) || null, last_in: lastIn.get(d.id) || null, created_at: d.created_at || null }))
+      // Tableware: counts in boxes and packs ("31 karobka + 200 dona") next to the pieces.
+      .map((r) => { const d = dishes.find((x) => x.id === r.id); return Units.hasUnits(d) ? { ...r, qty_text: Units.stockText(d, r.qty), stock_text: Units.stockText(d, r.stock) } : r; });
     const sold = rows.filter((r) => r.qty > 0);
     const inStock = rows.filter((r) => (r.stock || 0) > 0);
     const deadLine = now() - 60 * DAY;
     const dead = inStock.filter((r) => { const last = Math.max(r.last_sale || 0, r.last_in || 0, r.created_at || 0); return last > 0 && last < deadLine; })
-      .map((r) => ({ ...r, frozen: r.stock * r.cost })).sort((a, b) => b.frozen - a.frozen);
+      .map((r) => ({ ...r, frozen: Math.round(r.stock * r.cost) })).sort((a, b) => b.frozen - a.frozen);
     const days = new Map();
     for (const o of cur.orders) {
       const d = new Date(o.closed_at); d.setHours(0, 0, 0, 0);
@@ -551,7 +562,7 @@ function createShop(db, { audit, events, now, tasks, moduleOn, settings }) {
       top_profit: [...sold].sort((a, b) => b.profit - a.profit).slice(0, 5),
       slow: [...inStock].sort((a, b) => a.qty - b.qty || b.stock * b.cost - a.stock * a.cost).slice(0, 5),
       dead: dead.slice(0, 20), dead_total: dead.reduce((s, r) => s + r.frozen, 0),
-      stock_value: inStock.reduce((s, r) => s + r.stock * r.cost, 0), stock_units: inStock.reduce((s, r) => s + r.stock, 0),
+      stock_value: Math.round(inStock.reduce((s, r) => s + r.stock * r.cost, 0)), stock_units: inStock.reduce((s, r) => s + r.stock, 0),
       by_day: [...days].map(([day, total]) => ({ day, total })).sort((a, b) => a.day - b.day),
       debts: debts(),
     };
@@ -560,7 +571,7 @@ function createShop(db, { audit, events, now, tasks, moduleOn, settings }) {
   // ---------- "Bugun" ----------
   function lowStock() {
     return q('SELECT * FROM dishes WHERE active = 1 AND stock IS NOT NULL AND ((min_stock IS NOT NULL AND stock <= min_stock) OR stock <= 0) ORDER BY stock, name LIMIT 30').all()
-      .map((d) => ({ id: d.id, name: label(d), stock: d.stock, min_stock: d.min_stock }));
+      .map((d) => ({ id: d.id, name: label(d), stock: d.stock, min_stock: d.min_stock, ...(Units.hasUnits(d) ? { stock_text: Units.stockText(d, d.stock) } : {}) }));
   }
   function todayJobs(from, to) {
     return q("SELECT j.*, m.name master_name FROM jobs j LEFT JOIN masters m ON m.id = j.master_id WHERE j.status = 'planned' AND j.scheduled_at >= ? AND j.scheduled_at < ? ORDER BY j.scheduled_at").all(from, to);

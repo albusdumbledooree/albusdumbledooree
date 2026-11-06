@@ -171,10 +171,14 @@ async function purchaseDialog(preset = null) {
   try { [menu, sups] = await Promise.all([GET('/api/menu'), GET('/api/suppliers')]); } catch (e) { return toastError(e); }
   const goods = menu.dishes;
   const opt = (sel) => goods.map((d) => `<option value="${d.id}" ${sel === d.id ? 'selected' : ''}>${esc(d.name)}${variantOf(d) ? ` — ${esc(variantOf(d))}` : ''}</option>`).join('');
-  const line = (dishId = null) => `<div class="pin-line">
+  // Tableware comes by the box (or the pack): the count and the price are typed per that unit.
+  const idish = isIdish();
+  const unitSel = (d) => (idish && d && Units.hasUnits(d) ? Units.unitsOf(d).reverse().map((u) => `<option value="${u}">${esc(PACK_NAMES()[u])}</option>`).join('') : '');
+  const line = (dishId = null) => `<div class="pin-line ${idish ? 'with-unit' : ''}">
       <label class="field">${t('Mol')}<select name="dish">${opt(dishId)}</select></label>
       <label class="field">${t('Soni')}<input type="number" name="qty" min="1" value="1"></label>
-      <label class="field">${t('Kelish narxi (1 ta)')}<input type="number" name="price" min="0"></label>
+      ${idish ? `<label class="field">${t('Birlik')}<select name="unit">${unitSel(goods.find((x) => x.id === (dishId || (goods[0] || {}).id)))}</select></label>` : ''}
+      <label class="field">${idish ? t('Kelish narxi (1 birlik)') : t('Kelish narxi (1 ta)')}<input type="number" name="price" min="0"></label>
       <button type="button" class="icon-btn danger" data-rm>${icon('x', 18)}</button></div>`;
   const form = openModal({
     title: `${icon('package-plus')} ${t('Mol keldi')}`, size: 'wide',
@@ -193,17 +197,18 @@ async function purchaseDialog(preset = null) {
       <label class="check" style="margin-top:8px"><input type="checkbox" name="freight_paid" checked> ${t("Yo'lkira hozir kassadan to'landi")}</label>
       <div class="sum-rows num" id="pin-sum" style="margin-top:12px"></div>`,
     actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: 'ok', icon: 'check', onClick: async (f) => {
-      const items = [...f.querySelectorAll('.pin-line')].map((l) => ({ dish_id: Number(l.querySelector('[name=dish]').value), qty: Number(l.querySelector('[name=qty]').value), price: Number(l.querySelector('[name=price]').value) }))
+      const items = [...f.querySelectorAll('.pin-line')].map((l) => ({ dish_id: Number(l.querySelector('[name=dish]').value), qty: Number(l.querySelector('[name=qty]').value), price: Number(l.querySelector('[name=price]').value),
+        ...(l.querySelector('[name=unit]') && l.querySelector('[name=unit]').value ? { unit: l.querySelector('[name=unit]').value } : {}) }))
         .filter((x) => x.qty > 0);
       if (!items.length) { toast(t('Mollarni kiriting'), 'warn'); return false; }
       if (items.some((x) => !(x.price >= 0) || f.querySelector('[name=price]').value === '')) { /* price 0 allowed only if typed */ }
       const r = await POST('/api/purchases', { supplier_id: f.supplier_id.value || null, items, freight: Number(f.freight.value) || 0,
         paid: f.paid.value === '' ? undefined : Number(f.paid.value), method: f.method.value, freight_paid: f.freight_paid.checked, due_date: f.due_date.value });
-      toast(t('Mol omborga qo\'shildi: {0} ta', r.items.reduce((s, i) => s + i.qty, 0)), 'ok', 6000);
+      toast(idish ? t('Mol omborga qo\'shildi') : t('Mol omborga qo\'shildi: {0} ta', r.items.reduce((s, i) => s + i.qty, 0)), 'ok', 6000);
       refreshView();
       // New goods usually need their labels right away.
       openModal({ title: `${icon('circle-check')} ${t('Mol omborga qo\'shildi')}`,
-        body: `<p style="margin-top:0">${r.items.map((i) => `${esc(i.label)} — <b>${i.qty} ${t('ta')}</b>`).join('<br>')}</p>`,
+        body: `<p style="margin-top:0">${r.items.map((i) => `${esc(i.label)} — <b>${idish ? esc(stockLabel(goods.find((x) => x.id === i.dish_id) || {}, i.qty)) : `${i.qty} ${t('ta')}`}</b>`).join('<br>')}</p>`,
         actions: [{ label: t('Yopish') }, { label: t('Yorliq chop etish'), cls: 'primary', icon: 'scan-barcode',
           onClick: () => { labelsDialog(r.items.map((i) => ({ id: i.dish_id, qty: i.qty }))); return false; } }] });
       return false;
@@ -211,8 +216,15 @@ async function purchaseDialog(preset = null) {
   });
   const fill = (l) => {
     const sel = l.querySelector('[name=dish]');
-    const set = () => { const d = goods.find((x) => x.id === Number(sel.value)); if (d && !l.querySelector('[name=price]').value) l.querySelector('[name=price]').value = d.cost || ''; };
-    sel.onchange = () => { l.querySelector('[name=price]').value = ''; set(); sum(); };
+    const us = l.querySelector('[name=unit]');
+    // The last cost, per the chosen unit (a box costs box_size pieces).
+    const set = () => {
+      const d = goods.find((x) => x.id === Number(sel.value));
+      const m = d && us && us.value ? Units.mult(d, us.value) || 1 : 1;
+      if (d && !l.querySelector('[name=price]').value && d.cost) l.querySelector('[name=price]').value = Math.round(d.cost * m);
+    };
+    sel.onchange = () => { if (us) { us.innerHTML = unitSel(goods.find((x) => x.id === Number(sel.value))); us.closest('label').hidden = !us.options.length; } l.querySelector('[name=price]').value = ''; set(); sum(); };
+    if (us) { us.closest('label').hidden = !us.options.length; us.onchange = () => { l.querySelector('[name=price]').value = ''; set(); sum(); }; }
     set();
     l.querySelector('[data-rm]').onclick = () => { if (form.querySelectorAll('.pin-line').length > 1) { l.remove(); sum(); } };
   };
@@ -475,7 +487,7 @@ async function printInvoice(orderId) {
 
 // ---------- Profit report ----------
 Views.profit = {
-  title: () => t('Foyda hisoboti'), icon: () => 'chart-column', roles: ['owner', 'admin', 'cashier'], module: 'reports', on: () => isShop() && !!(App.money || {}).reports,
+  title: () => (isIdish() ? t('Foyda') : t('Foyda hisoboti')), icon: () => 'chart-column', roles: ['owner', 'admin', 'cashier'], module: 'reports', on: () => isShop() && !!(App.money || {}).reports,
   refreshOn: ['finance'],
   async load() { const r = periodRange(); return GET(`/api/profit?from=${r.from}&to=${r.to}`); },
   render(d) {
@@ -488,13 +500,18 @@ Views.profit = {
       ...d.running.map((r) => [r.category, r.amount, '']),
     ];
     const maxRow = Math.max(1, ...rows.map((r) => r[1]));
-    const items = (list, f) => (list.length ? list.map((r) => `<div class="hbar"><span>${esc(r.name)}${r.variant ? ` <span class="small muted">${esc(r.variant)}</span>` : ''}</span><span class="track"><span class="fill" style="width:${(f(r) / Math.max(1, ...list.map(f))) * 100}%"></span></span><span class="num">${f === qtyF ? `${r.qty} ${t('ta')}` : money(f(r))}</span></div>`).join('')
+    const items = (list, f) => (list.length ? list.map((r) => `<div class="hbar"><span>${esc(r.name)}${r.variant ? ` <span class="small muted">${esc(r.variant)}</span>` : ''}</span><span class="track"><span class="fill" style="width:${(f(r) / Math.max(1, ...list.map(f))) * 100}%"></span></span><span class="num">${f === qtyF ? (r.qty_text ? esc(r.qty_text) : `${r.qty} ${t('ta')}`) : money(f(r))}</span></div>`).join('')
       : `<p class="muted">${t("Ma'lumot yo'q")}</p>`);
     const qtyF = (r) => r.qty;
     const profitF = (r) => r.profit;
     return `<div class="page-head"><a class="btn sm" href="#/money">${icon('arrow-left', 16)}</a><h1>${t('Foyda hisoboti')}</h1><span class="grow"></span>
         <button class="btn" id="pr-csv">${icon('file-spreadsheet', 18)} Excel</button></div>
       ${periodPicker()}
+      ${isIdish() ? `<div class="card"><div class="profit-eq"><div class="box"><small>${t('Sotildi')}</small><span class="num">${num(d.revenue)}</span></div>−
+        <div class="box"><small>${t('Mol tannarxi')}</small><span class="num">${num(Math.round(d.goods_cost))}</span></div>−
+        <div class="box"><small>${t('Xarajatlar')}</small><span class="num">${num(Math.round(d.running_total + d.damage + d.service_cost - d.other_income))}</span></div>=
+        <div class="box res ${d.net >= 0 ? '' : 'bad'}"><small>${t('Sof foyda')}</small><span class="num">${num(Math.round(d.net))}</span></div></div>
+        <p class="small muted" style="margin:10px 0 0">${t("Foyda — kassadagi pul emas: qarzga berilgan mol ham foydaga kiradi, qarz pastda alohida ko'rinadi.")}</p></div>` : ''}
       <div class="kpis two big-kpis">
         ${kpi(`${t('Savdo')} ${tip(t("Sotuvlardan tushgan jami summa (chegirma va qaytarilganlar ayrilgan). Qarzga sotilgani ham shu yerda."))}`, money(d.revenue), `${d.sales} ${t('ta sotuv')} · ${arrow(d.revenue, d.prev.revenue)}`, 'good', 'trending-up')}
         ${kpi(`${t('Sof foyda')} ${tip(t("Savdodan hamma narsa ayrilgandan keyin qolgan pul: mollar tannarxi, ustalar, brak, ijara, soliq, kommunal, ish haqi va boshqa xarajatlar."))}`, money(d.net), arrow(d.net, d.prev.net), d.net >= 0 ? 'good' : 'bad', 'coins')}
@@ -509,13 +526,13 @@ Views.profit = {
         <div class="card"><div class="card-head"><h2>${icon('trophy', 20)} ${t("Eng ko'p sotilgan")}</h2></div>${items(d.top_qty, qtyF)}</div>
         <div class="card"><div class="card-head"><h2>${icon('coins', 20)} ${t("Eng ko'p foyda keltirgan")} ${tip(t("Ko'p sotilgan har doim ko'p foyda bermaydi — bu ro'yxat (narx − tannarx) × soni bo'yicha."))}</h2></div>${items(d.top_profit, profitF)}</div>
         <div class="card"><div class="card-head"><h2>${icon('trending-down', 20)} ${t('Kam sotilgan')}</h2></div>
-          ${d.slow.length ? d.slow.map((r) => `<div class="low-line"><span class="grow">${esc(r.name)} <span class="small muted">${esc(r.variant)}</span></span><span class="small muted">${t('sotildi')}: <b>${r.qty}</b> · ${t('omborda')}: <b>${r.stock}</b></span></div>`).join('') : `<p class="muted">${t("Ma'lumot yo'q")}</p>`}</div>
+          ${d.slow.length ? d.slow.map((r) => `<div class="low-line"><span class="grow">${esc(r.name)} <span class="small muted">${esc(r.variant)}</span></span><span class="small muted">${t('sotildi')}: <b>${r.qty_text ? esc(r.qty_text) : r.qty}</b> · ${t('omborda')}: <b>${r.stock_text ? esc(r.stock_text) : r.stock}</b></span></div>`).join('') : `<p class="muted">${t("Ma'lumot yo'q")}</p>`}</div>
         <div class="card"><div class="card-head"><h2>${icon('snowflake', 20)} ${t("O'lik mollar")} ${tip(t("60 kundan beri na sotilgan, na kelgan mollar. Ulardagi pul \"qotib\" turibdi — chegirma bilan sotishni o'ylab ko'ring."))}</h2>
           ${d.dead_total ? `<span class="chip red">${money(d.dead_total)}</span>` : ''}</div>
-          ${d.dead.length ? d.dead.slice(0, 8).map((r) => `<div class="low-line"><span class="grow">${esc(r.name)} <span class="small muted">${esc(r.variant)}</span></span><span>${r.stock} ${t('ta')} · <b>${money(r.frozen)}</b></span></div>`).join('') : `<p class="muted">${icon('circle-check', 16)} ${t("Yo'q — hamma mol aylanib turibdi")}</p>`}</div>
+          ${d.dead.length ? d.dead.slice(0, 8).map((r) => `<div class="low-line"><span class="grow">${esc(r.name)} <span class="small muted">${esc(r.variant)}</span></span><span>${r.stock_text ? esc(r.stock_text) : `${r.stock} ${t('ta')}`} · <b>${money(r.frozen)}</b></span></div>`).join('') : `<p class="muted">${icon('circle-check', 16)} ${t("Yo'q — hamma mol aylanib turibdi")}</p>`}</div>
       </div>
       <div class="kpis">
-        ${kpi(`${t('Ombordagi mol')} ${tip(t("Hozir do'konda turgan hamma mol tannarx bo'yicha."))}`, money(d.stock_value), `${d.stock_units} ${t('ta')}`, '', 'warehouse')}
+        ${kpi(`${t('Ombordagi mol')} ${tip(t("Hozir do'konda turgan hamma mol tannarx bo'yicha."))}`, money(d.stock_value), isIdish() ? '' : `${d.stock_units} ${t('ta')}`, '', 'warehouse')}
         ${kpi(t('Bizga qarz'), money(d.debts.owed_to_us), `${d.debts.customers.length} ${t('ta mijoz')}`, d.debts.owed_to_us ? 'warn' : '', 'hand-coins')}
         ${kpi(t('Biz qarzmiz'), money(d.debts.we_owe), t('yetkazib beruvchi va ustalarga'), d.debts.we_owe ? 'bad' : '', 'notebook-pen')}
       </div>
@@ -580,7 +597,9 @@ Views.purchases = {
         title: `${icon('package-plus')} ${t('Mol keldi')} #${p.id}`, size: 'wide',
         body: `<p class="muted" style="margin-top:0">${fmtDateTime(p.created_at)} · ${esc(p.supplier_name || '—')} · ${esc(p.user_name || '')}${p.note ? ` · ${esc(p.note)}` : ''}</p>
           <div class="table-wrap"><table><tr><th>${t('Mol')}</th><th class="right">${t('Soni')}</th><th class="right">${t('Narx')}</th><th class="right">${t("Yo'lkira bilan")} ${tip(t("Har bir dona uchun haqiqiy tannarx: narx + yo'lkira ulushi."))}</th></tr>
-          ${p.items.map((i) => `<tr><td>${esc(i.label)}</td><td class="right">${i.qty}</td><td class="right num">${money(i.price)}</td><td class="right num"><b>${money(i.unit_cost)}</b></td></tr>`).join('')}</table></div>
+          ${p.items.map((i) => { const bu = Units.hasUnits(i) ? bigUnit(i) : 'piece'; const m = Units.mult(i, bu) || 1;
+            return `<tr><td>${esc(i.label)}</td><td class="right">${Units.hasUnits(i) ? esc(stockLabel(i, i.qty)) : i.qty}</td><td class="right num">${money(Math.round(i.price * m))}${m > 1 ? `<span class="small muted"> / ${esc(PACK_NAMES()[bu])}</span>` : ''}</td>
+              <td class="right num"><b>${money(Math.round(i.unit_cost * m))}</b></td></tr>`; }).join('')}</table></div>
           <div class="sum-rows num" style="margin-top:10px"><span>${t('Mollar')}</span><span class="right">${money(p.goods_total)}</span><span>${t("Yo'lkira")}</span><span class="right">${money(p.freight)}</span>
             <span>${t("To'langan")}</span><span class="right">${money(p.paid)}</span></div>`,
         actions: [{ label: t('Yopish') }],

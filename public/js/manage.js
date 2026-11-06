@@ -768,7 +768,7 @@ Views.customers = {
       <div class="card">${d.rows.length ? `<div class="table-wrap"><table>
         <tr><th>${t('Mijoz')}</th><th>${t('Telefon')}</th><th class="right">${t('Tashrif')}</th><th class="right">${t('Jami xarid')}</th>
           ${moduleOn('customers') ? `<th class="right">${t('Bonus')}</th>` : ''}${moduleOn('debts') ? `<th class="right">${t('Qarz')}</th>` : ''}<th>${t('Oxirgi tashrif')}</th></tr>
-        ${d.rows.map((c) => `<tr class="clickable" data-cust="${c.id}"><td><b>${esc(c.name)}</b>${c.note ? `<br><span class="small muted">${esc(c.note)}</span>` : ''}</td>
+        ${d.rows.map((c) => `<tr class="clickable" data-cust="${c.id}"><td><b>${esc(c.name)}</b>${isIdish() ? ` <span class="chip">${esc(TIER_NAMES()[c.price_tier] || TIER_NAMES().r)}</span>` : ''}${c.note ? `<br><span class="small muted">${esc(c.note)}</span>` : ''}</td>
           <td>${esc(c.phone || '—')}</td><td class="right">${c.visits}</td><td class="right num">${money(c.spent)}</td>
           ${moduleOn('customers') ? `<td class="right num">${c.bonus ? money(c.bonus) : '—'}</td>` : ''}
           ${moduleOn('debts') ? `<td class="right num">${c.debt ? `<b class="red">${money(c.debt)}</b>` : '—'}</td>` : ''}
@@ -789,7 +789,8 @@ function customerForm(c = {}) {
   openModal({
     title: `${icon('book-user')} ${c.id ? esc(c.name) : t('Yangi mijoz')}`,
     body: `<div class="form-grid"><label class="field">${t('Ism')}<input name="name" value="${esc(c.name || '')}" required></label>
-      <label class="field">${t('Telefon')}<input name="phone" type="tel" value="${esc(c.phone || '+998 ')}"></label></div>
+      <label class="field">${t('Telefon')}<input name="phone" type="tel" value="${esc(c.phone || '+998 ')}"></label>
+      ${isIdish() ? `<label class="field">${t('Qaysi narxda oladi')}<select name="price_tier">${Object.entries(TIER_NAMES()).map(([k, n]) => `<option value="${k}" ${(c.price_tier || 'r') === k ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>` : ''}</div>
       <label class="field" style="margin-top:12px">${t('Izoh')}<input name="note" value="${esc(c.note || '')}"></label>`,
     actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: 'primary', onClick: async (f) => {
       const x = formData(f);
@@ -1088,7 +1089,7 @@ Views.reservations = {
 
 // ---------- Menu (with "Tugadi" switches) ----------
 Views.menuadmin = {
-  title: () => W('Menyu'), icon: () => (isShop() ? 'package' : 'utensils'), roles: ['owner', 'admin'], refreshOn: ['menu'],
+  title: () => (isIdish() ? t('Ombor') : W('Menyu')), icon: () => (isIdish() ? 'warehouse' : isShop() ? 'package' : 'utensils'), roles: ['owner', 'admin'], refreshOn: ['menu'],
   async load() {
     const [menu, suppliers] = await Promise.all([GET('/api/menu'), isShop() ? GET('/api/suppliers').catch(() => []) : []]);
     return { ...menu, suppliers };
@@ -1098,20 +1099,23 @@ Views.menuadmin = {
     const q = (UI.menuSearch || '').toLowerCase();
     const list = dishes.filter((d) => !q || `${d.name} ${d.barcode} ${d.size} ${d.color} ${d.material || ''} ${d.side || ''}`.toLowerCase().includes(q));
     const groups = [...categories, { id: null, name: t("Bo'limsiz"), icon: '' }].map((c) => ({ c, ds: list.filter((d) => (d.category_id ?? null) === c.id) }));
-    const low = dishes.filter((d) => d.stock != null && (d.min_stock != null ? d.stock <= d.min_stock : d.stock <= (isDoors() ? 0 : 3)));
-    return `<div class="page-head"><h1>${W('Menyu')}</h1>
+    const low = dishes.filter((d) => d.stock != null && (d.min_stock != null ? d.stock <= d.min_stock : d.stock <= (isDoors() || isIdish() ? 0 : 3)));
+    const idish = isIdish();
+    return `<div class="page-head"><h1>${idish ? t('Ombor') : W('Menyu')}</h1>
       <input type="search" id="menu-search" placeholder="${esc(shop ? t('Shtrix-kod yoki nomi') : t('Qidirish'))}" value="${esc(UI.menuSearch || '')}" style="max-width:240px">
       ${shop ? `<button class="btn ok" id="mol-keldi">${icon('package-plus', 18)} ${t('Mol keldi')}</button><button class="btn" id="mol-import">${icon('file-spreadsheet', 18)} Excel</button><button class="btn" id="mol-labels">${icon('scan-barcode', 18)} ${t('Yorliq')}</button>` : ''}
       ${shop ? '' : `<button class="btn" id="mods-btn">${icon('list', 18)} ${t("Qo'shimcha tanlovlar")}</button>`}
       <button class="btn" id="add-cat">${icon('plus', 18)} ${t("Bo'lim")}</button><button class="btn primary" id="add-dish">${icon('plus', 18)} ${W('Taom')}</button></div>
-      ${shop && low.length ? `<div class="notice">${icon('triangle-alert', 18)} ${t('Kam qolgan: {0}', low.map((d) => `${esc(d.name)}${d.size ? ` ${esc(d.size)}` : ''} (${d.stock})`).join(', '))}</div>` : ''}
+      ${idish ? idishStockKpis(dishes) : ''}
+      ${shop && low.length ? `<div class="notice">${icon('triangle-alert', 18)} ${t('Kam qolgan: {0}', low.map((d) => `${esc(d.name)}${d.size ? ` ${esc(d.size)}` : ''} (${idish ? esc(stockLabel(d)) : d.stock})`).join(', '))}</div>` : ''}
       ${groups.filter((g) => (g.c.id && !q) || g.ds.length).map(({ c, ds }) => `<div class="card"><div class="card-head"><h2>${c.id ? `<i class="cat-dot" style="background:${catColor({ categories }, c.id)}"></i>` : ''}${esc(c.icon)} ${esc(c.name)}</h2>
         ${c.id ? `<button class="icon-btn" data-edit-cat="${c.id}">${icon('pencil', 18)}</button><button class="icon-btn danger" data-del-cat="${c.id}">${icon('trash-2', 18)}</button>` : ''}</div>
         ${ds.length ? `<div class="table-wrap"><table>
         ${ds.map((d) => `<tr><td style="width:44px;font-size:24px">${d.photo ? `<img class="dish-thumb" src="${dishPhoto(d.photo)}" alt="" loading="lazy">` : esc(d.icon)}</td><td><b>${esc(d.name)}</b>${variantOf(d) ? ` <span class="chip">${esc(variantOf(d))}</span>` : ''}<br>
-            <span class="small muted">${shop ? `${d.barcode ? `${icon('scan-barcode', 13)} ${esc(d.barcode)} · ` : ''}${icon('package', 13)} ${d.stock ?? '∞'} ${esc(d.unit)}`
+            <span class="small muted">${shop ? `${d.barcode ? `${icon('scan-barcode', 13)} ${esc(d.barcode)} · ` : ''}${icon('package', 13)} ${idish ? `<b class="${d.stock != null && d.stock <= 0 ? 'red' : d.min_stock != null && d.stock <= d.min_stock ? 'orange-text' : ''}">${esc(stockLabel(d))}</b>` : `${d.stock ?? '∞'} ${esc(d.unit)}`}`
               : d.needs_kitchen ? `${icon('chef-hat', 13)} ${d.prep_minutes} ${t('daq')}` : `${icon('check', 13)} ${t('Darhol')}`}</span></td>
-          <td class="right num"><b>${money(d.price)}</b>${shop && d.cost ? `<br><span class="small muted">${money(d.cost)}</span>` : ''}</td>
+          <td class="right num">${idish && Units.hasUnits(d) ? `<b>${money(Units.price(d, bigUnit(d), 'r'))}</b><span class="small muted"> / ${esc(PACK_NAMES()[bigUnit(d)])}</span>${d.cost ? `<br><span class="small muted">${money(Math.round(d.cost * Units.mult(d, bigUnit(d))))}</span>` : ''}`
+            : `<b>${money(d.price)}</b>${shop && d.cost ? `<br><span class="small muted">${money(d.cost)}</span>` : ''}`}</td>
           <td class="actions">${shop ? `<button class="btn sm" data-receive="${d.id}" title="${esc(t('Kirim qilish'))}">${icon('package-plus', 16)} ${t('Kirim')}</button><button class="btn sm" data-stock="${d.id}" title="${esc(t('Brak, sanash, tarix'))}">${icon('ellipsis-vertical', 16)}</button>` : ''}${!shop && moduleOn('inventory') && can('owner', 'admin') ? `<button class="btn sm" data-recipe="${d.id}" title="${esc(t('Tex-karta'))}">${icon('chef-hat', 16)} ${t('Tex-karta')}</button>` : ''}${d.available ? `<button class="btn sm" data-stop="${d.id}" title="${esc(t('Tugadi'))}">${icon('ban', 16)}</button>` : `<button class="btn sm danger" data-start="${d.id}">${icon('ban', 16)} ${t('Tugadi')}</button>`}
             <button class="icon-btn" data-edit="${d.id}">${icon('pencil', 18)}</button><button class="icon-btn danger" data-del="${d.id}">${icon('trash-2', 18)}</button></td></tr>`).join('')}
         </table></div>` : `<p class="muted">${W("Bu bo'limda taom yo'q")}</p>`}</div>`).join('')}`;
@@ -1121,7 +1125,8 @@ Views.menuadmin = {
     if (mb) mb.onclick = () => modifiersDialog(modifiers, categories, dishes);
     const ms = root.querySelector('#menu-search');
     ms.oninput = () => { UI.menuSearch = ms.value; renderView(currentData); };
-    root.querySelectorAll('[data-receive]').forEach((b) => b.onclick = () => (isDoors() ? purchaseDialog(Number(b.dataset.receive)) : receiveDialog(dishes.find((d) => d.id === Number(b.dataset.receive)))));
+    bindTips(root);
+    root.querySelectorAll('[data-receive]').forEach((b) => b.onclick = () => (isDoors() || isIdish() ? purchaseDialog(Number(b.dataset.receive)) : receiveDialog(dishes.find((d) => d.id === Number(b.dataset.receive)))));
     root.querySelectorAll('[data-stock]').forEach((b) => b.onclick = () => stockMenu(dishes.find((d) => d.id === Number(b.dataset.stock))));
     const mk = root.querySelector('#mol-keldi'); if (mk) mk.onclick = () => purchaseDialog();
     const mi = root.querySelector('#mol-import'); if (mi) mi.onclick = () => importDialog();
@@ -1146,7 +1151,7 @@ Views.menuadmin = {
       } }],
     });
     const shop = isShop();
-    const editDish = (d = {}) => openModal({
+    const editDish = (d = {}) => (isIdish() ? idishDishForm(d, categories, suppliers) : openModal({
       title: `${icon(shop ? 'package' : 'utensils')} ${d.id ? esc(d.name) : W('Yangi taom')}`, size: 'wide',
       body: `<div class="form-grid">
         <label class="field">${t('Nomi')}<input name="name" value="${esc(d.name || '')}" required></label>
@@ -1210,7 +1215,7 @@ Views.menuadmin = {
         if (d.id) await PUT(`/api/dishes/${d.id}`, x); else await POST('/api/dishes', x);
         toast(t('Saqlandi'), 'ok'); refreshView();
       } }],
-    });
+    }));
     root.querySelector('#add-cat').onclick = () => editCat();
     root.querySelector('#add-dish').onclick = () => editDish();
     root.querySelectorAll('[data-edit-cat]').forEach((b) => b.onclick = () => editCat(categories.find((c) => c.id === Number(b.dataset.editCat))));
@@ -1618,6 +1623,9 @@ Views.settings = {
         <label class="field" id="sv-pct">${t('Foiz, %')}<input type="number" name="service_pct" min="0" max="50" step="0.5" value="${s.service_pct}"></label>
         <label class="field" id="sv-guest">${t('Bir kishi uchun')} (${esc(s.currency)})<input type="number" name="service_per_guest" min="0" step="500" value="${s.service_per_guest}"></label></div>
       <p class="small muted" style="margin-top:8px">${t("Xizmat haqi faqat shu yerda o'zgaradi. Olib ketishda xizmat haqi olinmaydi.")}</p>
+      ${isIdish() ? `<h3 style="margin:18px 0 10px">${icon('package', 18)} ${t('Katta optom')}</h3>
+      <div class="form-grid"><label class="field">${t('Bir xil moldan necha karobka olinsa katta optom narxi qo\'yiladi')}<input type="number" name="big_box_from" min="0" value="${s.big_box_from ?? 10}"></label></div>
+      <p class="small muted" style="margin-top:8px">${t("0 — faqat \"Katta optom\" mijozlarga. Mijozning narxi Mijozlar bo'limida belgilanadi.")}</p>` : ''}
       ${isShop() ? '' : `<h3 style="margin:18px 0 10px">${icon('truck', 18)} ${t('Dostavka')}</h3>
       <div class="form-grid"><label class="field">${t('Yetkazib berish haqi')} (${esc(s.currency)})<input type="number" name="delivery_fee" min="0" step="1000" value="${s.delivery_fee || 0}"></label></div>
       <p class="small muted" style="margin-top:8px">${t("Har bir dostavka chekiga avtomatik qo'shiladi. 0 — qo'shilmaydi.")}</p>`}

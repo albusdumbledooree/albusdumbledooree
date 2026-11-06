@@ -3,13 +3,27 @@
  * Counter sales ("Sotuv") for shops and fast food: pick goods (or scan a barcode), take the money, print.
  * Fast food dishes still go to the kitchen; the customer gets a number on the receipt.
  */
-const PosCart = { lines: [], label: '' };
+const PosCart = { lines: [], label: '', tier: 'r', customer: null };
 
-function posTotal() { return PosCart.lines.reduce((s, c) => s + c.price * c.qty, 0); }
+// A tableware line's price follows its unit, the price tier and the quantity (big wholesale from N boxes).
+function lineTier(c) { return Units.tierFor(PosCart.tier, c.unit, c.qty, App.settings.big_box_from || 0); }
+function linePrice(c) { return c.unit && c.d ? Units.price(c.d, c.unit, lineTier(c)) : c.price; }
+function posTotal() { return PosCart.lines.reduce((s, c) => s + linePrice(c) * c.qty, 0); }
+// What the cart earns: price minus the goods' cost (shown to the boss only).
+function posProfit() { return PosCart.lines.reduce((s, c) => s + (linePrice(c) - (c.d ? (c.d.cost || 0) * (Units.mult(c.d, c.unit || 'piece') || 1) : 0)) * c.qty, 0); }
+function piecesInCart(id) { return PosCart.lines.filter((c) => c.dish_id === id).reduce((a, c) => a + c.qty * (c.unit && c.d ? Units.mult(c.d, c.unit) : 1), 0); }
 
 // m: the dish's chosen modifiers ({ ids, text, price }); the same choice adds to the same line.
-function posAdd(x, qty = 1, m = null) {
+function posAdd(x, qty = 1, m = null, unit = null) {
   if (!x.available) return toast(t('"{0}" tugagan', x.name), 'warn');
+  if (unit) {
+    const um = Units.mult(x, unit);
+    if (x.stock != null && piecesInCart(x.id) + qty * um > x.stock) return toast(t('"{0}" dan faqat {1} qoldi', x.name, stockLabel(x)), 'warn');
+    const ln = PosCart.lines.find((c) => c.dish_id === x.id && c.unit === unit);
+    if (ln) ln.qty += qty;
+    else PosCart.lines.push({ dish_id: x.id, name: x.name, unit, d: x, qty, variant: PACK_NAMES()[unit] });
+    return;
+  }
   const key = m ? m.ids.join(',') : '';
   const line = PosCart.lines.find((c) => c.dish_id === x.id && (c.mods || []).join(',') === key);
   const same = PosCart.lines.filter((c) => c.dish_id === x.id).reduce((a, c) => a + c.qty, 0);
@@ -19,6 +33,10 @@ function posAdd(x, qty = 1, m = null) {
 }
 
 function productSub(x) {
+  if (isIdish() && Units.hasUnits(x)) {
+    const lowI = x.stock != null && (x.stock <= 0 || (x.min_stock != null && x.stock <= x.min_stock));
+    return x.stock != null ? `<span class="${lowI ? 'low' : ''}">${icon('package', 12)} ${esc(stockLabel(x))}</span>` : '';
+  }
   const low = x.stock != null && (x.min_stock != null ? x.stock <= x.min_stock : x.stock <= 3);
   const variant = variantOf(x);
   return `${variant ? `<b>${esc(variant)}</b> ` : ''}${x.stock != null ? `<span class="${low ? 'low' : ''}">${icon('package', 12)} ${x.stock}</span>`
@@ -45,19 +63,42 @@ Views.pos = {
       return vals.length > 1 ? `<div class="chips"><span class="small muted">${label}:</span>${vals.map((v) => `<button class="chip-btn ${f[key] === v ? 'on' : ''}" data-f="${key}" data-v="${esc(v)}">${esc(v)}</button>`).join('')}</div>` : '';
     };
     const filters = isDoors() ? `<div class="pos-filters">${chips('size', t("O'lcham"))}${chips('material', t('Turi'))}${chips('color', t('Rang'))}</div>` : '';
+    // Lines keep the product as it was when added: take the fresh one (price, stock) after the menu reloads.
+    for (const c of PosCart.lines) if (c.unit) c.d = menu.dishes.find((x) => x.id === c.dish_id) || c.d;
     const count = PosCart.lines.reduce((s, c) => s + c.qty, 0);
+    const idish = isIdish();
+    const boss = can('owner', 'admin');
+    const custOk = idish && can('owner', 'admin', 'cashier') && canCustomers();
+    const pc = PosCart.customer;
+    // Tableware: the price tier and the customer (their tier, their debt, their last purchase).
+    const idishHead = idish ? `<div class="pos-tiers">
+        ${custOk ? `<div class="pos-cust">${pc ? `${icon('book-user', 16)} <span class="pc-name"><b>${esc(pc.name)}</b>${pc.debt ? `<span class="small red">${t('qarz')} ${num(pc.debt)}</span>` : ''}</span><button class="btn sm" id="pos-repeat" title="${esc(t('Oxirgi xaridini savatga solish'))}">${icon('history', 15)} ${t('Oxirgi xarid')}</button>
+            <button class="icon-btn ghost" id="pos-cust-x" title="${esc(t('Olib tashlash'))}">${icon('x', 16)}</button>`
+          : `<button class="btn sm block" id="pos-cust">${icon('book-user', 16)} ${t('Mijozni tanlash')}</button>`}</div>` : ''}
+        <div class="seg tier-seg">${Object.entries(TIER_NAMES()).map(([k, n]) => `<button class="${PosCart.tier === k ? 'active' : ''}" data-tier="${k}">${esc(n)}</button>`).join('')}</div></div>` : '';
+    const idLine = (c, i) => {
+      const units = Units.unitsOf(c.d);
+      const p = linePrice(c);
+      return `<div class="line pending idl">
+        <span class="q">${c.qty}</span><span class="n">${esc(c.name)} <span class="small muted">${esc(PACK_NAMES()[c.unit])} × ${num(p)}${lineTier(c) !== PosCart.tier ? ` · ${esc(TIER_NAMES()[lineTier(c)])}` : ''}</span></span><span class="p">${money(p * c.qty)}</span>
+        <span class="sub">${units.length > 1 ? `<span class="useg">${units.map((u) => `<button class="${u === c.unit ? 'on' : ''}" data-unit="${i}:${u}">${esc(PACK_NAMES()[u])}</button>`).join('')}</span>` : ''}
+          <span class="grow"></span>
+          <span class="stepper"><button data-dec="${i}" title="${esc(t('Kamaytirish (0 — olib tashlash)'))}">${icon('minus', 16)}</button><input class="qty-in" type="number" min="0" inputmode="numeric" data-qty="${i}" value="${c.qty}"><button data-inc="${i}">${icon('plus', 16)}</button></span></span></div>`;
+    };
     return `<div class="order">
       <aside class="checkpane ${UI.drawer ? 'open' : ''}" id="checkpane">
         <div class="cp-head"><span class="avatar" style="background:var(--brand)">${icon('shopping-cart', 18)}</span>
           <div class="grow"><b>${t('Yangi sotuv')}</b><input id="pos-label" placeholder="${esc(t('Mijoz ismi (ixtiyoriy)'))}" value="${esc(PosCart.label)}" style="min-height:36px;margin-top:4px;padding:6px 10px"></div>
           <button class="icon-btn ghost" id="cp-close" style="display:none">${icon('x')}</button></div>
-        <div class="cp-body">${PosCart.lines.length ? PosCart.lines.map((c, i) => `<div class="line pending">
+        ${idishHead}
+        <div class="cp-body">${PosCart.lines.length ? PosCart.lines.map((c, i) => (c.unit ? idLine(c, i) : `<div class="line pending">
             <span class="q">${c.qty}×</span><span class="n">${esc(c.name)}${c.variant ? ` <span class="small muted">${esc(c.variant)}</span>` : ''}</span><span class="p">${money(c.price * c.qty)}</span>
             <span class="sub"><span class="grow"></span><button class="icon-btn ghost danger" data-del="${i}">${icon('trash-2', 18)}</button>
-              <span class="stepper"><button data-dec="${i}">${icon('minus', 16)}</button><span>${c.qty}</span><button data-inc="${i}">${icon('plus', 16)}</button></span></span></div>`).join('')
+              <span class="stepper"><button data-dec="${i}">${icon('minus', 16)}</button><span>${c.qty}</span><button data-inc="${i}">${icon('plus', 16)}</button></span></span></div>`)).join('')
           : emptyState(isShop() ? 'scan-barcode' : 'utensils', isShop() ? t('Mahsulotni tanlang yoki shtrix-kodni skanerlang') : W('Menyudan taom tanlang'))}</div>
         <div class="cp-foot">
           <div class="sum-rows num"><span class="total">${t('Jami')}</span><span class="total right">${money(posTotal())}</span></div>
+          ${idish && boss && PosCart.lines.length ? `<div class="pos-profit"><span>${t('Shu savdodan foyda')}</span><b class="num">${posProfit() >= 0 ? '+' : ''}${money(Math.round(posProfit()))}</b></div>` : ''}
           <div class="order-actions">
             <button class="btn" id="pos-clear" ${PosCart.lines.length ? '' : 'disabled'}>${icon('x', 18)} ${t('Tozalash')}</button>
             <button class="btn ok lg" id="pos-pay" ${PosCart.lines.length ? '' : 'disabled'} style="grid-column:span 2">${icon('wallet', 20)} ${t("To'lov")}</button></div>
@@ -72,7 +113,8 @@ Views.pos = {
             ${isDoors() ? '' : quickMoneyHtml()}
             ${showShift ? `<button class="btn ${shift ? '' : 'primary'}" id="shift">${icon(shift ? 'lock' : 'circle-plus', 16)} ${shift ? t('Smenani yopish') : t('Smenani ochish')}</button>` : ''}</div>
           ${filters}
-          <div class="dishes">${list.map((x) => dishTile(menu, x, { qty: (PosCart.lines.find((c) => c.dish_id === x.id) || {}).qty, sub: productSub(x) })).join('') || emptyState('search', W('Taom topilmadi'))}</div>
+          <div class="dishes">${list.map((x) => dishTile(menu, x, { qty: (PosCart.lines.find((c) => c.dish_id === x.id) || {}).qty, sub: productSub(x),
+            ...(idish && Units.hasUnits(x) ? { price: `${num(Units.price(x, bigUnit(x), PosCart.tier))}<small>/${esc(PACK_NAMES()[bigUnit(x)])}</small>` } : {}) })).join('') || emptyState('search', W('Taom topilmadi'))}</div>
         </div>
       </section>
       <button class="fab-check" id="fab">${icon('shopping-cart', 22)}<span class="grow">${t('Savat')}${count ? ` · ${count}` : ''}</span><b>${money(posTotal())}</b></button>
@@ -98,8 +140,9 @@ Views.pos = {
       const q = v.toLowerCase();
       const found = exact || (() => { const l = menu.dishes.filter((x) => `${x.name} ${x.barcode}`.toLowerCase().includes(q)); return l.length === 1 ? l[0] : null; })();
       if (!found) { toast(t('Topilmadi: {0}', v), 'warn'); scan.select(); return; }
-      posAdd(found);
       UI.search = '';
+      if (isIdish() && Units.hasUnits(found)) { pickUnit(found, PosCart.tier).then((u) => { if (u) posAdd(found, 1, null, u); rerender(); }); return; }
+      posAdd(found);
       rerender();
     };
     if (window.matchMedia('(max-width: 1000px)').matches) root.querySelector('#cp-close').style.display = '';
@@ -126,6 +169,7 @@ Views.pos = {
     root.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => { const f = UI.posFilter; f[b.dataset.f] = f[b.dataset.f] === b.dataset.v ? '' : b.dataset.v; rerender(); });
     root.querySelectorAll('[data-dish]').forEach((b) => b.onclick = async () => {
       const x = menu.dishes.find((y) => y.id === Number(b.dataset.dish));
+      if (isIdish() && Units.hasUnits(x)) { const u = await pickUnit(x, PosCart.tier); if (u) { posAdd(x, 1, null, u); rerender(); } return; }
       if (!(x.mods || []).length) { posAdd(x); rerender(); return; }
       const m = await pickMods(menu, x);
       if (m) { posAdd(x, 1, m); rerender(); }
@@ -134,6 +178,7 @@ Views.pos = {
     // "+" on a line adds one more of that very line (with its own choices).
     root.querySelectorAll('[data-inc]').forEach((b) => b.onclick = () => {
       const c = PosCart.lines[b.dataset.inc];
+      if (c.unit) { posAdd(dish(c), 1, null, c.unit); rerender(); return; }
       const m = c.mods ? { ids: c.mods, text: (c.variant || '').replace(/^\+ /, ''), price: c.price } : null;
       posAdd(dish(c), 1, m); rerender();
     });
@@ -145,7 +190,60 @@ Views.pos = {
     });
     root.querySelectorAll('[data-del]').forEach((b) => b.onclick = () => { PosCart.lines.splice(b.dataset.del, 1); rerender(); });
     root.querySelector('#pos-label').onchange = (e) => { PosCart.label = e.target.value; };
-    root.querySelector('#pos-clear').onclick = () => { PosCart.lines = []; PosCart.label = ''; rerender(); };
+    root.querySelector('#pos-clear').onclick = () => { PosCart.lines = []; PosCart.label = ''; PosCart.customer = null; PosCart.tier = 'r'; rerender(); };
+    // Tableware: a typed quantity, another unit for a line, the price tier, the customer and their last purchase.
+    root.querySelectorAll('[data-qty]').forEach((inp) => {
+      inp.onclick = (e) => { e.stopPropagation(); inp.select(); };
+      inp.onchange = () => {
+        const c = PosCart.lines[inp.dataset.qty];
+        const n = Math.max(0, Math.floor(Number(inp.value) || 0));
+        if (!n) { PosCart.lines.splice(inp.dataset.qty, 1); rerender(); return; }
+        const um = Units.mult(c.d, c.unit);
+        const fresh = dish(c);
+        if (fresh.stock != null && piecesInCart(c.dish_id) - c.qty * um + n * um > fresh.stock) toast(t('"{0}" dan faqat {1} qoldi', c.name, stockLabel(fresh)), 'warn');
+        else c.qty = n;
+        rerender();
+      };
+    });
+    root.querySelectorAll('[data-unit]').forEach((b) => b.onclick = () => {
+      const [i, u] = b.dataset.unit.split(':');
+      const c = PosCart.lines[i];
+      const fresh = dish(c);
+      if (fresh.stock != null && piecesInCart(c.dish_id) - c.qty * Units.mult(c.d, c.unit) + c.qty * Units.mult(c.d, u) > fresh.stock) {
+        toast(t('"{0}" dan faqat {1} qoldi', c.name, stockLabel(fresh)), 'warn'); return;
+      }
+      const same = PosCart.lines.find((x, j) => j !== Number(i) && x.dish_id === c.dish_id && x.unit === u);
+      if (same) { same.qty += c.qty; PosCart.lines.splice(i, 1); } else { c.unit = u; c.variant = PACK_NAMES()[u]; }
+      rerender();
+    });
+    root.querySelectorAll('[data-tier]').forEach((b) => b.onclick = () => { PosCart.tier = b.dataset.tier; rerender(); });
+    const pcb = root.querySelector('#pos-cust');
+    if (pcb) pcb.onclick = async () => {
+      const c = await pickCustomer();
+      if (!c) return;
+      PosCart.customer = c; PosCart.tier = c.price_tier || 'r';
+      if (!PosCart.label) PosCart.label = c.name;
+      rerender();
+    };
+    const pcx = root.querySelector('#pos-cust-x');
+    if (pcx) pcx.onclick = () => { if (PosCart.label === PosCart.customer.name) PosCart.label = ''; PosCart.customer = null; PosCart.tier = 'r'; rerender(); };
+    const rep = root.querySelector('#pos-repeat');
+    if (rep) rep.onclick = async () => {
+      let r;
+      try { r = await GET(`/api/customers/${PosCart.customer.id}/last-sale`); } catch (e) { return toastError(e); }
+      if (!r.items.length) { toast(t("Bu mijozning oldingi xaridi yo'q"), 'warn'); return; }
+      let missed = 0;
+      for (const it of r.items) {
+        const x = menu.dishes.find((y) => y.id === it.dish_id);
+        const before = PosCart.lines.length + piecesInCart(it.dish_id);
+        if (x && it.unit !== 'piece' && Units.mult(x, it.unit)) posAdd(x, it.qty, null, it.unit);
+        else if (x && Units.hasUnits(x)) posAdd(x, it.qty, null, 'piece');
+        else if (x) posAdd(x, it.qty);
+        if (!x || PosCart.lines.length + piecesInCart(it.dish_id) === before) missed++;
+      }
+      toast(missed ? t("Oxirgi xarid savatga solindi ({0} ta mol yetmadi)", missed) : t('Oxirgi xarid savatga solindi ({0})', fmtDate(r.order.closed_at)), missed ? 'warn' : 'ok');
+      rerender();
+    };
     root.querySelector('#pos-pay').onclick = () => posPayment();
     const sh = root.querySelector('#shift');
     if (sh) sh.onclick = () => (d.shift ? closeShiftDialog(d.shift) : openShiftDialog());
@@ -161,7 +259,7 @@ async function posPayment() {
   const form = openModal({
     title: `${icon('wallet')} ${t("To'lov")}`, size: 'wide',
     body: `<div class="pay">
-        <div class="receipt">${PosCart.lines.map((c) => `<div class="line"><span class="q">${c.qty}×</span><span class="n">${esc(c.name)}${c.variant ? ` <span class="small muted">${esc(c.variant)}</span>` : ''}</span><span class="p">${money(c.price * c.qty)}</span></div>`).join('')}</div>
+        <div class="receipt">${PosCart.lines.map((c) => `<div class="line"><span class="q">${c.qty}×</span><span class="n">${esc(c.name)}${c.variant ? ` <span class="small muted">${esc(c.variant)}</span>` : ''}</span><span class="p">${money(linePrice(c) * c.qty)}</span></div>`).join('')}</div>
         <div class="stack">
           ${isDoors() ? `<div class="seg pay-mode"><button type="button" class="active" data-pmode="full">${icon('circle-check', 16)} ${t("To'liq to'lov")}</button>
             <button type="button" data-pmode="adv">${icon('hand-coins', 16)} ${t("Avans (bosh to'lov)")}</button></div>
@@ -190,7 +288,8 @@ async function posPayment() {
       const services = getServices();
       if (services.some((s) => !s.date)) { toast(t('Xizmat sanasini tanlang'), 'warn'); return false; }
       const r = await POST('/api/sales', {
-        items: PosCart.lines.map(({ dish_id, qty, mods }) => ({ dish_id, qty, ...(mods ? { mods } : {}) })), label: PosCart.label,
+        items: PosCart.lines.map(({ dish_id, qty, mods, unit }) => ({ dish_id, qty, ...(mods ? { mods } : {}), ...(unit ? { unit } : {}) })), label: PosCart.label,
+        ...(isIdish() ? { tier: PosCart.tier } : {}),
         services, phone: (adv ? x.adv_phone : x.svc_phone) || '', debt_due: x.debt_due || '',
         ...(adv ? { advance: true, customer_name: x.adv_name.trim(), discount: Number(x.discount) || 0,
           paid_cash: Number(x.paid_cash) || 0, paid_card: Number(x.paid_card) || 0, paid_transfer: Number(x.paid_transfer) || 0 } : staffPay.on ? { staff_id: Number(x.staff_id) } : {
@@ -198,7 +297,7 @@ async function posPayment() {
           ...(cust.customer ? { customer_id: cust.customer.id, bonus: sums().bonus, paid_debt: sums().debt } : {}) }),
       });
       if ('print' in x) store('cp_pos_print', !!x.print);
-      PosCart.lines = []; PosCart.label = ''; UI.drawer = false;
+      PosCart.lines = []; PosCart.label = ''; PosCart.customer = null; PosCart.tier = 'r'; UI.drawer = false;
       LocalBackup.save(r);
       if (x.print) printReceipt(r);
       refreshView();
@@ -269,7 +368,7 @@ async function posPayment() {
     } else form.querySelector('[data-m="cash"]').click();
   });
   const staffPay = bindStaffPay(form, calc);
-  const cust = bindCustomerPay(form, calc);
+  const cust = bindCustomerPay(form, calc, PosCart.customer);
   getServices = bindSaleServices(form, () => { calc(); const b = form.querySelector('.method.active'); if (b) b.click(); });
   form.querySelectorAll('[data-m]').forEach((b) => b.onclick = () => {
     staffPay.on = false;

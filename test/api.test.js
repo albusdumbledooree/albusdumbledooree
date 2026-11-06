@@ -2817,3 +2817,75 @@ test('a delivery bill shows the customer, phone, address and the courier (pictur
   const short = bill({ order: { ...order, phone: '', address: '' }, shop: { name: 'X' } }).toString('latin1');
   assert.ok(!short.includes('Tel:') && !short.includes('Manzil:'));
 });
+
+test('disposable tableware: piece / pack / box, three prices, customer tier, stock in pieces, goods in by the box, repeat', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  const c = await call('POST', '/api/platform/tenants', admin, { name: 'Idish savdo', code: 'idish', owner_name: 'Olim', owner_username: 'olim', owner_password: 'olim12345', plan: 'pro', business_type: 'idish', sample: true });
+  assert.equal(c.status, 200, JSON.stringify(c.data));
+  const boss = await login('olim', 'olim12345', 'idish');
+  const me = (await call('GET', '/api/me', boss)).data;
+  assert.equal(me.business_type, 'idish');
+  assert.equal(me.settings.big_box_from, 10);
+  let menu = (await call('GET', '/api/menu', boss)).data;
+  const cup = menu.dishes.find((d) => d.name === 'Stakan 250 ml');
+  assert.equal(cup.pack_size, 50);
+  assert.equal(cup.box_size, 1000);
+  assert.equal(cup.stock, 42350);
+
+  // A wholesale customer: their price comes by itself.
+  const cafe = (await call('POST', '/api/customers', boss, { name: 'Rayhon kafe', phone: '+998901110022', price_tier: 'o' })).data;
+  assert.equal(cafe.price_tier, 'o');
+  const sale = await call('POST', '/api/sales', boss, { customer_id: cafe.id, paid_cash: 1138200,
+    items: [{ dish_id: cup.id, qty: 5, unit: 'box' }, { dish_id: cup.id, qty: 3, unit: 'pack' }, { dish_id: cup.id, qty: 10 }] });
+  assert.equal(sale.status, 200, JSON.stringify(sale.data));
+  // Box 220 000 (written), pack 12 000 (written), piece: the box price shared out = 220.
+  assert.equal(sale.data.total, 5 * 220000 + 3 * 12000 + 10 * 220);
+  assert.equal(sale.data.profit, sale.data.total - (5 * 190000 + 3 * 9500 + 10 * 190));
+  const boxLine = sale.data.items.find((i) => i.unit === 'box');
+  assert.equal(boxLine.name, 'Stakan 250 ml (karobka)');
+  assert.equal(boxLine.unit_mult, 1000);
+  menu = (await call('GET', '/api/menu', boss)).data;
+  assert.equal(menu.dishes.find((d) => d.id === cup.id).stock, 42350 - 5000 - 150 - 10);
+
+  // Big wholesale from 10 boxes in one line, even at the retail tier.
+  const big = await call('POST', '/api/sales', boss, { tier: 'r', paid_cash: 12 * 210000, items: [{ dish_id: cup.id, qty: 12, unit: 'box' }] });
+  assert.equal(big.status, 200, JSON.stringify(big.data));
+  assert.equal(big.data.total, 12 * 210000);
+  // Not enough on the shelf: the answer says how much is left in boxes.
+  const tooMany = await call('POST', '/api/sales', boss, { paid_cash: 1, items: [{ dish_id: cup.id, qty: 100, unit: 'box' }] });
+  assert.equal(tooMany.status, 409);
+  assert.match(tooMany.data.error, /25 karobka \+ 3 pachka \+ 40 dona/);
+
+  // Two boxes come back: 2000 pieces return to the shelf.
+  const back = await call('POST', `/api/orders/${sale.data.id}/refund`, boss, { items: [{ item_id: boxLine.id, qty: 2 }], reason: 'Ortiqcha', method: 'cash' });
+  assert.equal(back.status, 200, JSON.stringify(back.data));
+  menu = (await call('GET', '/api/menu', boss)).data;
+  assert.equal(menu.dishes.find((d) => d.id === cup.id).stock, 25190 + 2000);
+
+  // "Takrorlash": the customer's last purchase, without what came back.
+  const last = (await call('GET', `/api/customers/${cafe.id}/last-sale`, boss)).data;
+  assert.deepEqual(last.items.map((i) => [i.unit, i.qty]).sort(), [['box', 3], ['pack', 3], ['piece', 10]]);
+
+  // Goods come by the box: the stock grows in pieces; the cost per piece takes the freight.
+  const p = await call('POST', '/api/purchases', boss, { freight: 100000, items: [{ dish_id: cup.id, qty: 20, unit: 'box', price: 200000 }] });
+  assert.equal(p.status, 200, JSON.stringify(p.data));
+  assert.equal(p.data.goods_total, 4000000);
+  assert.equal(p.data.items[0].qty, 20000);
+  assert.equal(p.data.items[0].unit_cost, 205);
+  menu = (await call('GET', '/api/menu', boss)).data;
+  const after = menu.dishes.find((d) => d.id === cup.id);
+  assert.equal(after.stock, 27190 + 20000);
+  assert.equal(after.cost, Math.round(((27190 * 190 + 20000 * 205) / 47190) * 100) / 100);
+
+  // The card: a box must hold more than a pack; the prices are saved per unit and tier.
+  assert.equal((await call('PUT', `/api/dishes/${cup.id}`, boss, { pack_size: 50, box_size: 40 })).status, 400);
+  const saved = await call('PUT', `/api/dishes/${cup.id}`, boss, { tiers: { box: { r: 250000, o: 230000, b: '' }, pack: { r: 14000 } } });
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  assert.deepEqual(JSON.parse(saved.data.tiers), { box: { r: 250000, o: 230000 }, pack: { r: 14000 } });
+
+  // The profit report counts in boxes too.
+  const from = new Date(); from.setHours(0, 0, 0, 0);
+  const pr = (await call('GET', `/api/profit?from=${from.getTime()}&to=${from.getTime() + 864e5}`, boss)).data;
+  const top = pr.top_qty.find((r) => r.id === cup.id);
+  assert.equal(top.qty_text, '17 karobka + 3 pachka + 10 dona');
+});

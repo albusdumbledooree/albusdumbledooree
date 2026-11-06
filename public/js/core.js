@@ -68,9 +68,11 @@ function subscriptionNotice(until) {
 }
 
 // ---------- Business type ----------
-const BIZ_TYPES = () => ({ choyxona: t('Choyxona'), restoran: t('Restoran / kafe'), fastfood: t('Fast food'), market: t("Do'kon (oziq-ovqat)"), clothing: t('Kiyim-kechak'), doors: t("Eshik do'koni") });
-const BIZ_ICONS = { choyxona: 'house', restoran: 'utensils', fastfood: 'sandwich', market: 'shopping-cart', clothing: 'shirt', doors: 'door-open' };
-function isShop() { return App.biz === 'market' || App.biz === 'clothing' || App.biz === 'doors'; }
+const BIZ_TYPES = () => ({ choyxona: t('Choyxona'), restoran: t('Restoran / kafe'), fastfood: t('Fast food'), market: t("Do'kon (oziq-ovqat)"), clothing: t('Kiyim-kechak'), doors: t("Eshik do'koni"), idish: t('Bir martalik idishlar') });
+const BIZ_ICONS = { choyxona: 'house', restoran: 'utensils', fastfood: 'sandwich', market: 'shopping-cart', clothing: 'shirt', doors: 'door-open', idish: 'package' };
+function isShop() { return App.biz === 'market' || App.biz === 'clothing' || App.biz === 'doors' || App.biz === 'idish'; }
+// Disposable tableware: goods sold by the piece, pack or box at three prices (public/js/units.js, idish.js).
+function isIdish() { return App.biz === 'idish'; }
 // A door shop: goods with size, colour, material and side; installation and delivery on a sale.
 function isDoors() { return App.biz === 'doors'; }
 // The camera can be used as a scanner (a secure page in a modern browser).
@@ -178,7 +180,7 @@ function dishTile(menu, x, opts = {}) {
   return `<button class="dish ${x.available ? '' : 'out'}" style="--cc:${esc(cc)};--cc-bg:${rgba(cc, 0.12)};--cc-line:${rgba(cc, 0.35)}" data-dish="${x.id}" ${x.available ? '' : 'disabled'}>
     ${opts.qty ? `<span class="qty">${opts.qty}</span>` : ''}<span class="nm">${esc(x.name)}</span>
     ${opts.sub ? `<span class="sub">${opts.sub}</span>` : ''}
-    <span class="pr" data-out="${esc(t('TUGADI'))}">${num(x.price)}</span></button>`;
+    <span class="pr" data-out="${esc(t('TUGADI'))}">${opts.price || num(x.price)}</span></button>`;
 }
 function catSide(menu) {
   const cats = menu.categories.filter((c) => menu.dishes.some((x) => x.category_id === c.id));
@@ -444,7 +446,7 @@ function customerPayHtml() {
       <div class="cust-results" hidden></div></div>
     <div class="cust-chosen" hidden></div></div>`;
 }
-function bindCustomerPay(form, onChange) {
+function bindCustomerPay(form, onChange, initial = null) {
   const state = { customer: null, bonus: 0, debt: false };
   const box = form.querySelector('.cust-pay');
   if (!box) return state;
@@ -490,6 +492,9 @@ function bindCustomerPay(form, onChange) {
   };
   input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 250); });
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timer); search(); } });
+  // A customer already chosen on the sale screen (a tableware shop).
+  // (no onChange here: the dialog that asked is still being set up and computes its sums right after)
+  if (initial) { state.customer = initial; draw(); }
   return state;
 }
 

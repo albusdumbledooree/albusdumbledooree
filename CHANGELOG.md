@@ -2,6 +2,18 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.34.0 — Yangi biznes turi: Bir martalik idishlar
+
+- Platformada yangi tur: **Bir martalik idishlar** (stakan, konteyner, tarelka, qoshiq-vilka, paket). Namuna mollar bilan ochiladi.
+- Bitta mol uch xil sotiladi: **dona, pachka, karobka**. Mol kartasida "1 pachka = 50 dona", "1 karobka = 1000 dona" yoziladi; omborda hammasi donada hisoblanadi, ekranda esa "42 karobka + 350 dona" bo'lib ko'rinadi.
+- Uch narx: **chakana, optom, katta optom** (dona, pachka, karobka uchun). Bo'sh qolgan narx karobka narxidan o'zi bo'linadi. Bir moldan 10 karobkadan ko'p olinsa katta optom narxi o'zi qo'yiladi (soni Sozlamalarda).
+- Sotuv: mol bosilganda "qanchadan?" — Dona / Pachka / Karobka va narxlari. Savatda birlikni almashtirish va sonini yozish mumkin. Mijoz tanlansa uning narxi (optom va h.k.) o'zi qo'yiladi, qarzi ko'rinadi. **"Oxirgi xarid"** tugmasi mijozning o'tgan safargi xaridini bitta bosishda savatga soladi. Boshliqqa "Shu savdodan foyda" ko'rinadi.
+- **Ombor**: ombordagi mol (tannarxda), sotsa tushadigan pul, kam qolgan va tugagan mollar soni; qoldiq karobka/pachka/donada.
+- **Mol keldi**: karobka yoki pachkada kiritiladi, narxi 1 karobka uchun; qoldiq donada qo'shiladi, tannarx (yo'lkira bilan) o'zi yangilanadi.
+- **Foyda**: bitta qator — Sotildi − Mol tannarxi − Xarajatlar = Sof foyda; eng ko'p sotilgan mollar karobkada.
+- Mijozlar: har mijozga narx turi (chakana / optom / katta optom).
+- Qaytarish va bekor qilishda qoldiq to'g'ri (karobka × dona) qaytadi.
+
 ## 1.33.0 — Oshxona, to'lov oynasi va ofitsant telefoni soddaroq
 
 - Oshxona: kartochkada bitta vaqt (qolgan vaqt, kechiksa qizil), "~15 daq" olib tashlandi; tayyor taomda qisqa "⏳ kutyapti 0:05"; chop etish tugmasi kartochka burchagida kichik belgi; sarlavhadagi ikkinchi Stop-list tugmasi olib tashlandi (yuqori menyuda bor).

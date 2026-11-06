@@ -14,6 +14,8 @@ const { createPrint } = require('./print');
 const { createPayroll } = require('./payroll');
 const { createWork, STAFF_ROLES } = require('./work');
 const { snapshot } = require('./backup');
+const Units = require('../public/js/units');
+const UNIT_WORDS = { piece: 'dona', pack: 'pachka', box: 'karobka' };
 
 const ROLES = ['owner', 'admin', 'cashier', 'waiter', 'chef'];
 const MANAGERS = ['owner', 'admin'];
@@ -23,8 +25,8 @@ const KITCHEN = ['owner', 'admin', 'chef'];
 const ROLE_NAMES = { owner: 'Boshliq', admin: 'Admin', cashier: 'Kassir', waiter: 'Ofitsant', chef: 'Oshpaz' };
 const METHODS = ['cash', 'card', 'transfer'];
 // What the platform owner picks when creating a business; the screens adapt to it.
-const BUSINESS_TYPES = { choyxona: 'Choyxona', restoran: 'Restoran / kafe', fastfood: 'Fast food', market: "Do'kon (oziq-ovqat)", clothing: 'Kiyim-kechak', doors: "Eshik do'koni" };
-const SHOP_TYPES = ['market', 'clothing', 'doors'];
+const BUSINESS_TYPES = { choyxona: 'Choyxona', restoran: 'Restoran / kafe', fastfood: 'Fast food', market: "Do'kon (oziq-ovqat)", clothing: 'Kiyim-kechak', doors: "Eshik do'koni", idish: 'Bir martalik idishlar' };
+const SHOP_TYPES = ['market', 'clothing', 'doors', 'idish'];
 const IMAGE_TYPES = { 'image/jpeg': 1, 'image/png': 1, 'image/webp': 1 };
 const DEFAULT_ROOM_TYPES = [['banket', 'Banket'], ['vip', 'VIP'], ['supa', 'Supa'], ['stol', 'Stol'], ['zal', 'Zal'], ['boshqa', 'Boshqa']].map(([key, name]) => ({ key, name }));
 const WALLPAPERS = 28;
@@ -149,6 +151,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     out.receipt_group = out.receipt_group === '1';
     out.room_assign = out.room_assign === 'assigned' ? 'assigned' : 'open';
     out.delivery_fee = Number(out.delivery_fee) || 0;
+    // Disposable tableware: big wholesale price from this many boxes in one line (0 = only for big-wholesale customers).
+    out.big_box_from = out.big_box_from === undefined ? 10 : Number(out.big_box_from) || 0;
     out.receipt_per_person = out.receipt_per_person !== '0';
     out.receipt_logo_id = out.receipt_logo_id ? Number(out.receipt_logo_id) : null;
     out.staff_meal_price = out.staff_meal_price === 'cost' ? 'cost' : 'menu';
@@ -417,7 +421,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     out.push('', d.today.length ? `📋 <b>Bugungi ishlar (${d.today.length}):</b>` : "📋 Bugunga ish yozilmagan.", ...d.today.slice(0, 15).map((x) => `• ${line(x)}`));
     if (y.sales) out.push('', `💰 Kecha: savdo <b>${shop.money(y.revenue)}</b> so'm${SHOP_TYPES.includes(businessType()) ? `, sof foyda <b>${shop.money(y.net)}</b> so'm` : ''} (${y.sales} ta chek)`);
     const low = SHOP_TYPES.includes(businessType()) ? shop.lowStock() : [];
-    if (low.length) out.push('', `⚠️ Kam qoldi: ${low.slice(0, 8).map((x) => `${esc(x.name)} (${x.stock})`).join(', ')}`);
+    if (low.length) out.push('', `⚠️ Kam qoldi: ${low.slice(0, 8).map((x) => `${esc(x.name)} (${x.stock_text || x.stock})`).join(', ')}`);
     if (due.length) out.push('', `💳 <b>To'lov kuni keldi:</b>`, ...dueLines);
     return out.join('\n');
   }
@@ -495,7 +499,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   // ---------- Settings ----------
   function updateSettings({ user, body }) {
-    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'receipt_logo_size', 'receipt_group', 'receipt_per_person', 'room_assign', 'delivery_fee',
+    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'receipt_logo_size', 'receipt_group', 'receipt_per_person', 'room_assign', 'delivery_fee', 'big_box_from',
       'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo',
       'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', 'cashback_pct', 'qr_order', 'qr_from', 'qr_to',
       'geo_lat', 'geo_lng', 'geo_radius', 'work_from', 'expense_groups', 'staff_types', ...GEO_FLAGS, ...OWNER_SETTINGS];
@@ -538,6 +542,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       if (k === 'receipt_logo' || k === 'receipt_group' || k === 'receipt_per_person') v = v ? '1' : '0';
       if (k === 'room_assign') v = v === 'assigned' ? 'assigned' : 'open';
       if (k === 'delivery_fee') v = int(v, 'Yetkazib berish haqi', { max: 10_000_000 });
+      if (k === 'big_box_from') v = int(v, 'Katta optom', { max: 100_000 });
       if (k === 'receipt_logo_size') v = int(v, "Logotip o'lchami", { min: 20, max: 100 });
       // Lines under the check: several, each printed on its own line.
       if (k === 'receipt_footer') v = String(v ?? '').replace(/\r/g, '').split('\n').map((x) => x.trim().slice(0, 64)).slice(0, 8).join('\n').trim();
@@ -981,6 +986,22 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return { ok: true };
   }
 
+  // The wholesale prices of a tableware product: whole sums only, missing ones left out.
+  function tiersInput(v) {
+    if (v === null || v === '') return '';
+    if (typeof v !== 'object' || Array.isArray(v)) throw new HttpError(400, "Narxlar noto'g'ri");
+    const out = {};
+    for (const unit of Units.UNITS) {
+      const row = v[unit] || {};
+      for (const tier of Units.TIERS) {
+        if (unit === 'piece' && tier === 'r') continue;
+        const n = row[tier] === undefined || row[tier] === '' || row[tier] === null ? 0 : int(row[tier], 'Narx', { max: 10_000_000_000 });
+        if (n) (out[unit] = out[unit] || {})[tier] = n;
+      }
+    }
+    return Object.keys(out).length ? JSON.stringify(out) : '';
+  }
+
   function saveDish({ user, params, body }) {
     const prev = params.id ? q('SELECT * FROM dishes WHERE id = ? AND active = 1').get(params.id) : {};
     if (!prev) throw new HttpError(404, 'Taom topilmadi');
@@ -989,7 +1010,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       category_id: pick('category_id', (v) => (v ? int(v, "Bo'lim", { min: 1 }) : null)) ?? null,
       name: pick('name', (v) => str(v, 'Nomi', { required: true, max: 80 })),
       price: pick('price', (v) => int(v, 'Narxi', { required: true })),
-      cost: pick('cost', (v) => int(v, 'Tannarxi')) ?? 0,
+      // A piece of a box can cost a fraction of a sum (a box of 1000 for 95 500): kept to the tiyin.
+      cost: pick('cost', (v) => { const n = Number(v ?? 0); if (!Number.isFinite(n) || n < 0 || n > 10_000_000_000) throw new HttpError(400, "Tannarxi noto'g'ri"); return Math.round(n * 100) / 100; }) ?? 0,
       prep_minutes: pick('prep_minutes', (v) => int(v, 'Tayyorlash vaqti', { max: 600 })) ?? 10,
       unit: pick('unit', (v) => str(v, "O'lchov", { max: 20 }) || 'porsiya') ?? 'porsiya',
       needs_kitchen: pick('needs_kitchen', (v) => (v ? 1 : 0)) ?? 1,
@@ -1005,7 +1027,12 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       // QR menu: a photo (uploaded as a 'dish' picture) and a line or two shown to guests.
       photo: pick('photo', (v) => (v ? assetId(v, 'dish') : null)) ?? null,
       description: pick('description', (v) => str(v, 'Tavsif', { max: 300 })) ?? '',
+      // Tableware: pieces in a pack and in a box, and the other prices ({ piece: {o, b}, pack: {r, o, b}, box: {r, o, b} }).
+      pack_size: pick('pack_size', (v) => int(v, 'Pachkada', { max: 1_000_000 })) ?? 0,
+      box_size: pick('box_size', (v) => int(v, 'Karobkada', { max: 10_000_000 })) ?? 0,
+      tiers: pick('tiers', tiersInput) ?? '',
     };
+    if (d.pack_size && d.box_size && d.box_size <= d.pack_size) throw new HttpError(400, "Karobkada pachkadan ko'p dona bo'lishi kerak");
     if (d.barcode && q('SELECT 1 FROM dishes WHERE barcode = ? AND active = 1 AND id != ?').get(d.barcode, prev.id || 0)) {
       throw new HttpError(409, 'Bu shtrix-kod boshqa mahsulotda bor');
     }
@@ -1013,17 +1040,17 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     let id = prev.id;
     if (id) {
       q(`UPDATE dishes SET category_id = ?, name = ?, price = ?, cost = ?, prep_minutes = ?, unit = ?, needs_kitchen = ?, icon = ?, stock = ?,
-        barcode = ?, size = ?, color = ?, photo = ?, description = ?, material = ?, side = ?, supplier_id = ?, min_stock = ?,
+        barcode = ?, size = ?, color = ?, photo = ?, description = ?, material = ?, side = ?, supplier_id = ?, min_stock = ?, pack_size = ?, box_size = ?, tiers = ?,
         available = CASE WHEN ? = 0 THEN 0 WHEN ? > 0 AND available = 0 AND stock = 0 THEN 1 ELSE available END WHERE id = ?`).run(
         d.category_id, d.name, d.price, d.cost, d.prep_minutes, d.unit, d.needs_kitchen, d.icon, d.stock, d.barcode, d.size, d.color, d.photo, d.description,
-        d.material, d.side, d.supplier_id, d.min_stock, d.stock ?? 1, d.stock ?? 0, id
+        d.material, d.side, d.supplier_id, d.min_stock, d.pack_size, d.box_size, d.tiers, d.stock ?? 1, d.stock ?? 0, id
       );
       if (prev.price !== d.price) audit(user, 'price_change', `${d.name}: ${prev.price} → ${d.price}`);
     } else {
       id = q(`INSERT INTO dishes (category_id, name, price, cost, prep_minutes, unit, needs_kitchen, icon, stock, barcode, size, color, photo, description,
-        material, side, supplier_id, min_stock, available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(d.category_id, d.name, d.price, d.cost,
+        material, side, supplier_id, min_stock, pack_size, box_size, tiers, available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(d.category_id, d.name, d.price, d.cost,
         d.prep_minutes, d.unit, d.needs_kitchen, d.icon, d.stock, d.barcode, d.size, d.color, d.photo, d.description, d.material, d.side, d.supplier_id, d.min_stock,
-        d.stock === 0 ? 0 : 1).lastInsertRowid;
+        d.pack_size, d.box_size, d.tiers, d.stock === 0 ? 0 : 1).lastInsertRowid;
     }
     // The dish's modifier groups, when the form sends them.
     if (Array.isArray(body.modifiers)) {
@@ -1272,31 +1299,41 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   }
 
   // Writes dishes onto a check (inside a transaction): stock, stop-list and the kitchen mode decide each line's status.
-  function insertItems(o, items, t) {
+  // opts.tier: the price tier of a tableware sale ('r' retail, 'o' wholesale, 'b' big wholesale).
+  function insertItems(o, items, t, opts = {}) {
     const load = kitchenLoad();
     const mode = kitchenMode();
     const out = [];
+    const idish = businessType() === 'idish';
+    const bigFrom = idish ? settings().big_box_from : 0;
     for (const it of items) {
       const d = q('SELECT * FROM dishes WHERE id = ? AND active = 1').get(int(it.dish_id, 'Taom', { min: 1, required: true }));
       if (!d) throw new HttpError(404, 'Taom topilmadi');
       const qty = int(it.qty, 'Soni', { min: 1, max: 99999, def: 1 });
       if (!d.available) throw new HttpError(409, `"${d.name}" tugagan`);
-      if (d.stock !== null && d.stock < qty) throw new HttpError(409, `"${d.name}" dan faqat ${d.stock} ta qoldi`);
+      // Sold by the pack or the box: the stock (in pieces) goes down by qty × pieces in the unit.
+      const unit = idish && Units.UNITS.includes(it.unit) && Units.mult(d, it.unit) ? it.unit : 'piece';
+      const um = idish ? Units.mult(d, unit) : 1;
+      const pieces = qty * um;
+      if (d.stock !== null && d.stock < pieces) {
+        throw new HttpError(409, um > 1 || Units.hasUnits(d) ? `"${d.name}" dan faqat ${Units.stockText(d, d.stock)} qoldi` : `"${d.name}" dan faqat ${d.stock} ta qoldi`);
+      }
       if (d.stock !== null) {
-        const left = d.stock - qty;
+        const left = d.stock - pieces;
         q('UPDATE dishes SET stock = ?, available = ? WHERE id = ?').run(left, left > 0 ? 1 : 0, d.id);
         if (left === 0) events.publish('stoplist', { name: d.name, by: 'Tizim' });
       }
       const kitchen = d.needs_kitchen === 1 && mode !== 'off';
       const status = !kitchen ? 'served' : mode === 'notify' ? 'cooking' : 'new';
       const mods = modsFor(d, it.mods);
-      const price = Math.max(0, d.price + mods.reduce((a, m) => a + m.price, 0));
+      const price = idish ? Units.price(d, unit, Units.tierFor(opts.tier, unit, qty, bigFrom))
+        : Math.max(0, d.price + mods.reduce((a, m) => a + m.price, 0));
       const modsText = mods.map((m) => m.name).join(', ');
-      const id = q(`INSERT INTO order_items (order_id, dish_id, name, price, cost, qty, note, status, needs_kitchen, prep_minutes, created_at, eta_at, served_at, accepted_at, mods)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-        o.id, d.id, d.name, price, d.cost, qty, str(it.note, 'Izoh', { max: 200 }), status, kitchen ? 1 : 0,
+      const id = q(`INSERT INTO order_items (order_id, dish_id, name, price, cost, qty, note, status, needs_kitchen, prep_minutes, created_at, eta_at, served_at, accepted_at, mods, unit, unit_mult)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        o.id, d.id, idish && Units.hasUnits(d) ? `${d.name} (${UNIT_WORDS[unit]})` : d.name, price, Math.round((d.cost || 0) * um), qty, str(it.note, 'Izoh', { max: 200 }), status, kitchen ? 1 : 0,
         d.prep_minutes, t, kitchen ? t + (d.prep_minutes + (mode === 'full' ? load.extra_minutes : 0)) * MIN : null,
-        kitchen ? null : t, status === 'cooking' ? t : null, mods.length ? JSON.stringify(mods) : ''
+        kitchen ? null : t, status === 'cooking' ? t : null, mods.length ? JSON.stringify(mods) : '', um > 1 || unit !== 'piece' ? unit : '', um
       ).lastInsertRowid;
       out.push({ id, name: d.name, qty, kitchen, note: str(it.note, 'Izoh', { max: 200 }), mods: modsText, dish_id: d.id, category_id: d.category_id, cook: d.needs_kitchen === 1 });
     }
@@ -1394,12 +1431,12 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     tx(() => {
       if (qty < it.qty) {
         q('UPDATE order_items SET qty = ? WHERE id = ?').run(it.qty - qty, it.id);
-        q(`INSERT INTO order_items (order_id, dish_id, name, price, cost, qty, note, status, needs_kitchen, prep_minutes, created_at, accepted_at, ready_at, eta_at, chef_id, cancel_reason, cancelled_at, cancelled_by)
-          SELECT order_id, dish_id, name, price, cost, ?, note, 'cancelled', needs_kitchen, prep_minutes, created_at, accepted_at, ready_at, eta_at, chef_id, ?, ?, ? FROM order_items WHERE id = ?`).run(qty, reason, now(), user.id, it.id);
+        q(`INSERT INTO order_items (order_id, dish_id, name, price, cost, qty, note, status, needs_kitchen, prep_minutes, created_at, accepted_at, ready_at, eta_at, chef_id, cancel_reason, cancelled_at, cancelled_by, unit, unit_mult)
+          SELECT order_id, dish_id, name, price, cost, ?, note, 'cancelled', needs_kitchen, prep_minutes, created_at, accepted_at, ready_at, eta_at, chef_id, ?, ?, ?, unit, unit_mult FROM order_items WHERE id = ?`).run(qty, reason, now(), user.id, it.id);
       } else {
         q("UPDATE order_items SET status = 'cancelled', cancel_reason = ?, cancelled_at = ?, cancelled_by = ? WHERE id = ?").run(reason, now(), user.id, it.id);
       }
-      if (it.dish_id) q('UPDATE dishes SET stock = stock + ?, available = 1 WHERE id = ? AND stock IS NOT NULL').run(qty, it.dish_id);
+      if (it.dish_id) q('UPDATE dishes SET stock = stock + ?, available = 1 WHERE id = ? AND stock IS NOT NULL').run(qty * (it.unit_mult || 1), it.dish_id);
     });
     audit(user, 'item_cancel', `#${it.order_id} ${it.name}×${qty} (${it.status}) ${reason}`);
     events.publish('kitchen');
@@ -1549,6 +1586,24 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   // Counter sale (shops, fast food): goods and payment in one step. Kitchen dishes of a fast food order
   // still go to the kitchen; the check is already paid.
+  // A tableware sale's price tier: the one chosen on the screen, else the customer's own.
+  function saleTier(body) {
+    if (Units.TIERS.includes(body.tier)) return body.tier;
+    const cid = Number(body.customer_id) || 0;
+    const c = cid ? q('SELECT price_tier FROM customers WHERE id = ?').get(cid) : null;
+    return c && Units.TIERS.includes(c.price_tier) ? c.price_tier : 'r';
+  }
+  // "Takrorlash": what this customer took last time (closed sale), to put in the cart again.
+  function customerLastSale({ params }) {
+    const c = q('SELECT id, name, price_tier FROM customers WHERE id = ?').get(params.id);
+    if (!c) throw new HttpError(404, 'Mijoz topilmadi');
+    const o = q("SELECT id, closed_at FROM orders WHERE customer_id = ? AND status = 'closed' ORDER BY closed_at DESC LIMIT 1").get(c.id);
+    if (!o) return { customer: c, order: null, items: [] };
+    const items = q(`SELECT i.dish_id, i.unit, SUM(i.qty - i.refunded_qty) qty FROM order_items i JOIN dishes d ON d.id = i.dish_id AND d.active = 1
+      WHERE i.order_id = ? AND i.status != 'cancelled' AND i.dish_id IS NOT NULL GROUP BY i.dish_id, i.unit HAVING qty > 0`).all(o.id);
+    return { customer: c, order: o, items: items.map((i) => ({ ...i, unit: i.unit || 'piece' })) };
+  }
+
   function createSale({ user, body }) {
     if (!perms(user).close) throw new HttpError(403, "Chekni yopish huquqingiz yo'q");
     // Installation, delivery: lines with what the customer pays and what the worker gets.
@@ -1564,7 +1619,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
         room.id, user.id, t, str(body.label, 'Mijoz', { max: 60 })
       ).lastInsertRowid;
       const o = getOrderRow(id);
-      if (goods.length) added = insertItems(o, goods, t);
+      if (goods.length) added = insertItems(o, goods, t, { tier: saleTier(body) });
       svc = shop.insertServices(id, services, t);
       const items = q('SELECT * FROM order_items WHERE order_id = ?').all(id);
       return { id, o, ...settle(user, o, items, body, false) };
@@ -1595,10 +1650,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
         const qty = int(r.qty, 'Soni', { min: 1, max: it.qty - it.refunded_qty, def: it.qty - it.refunded_qty });
         if (qty < 1) throw new HttpError(400, `"${it.name}" allaqachon qaytarilgan`);
         q('UPDATE order_items SET refunded_qty = refunded_qty + ? WHERE id = ?').run(qty, it.id);
-        if (it.dish_id) q('UPDATE dishes SET stock = stock + ?, available = 1 WHERE id = ? AND stock IS NOT NULL').run(qty, it.dish_id);
+        if (it.dish_id) q('UPDATE dishes SET stock = stock + ?, available = 1 WHERE id = ? AND stock IS NOT NULL').run(qty * (it.unit_mult || 1), it.dish_id);
         amount += it.price * qty;
         lines.push(`${it.name}×${qty}`);
-        pro.consume(o.id, [{ dish_id: it.dish_id, qty }], 1, user.id);
+        pro.consume(o.id, [{ dish_id: it.dish_id, qty: qty * (it.unit_mult || 1) }], 1, user.id);
         shop.refunded(it, qty, user.id, o.id);
       }
       const already = q("SELECT COALESCE(SUM(amount), 0) s FROM transactions WHERE category = 'Qaytarish' AND order_id = ?").get(o.id).s;
@@ -1708,7 +1763,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       what = items.map((i) => `${i.name}×${i.qty}`).join(', ').slice(0, 300);
       q('UPDATE orders SET cancelled_by = ?, cancel_total = ? WHERE id = ?').run(user.id, items.reduce((s, i) => s + i.price * i.qty, 0), o.id);
       for (const it of items) {
-        if (it.dish_id) q('UPDATE dishes SET stock = stock + ?, available = 1 WHERE id = ? AND stock IS NOT NULL').run(it.qty, it.dish_id);
+        if (it.dish_id) q('UPDATE dishes SET stock = stock + ?, available = 1 WHERE id = ? AND stock IS NOT NULL').run(it.qty * (it.unit_mult || 1), it.dish_id);
       }
       q("UPDATE order_items SET status = 'cancelled', cancel_reason = ?, cancelled_at = ?, cancelled_by = ? WHERE order_id = ? AND status != 'cancelled'").run(reason, now(), user.id, o.id);
       q("UPDATE orders SET status = 'cancelled', closed_at = ?, cancel_reason = ? WHERE id = ?").run(now(), reason, o.id);
@@ -2463,6 +2518,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['GET', '/api/customers', MONEY, pro.listCustomers],
     ['POST', '/api/customers', MONEY, pro.saveCustomer],
     ['GET', '/api/customers/:id', MONEY, pro.customerDetail],
+    ['GET', '/api/customers/:id/last-sale', ['owner', 'admin', 'cashier', 'waiter'], customerLastSale],
     ['PUT', '/api/customers/:id', MONEY, pro.saveCustomer],
     ['POST', '/api/customers/:id/pay', MONEY, pro.payDebt],
     ['GET', '/api/ingredients', [...MANAGERS, 'cashier', 'chef'], pro.listIngredients],

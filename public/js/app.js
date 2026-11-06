@@ -13,6 +13,16 @@ function navOrder(role) {
       chef: ['today', 'settings'],
     }[role];
   }
+  // A tableware shop: selling, the warehouse, goods arriving, customers and the profit — one tap each.
+  if (isIdish()) {
+    return {
+      owner: ['pos', 'menuadmin', 'purchases', 'customers', 'profit', 'history', 'staff', 'settings', 'money'],
+      admin: ['pos', 'menuadmin', 'purchases', 'customers', 'profit', 'history', 'staff', 'settings', 'money'],
+      cashier: ['pos', 'purchases', 'customers', 'history', 'settings', 'money'],
+      waiter: ['pos', 'settings'],
+      chef: ['settings'],
+    }[role];
+  }
   // "Bugun" (tasks of the day) is a door shop's page; a seller in a shop has no dishes to take from the kitchen.
   const home = isShop() ? ['pos'] : App.biz === 'fastfood' ? ['pos', 'rooms'] : ['rooms'];
   return {

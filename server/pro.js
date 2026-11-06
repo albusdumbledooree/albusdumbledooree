@@ -59,13 +59,15 @@ function createPro(db, { audit, events, now, moduleOn, settings }) {
     if (phone && q('SELECT 1 FROM customers WHERE phone = ? AND active = 1 AND id != ?').get(phone, params.id || 0)) {
       throw new HttpError(409, 'Bu telefon raqamli mijoz bor');
     }
+    // Which price this customer gets (a tableware shop): retail, wholesale or big wholesale.
+    const tier = ['r', 'o', 'b'].includes(body.price_tier) ? body.price_tier : '';
     let id = params.id;
     if (id) {
-      customerRow(id);
-      q('UPDATE customers SET name = ?, phone = ?, note = ? WHERE id = ?').run(name, phone, note, id);
+      const prev = customerRow(id);
+      q('UPDATE customers SET name = ?, phone = ?, note = ?, price_tier = ? WHERE id = ?').run(name, phone, note, body.price_tier === undefined ? prev.price_tier : tier, id);
       audit(user, 'customer_update', name);
     } else {
-      id = q('INSERT INTO customers (name, phone, note, created_at) VALUES (?, ?, ?, ?)').run(name, phone, note, now()).lastInsertRowid;
+      id = q('INSERT INTO customers (name, phone, note, price_tier, created_at) VALUES (?, ?, ?, ?, ?)').run(name, phone, note, tier, now()).lastInsertRowid;
       audit(user, 'customer_create', name);
     }
     return customerRow(id);

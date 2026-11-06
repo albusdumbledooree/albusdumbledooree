@@ -254,13 +254,13 @@ function addUser(db, name, username, password, role, pin = null) {
 
 function addMenu(db, menu) {
   const addCat = db.prepare('INSERT INTO categories (name, icon, sort) VALUES (?, ?, ?)');
-  const addDish = db.prepare(`INSERT INTO dishes (category_id, name, price, cost, prep_minutes, unit, needs_kitchen, icon, stock, barcode, size, color, material, side, min_stock)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const addDish = db.prepare(`INSERT INTO dishes (category_id, name, price, cost, prep_minutes, unit, needs_kitchen, icon, stock, barcode, size, color, material, side, min_stock,
+    pack_size, box_size, tiers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   menu.forEach(([cat, icon, dishes], i) => {
     const cid = addCat.run(cat, icon, i).lastInsertRowid;
     for (const d of dishes) {
       addDish.run(cid, d.name, d.price, d.cost || 0, d.prep ?? 10, d.unit || 'porsiya', d.kitchen ?? 1, d.icon || '', d.stock ?? null,
-        d.barcode || '', d.size || '', d.color || '', d.material || '', d.side || '', d.min ?? null);
+        d.barcode || '', d.size || '', d.color || '', d.material || '', d.side || '', d.min ?? null, d.pack || 0, d.box || 0, d.tiers ? JSON.stringify(d.tiers) : '');
     }
   });
 }
@@ -294,6 +294,34 @@ const SAMPLES = {
     ['Furnitura', '🔑', [{ name: 'Qulf "Apecs"', price: 180000, cost: 120000, stock: 15, min: 5, icon: '🔒' }, { name: 'Ruchka (juft)', price: 90000, cost: 55000, stock: 20, min: 5, icon: '🔑' },
       { name: 'Petlya (3 dona)', price: 60000, cost: 36000, stock: 30, min: 10, icon: '🔩' }, { name: 'Nalichnik (komplekt)', price: 150000, cost: 95000, stock: 12, min: 4, icon: '📏' },
       { name: 'Karobka (komplekt)', price: 250000, cost: 170000, stock: 10, min: 3, icon: '🪵' }]],
+  ].map(([c, i, ds]) => [c, i, ds.map((d) => ({ prep: 0, kitchen: 0, unit: 'dona', icon: i, ...d }))]),
+  // Disposable tableware: stock and costs in pieces; prices per piece / pack / box at three tiers (public/js/units.js).
+  idish: [
+    ['Stakanlar', '🥤', [
+      { name: 'Stakan 250 ml', material: 'Plastik', color: 'Oq', price: 300, cost: 190, pack: 50, box: 1000, stock: 42350, min: 5000,
+        tiers: { pack: { r: 13500, o: 12000 }, box: { r: 240000, o: 220000, b: 210000 } } },
+      { name: 'Stakan 400 ml', material: "Qog'oz", color: 'Kofe', price: 500, cost: 360, pack: 50, box: 1000, stock: 3120, min: 5000,
+        tiers: { pack: { r: 22000, o: 20000 }, box: { r: 430000, o: 400000, b: 385000 } } },
+      { name: 'Stakan 200 ml', material: 'Plastik', color: 'Shaffof', price: 250, cost: 150, pack: 100, box: 2000, stock: 24000, min: 4000,
+        tiers: { pack: { r: 22000, o: 19000 }, box: { r: 380000, o: 350000, b: 330000 } } }]],
+    ['Konteynerlar', '🍱', [
+      { name: 'Konteyner 500 ml', material: 'Plastik', color: 'Qopqoqli', price: 1200, cost: 900, pack: 50, box: 300, stock: 5400, min: 900,
+        tiers: { pack: { r: 55000, o: 52000 }, box: { r: 330000, o: 310000, b: 300000 } } },
+      { name: 'Folga konteyner', material: 'Alyumin', color: '', price: 1500, cost: 1100, pack: 100, box: 500, stock: 4500, min: 1000,
+        tiers: { pack: { r: 140000, o: 130000 }, box: { r: 680000, o: 640000, b: 620000 } } }]],
+    ['Tarelkalar', '🍽️', [
+      { name: 'Tarelka Ø22', material: 'Plastik', color: 'Oq', price: 400, cost: 280, pack: 50, box: 1000, stock: 25200, min: 3000,
+        tiers: { pack: { r: 18000, o: 16000 }, box: { r: 340000, o: 310000, b: 300000 } } }]],
+    ['Qoshiq-vilka', '🥄', [
+      { name: 'Qoshiq', material: 'Plastik', color: 'Oq', price: 150, cost: 95, pack: 100, box: 2000, stock: 0, min: 4000,
+        tiers: { pack: { r: 12000, o: 10500 }, box: { r: 230000, o: 210000, b: 200000 } } },
+      { name: 'Vilka', material: 'Plastik', color: 'Oq', price: 150, cost: 95, pack: 100, box: 2000, stock: 62000, min: 4000,
+        tiers: { pack: { r: 12000, o: 10500 }, box: { r: 230000, o: 210000, b: 200000 } } }]],
+    ['Paketlar va salfetka', '🛍️', [
+      { name: 'Paket mayka', material: "O'rta", color: '', price: 100, cost: 60, pack: 100, box: 2000, stock: 4000, min: 4000,
+        tiers: { pack: { r: 8000, o: 7000 }, box: { r: 150000, o: 135000, b: 125000 } } },
+      { name: 'Salfetka (100 ta)', material: "Qog'oz", color: '', price: 7000, cost: 5000, pack: 0, box: 40, stock: 1200, min: 80,
+        tiers: { piece: { o: 6500, b: 6200 }, box: { r: 270000, o: 250000, b: 240000 } } }]],
   ].map(([c, i, ds]) => [c, i, ds.map((d) => ({ prep: 0, kitchen: 0, unit: 'dona', icon: i, ...d }))]),
   clothing: [
     ["Ko'ylaklar", '👔', [{ name: "Ko'ylak klassik", size: 'M', color: 'Oq', price: 180000, cost: 110000, stock: 6, barcode: '4781000000017' },
@@ -379,8 +407,8 @@ function seed(db, opts = {}) {
   // Fast food and shops take no service charge by default.
   if (!['choyxona', 'restoran'].includes(type)) db.prepare("UPDATE settings SET value = '0' WHERE key = 'service_pct'").run();
   // A door shop's running costs; goods bought, supplier and installer payments are kept by their own screens.
-  if (type === 'doors') {
-    db.prepare("UPDATE settings SET value = ? WHERE key = 'expense_categories'").run(JSON.stringify(['Ijara', 'Soliq', 'Kommunal', 'Ish haqi', "Yo'lkira", 'Ustalar', 'Reklama', 'Boshqa']));
+  if (type === 'doors' || type === 'idish') {
+    db.prepare("UPDATE settings SET value = ? WHERE key = 'expense_categories'").run(JSON.stringify(['Ijara', 'Soliq', 'Kommunal', 'Ish haqi', "Yo'lkira", ...(type === 'doors' ? ['Ustalar'] : []), 'Reklama', 'Boshqa']));
     db.prepare("UPDATE settings SET value = ? WHERE key = 'income_categories'").run(JSON.stringify(['Boshqa kirim']));
   }
   if (opts.sample) {
@@ -563,6 +591,15 @@ CREATE INDEX IF NOT EXISTS idx_guest_req ON guest_requests(status, room_id);
   addCol('order_items', 'cancelled_by', 'INTEGER');
   // When a product was added: goods with no sale since then for 60 days are "dead" stock (older rows: unknown).
   addCol('dishes', 'created_at', 'INTEGER');
+  // Disposable tableware: pieces in a pack and in a box, and the wholesale prices (public/js/units.js).
+  addCol('dishes', 'pack_size', 'INTEGER NOT NULL DEFAULT 0');
+  addCol('dishes', 'box_size', 'INTEGER NOT NULL DEFAULT 0');
+  addCol('dishes', 'tiers', "TEXT NOT NULL DEFAULT ''");
+  // A line sold by the pack or the box: qty is in that unit, unit_mult pieces each (stock moves by qty × unit_mult).
+  addCol('order_items', 'unit', "TEXT NOT NULL DEFAULT ''");
+  addCol('order_items', 'unit_mult', 'INTEGER NOT NULL DEFAULT 1');
+  // Which price a customer gets: '' or 'r' retail, 'o' wholesale, 'b' big wholesale.
+  if (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'customers'").get()) addCol('customers', 'price_tier', "TEXT NOT NULL DEFAULT ''");
   db.exec(`CREATE TRIGGER IF NOT EXISTS dishes_created AFTER INSERT ON dishes WHEN NEW.created_at IS NULL
     BEGIN UPDATE dishes SET created_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000 WHERE id = NEW.id; END;`);
   db.exec(`
