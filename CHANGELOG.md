@@ -2,6 +2,12 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.34.2 — Mol kartasi telefonda tushunarliroq
+
+- Pachka va karobka yozilmagan (faqat dona) molda ortiqcha "+ dona" katagi ko'rinmaydi.
+- Narx bo'sh bo'lsa katakda "0" emas, "avto" yoziladi; izoh ham shunga mos: "Optom yoki katta optom bo'sh qolsa — chakana narxi olinadi".
+- Telefonda narxlar jadvali to'liq sig'adi (Katta optom ustuni kesilmaydi).
+
 ## 1.34.1 — Kassirga cheklar tarixi, umumiy summasiz
 
 - Kassir "Cheklar" bo'limida endi **Cheklar tarixi**ni ko'radi: ochiq va yopilgan cheklar ro'yxati, har chekning o'z summasi va ichidagi taomlar.

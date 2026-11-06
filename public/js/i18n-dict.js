@@ -1437,6 +1437,7 @@
   "Kassir Cheklar bo'limida umumiy savdo summasini ko'ra oladi": ["Кассир видит общую сумму продаж в разделе Чеки", "Cashier sees total takings under Checks"],
   "O'chiq bo'lsa kassir faqat cheklar ro'yxatini (ochiq, yopilgan) va har chekning summasini ko'radi; kun yoki oy jami, tannarx va Excel ko'rinmaydi.": ["Если выключено, кассир видит только список чеков (открытые, закрытые) и сумму каждого чека; итоги за день или месяц, себестоимость и Excel скрыты.", "When off, the cashier sees only the list of checks (open, closed) and each check's sum; day or month totals, cost and Excel are hidden."],
   "Cheklar tarixi": ["История чеков", "Checks history"],
+  "Optom yoki katta optom bo'sh qolsa — chakana narxi olinadi.": ["Если опт или крупный опт пусты — берётся розничная цена.", "If wholesale or big wholesale is empty, the retail price is used."],
   "Kamera topilmadi": ["Камера не найдена", "No camera found"],
     "BUTUN CHEK O'CHIRILDI": ["ЧЕК УДАЛЁН ПОЛНОСТЬЮ","WHOLE CHECK DELETED"],
     "Diqqat! {0}. Butun chek o'chirildi.": ["Внимание! {0}. Чек удалён полностью.","Attention! {0}. The whole check was deleted."],

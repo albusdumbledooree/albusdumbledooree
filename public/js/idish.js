@@ -95,13 +95,13 @@ function idishDishForm(d, categories, suppliers) {
       <div class="table-wrap"><table class="price-grid"><tr><th></th><th class="right">${t('Tannarx')}</th><th class="right">${t('Chakana')}</th><th class="right">${t('Optom')}</th><th class="right">${t('Katta optom')}</th></tr>
         ${Units.UNITS.map((u) => `<tr data-row="${u}"><td><b>${esc(PACK_NAMES()[u])}</b></td><td class="right num muted" data-cost="${u}"></td>${Units.TIERS.map((tr) => `<td>${cell(u, tr)}</td>`).join('')}</tr>`).join('')}
       </table></div>
-      <p class="small muted">${t("Bo'sh qolgan narx karobka narxidan o'zi bo'linadi; katta optom bo'lmasa — optom narxi olinadi.")}</p>
+      <p class="small muted" id="price-hint"></p>
       <div class="note-box" id="margin-box"></div>
       <div class="form-grid" style="margin-top:12px">
         <label class="field" id="cost-l">${t('Tannarx (1 karobka)')}<input type="number" name="cost_big" min="0" value="${d.cost ? Math.round(d.cost * bm) : ''}"></label>
         <label class="field" id="min-l">${t('Kam qolsa ogohlantirish (karobka)')}<input type="number" name="min_big" min="0" value="${d.min_stock != null ? Math.round(d.min_stock / bm) : ''}"></label>
         <label class="field">${t("Qoldiq (bo'sh = hisoblanmaydi)")}<input type="number" name="stock_big" min="0" value="${d.stock != null ? Math.floor(d.stock / bm) : ''}" data-unit-hint></label>
-        <label class="field">${t('+ dona')}<input type="number" name="stock_rest" min="0" value="${d.stock != null ? d.stock - Math.floor(d.stock / bm) * bm : ''}"></label>
+        <label class="field" id="rest-l">${t('+ dona')}<input type="number" name="stock_rest" min="0" value="${d.stock != null ? d.stock - Math.floor(d.stock / bm) * bm : ''}"></label>
       </div>
       <p class="small muted">${t('Tannarx har "Mol keldi"da o\'zi yangilanadi (yo\'lkira bilan).')}</p>`,
     onMount: (f) => {
@@ -114,6 +114,11 @@ function idishDishForm(d, categories, suppliers) {
         f.querySelector('#cost-l').firstChild.textContent = `${t('Tannarx')} (1 ${name})`;
         f.querySelector('#min-l').firstChild.textContent = `${t('Kam qolsa ogohlantirish')} (${name})`;
         f.querySelector('[data-unit-hint]').previousSibling.textContent = `${t('Qoldiq')} (${name})`;
+        // Only pieces (no pack, no box): one stock field and a plain price hint.
+        f.querySelector('#rest-l').hidden = big === 'piece';
+        f.querySelector('#price-hint').textContent = big === 'piece'
+          ? t("Optom yoki katta optom bo'sh qolsa — chakana narxi olinadi.")
+          : t("Bo'sh qolgan narx karobka narxidan o'zi bo'linadi; katta optom bo'lmasa — optom narxi olinadi.");
         f.querySelector('#box-hint').textContent = x.box_size && x.pack_size && x.box_size % x.pack_size === 0 ? `= ${t('{0} pachka', x.box_size / x.pack_size)}` : '';
         const piece = (Number(f.cost_big.value) || 0) / m;
         for (const u of Units.UNITS) {
@@ -123,7 +128,9 @@ function idishDishForm(d, categories, suppliers) {
           // The automatic price shows as the field's hint.
           for (const tr of Units.TIERS) {
             const inp = f.querySelector(`[data-t="${u}.${tr}"]`);
-            if (inp && um) inp.placeholder = num(Units.price({ ...x, tiers: { ...x.tiers, [u]: { ...(x.tiers[u] || {}), [tr]: 0 } } }, u, tr));
+            if (!inp || !um) continue;
+            const auto = Units.price({ ...x, tiers: { ...x.tiers, [u]: { ...(x.tiers[u] || {}), [tr]: 0 } } }, u, tr);
+            inp.placeholder = auto ? num(auto) : t('avto');
           }
         }
         const bc = piece * m;
