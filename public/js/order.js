@@ -197,16 +197,16 @@ function canCancelItem(i) {
   return App.user.role === 'waiter' && App.settings.waiter_cancel;
 }
 
-function lineHtml(i, ro = false) {
-  const timer = i.status === 'new' || i.status === 'cooking' ? `<span class="timer">${icon('timer', 13)} <b data-eta="${i.eta_at}"></b></span>` : '';
-  return `<div class="line ${i.status}">
-    <span class="q">${i.qty}×</span><span class="n">${esc(i.name)}${modsText(i) ? `<span class="mods">+ ${esc(modsText(i))}</span>` : ''}</span><span class="p">${money(i.price * i.qty)}</span>
-    <span class="sub"><span class="chip ${i.status}">${statusName(i.status)}</span>${timer}
-      ${i.note ? `<span>${icon('sticky-note', 13)} ${esc(i.note)}</span>` : ''}${i.cancel_reason ? `<span>(${esc(i.cancel_reason)})</span>` : ''}
-      <span class="grow"></span>
-      ${i.status === 'ready' && !ro ? `<button class="btn ok sm" data-serve="${i.id}">${icon('hand', 16)} ${t('Oldim')}</button>` : ''}
-      ${canCancelItem(i) && !ro ? `<button class="icon-btn ghost danger" data-cancel-item="${i.id}" data-st="${i.status}" title="${esc(t('Bekor qilish'))}">${icon('x', 18)}</button>` : ''}</span>
-  </div>`;
+/* One row of the check, like a printed bill: № | name (its choices and note under it) | count | sum. The dish's state is a
+   coloured dot (a ready dish: the whole row green). Tapping the row opens what can be done with it (took it, cancel),
+   so no buttons stand between the lines. */
+function lineHtml(i, ro = false, no = '') {
+  const md = modsText(i);
+  const act = !ro && (i.status === 'ready' || canCancelItem(i));
+  return `<div class="row2 ${i.status}"${act ? ` data-line="${i.id}" role="button" tabindex="0"` : ''}>
+    <span class="no">${no}</span>
+    <span class="nm"><i class="dot" title="${esc(statusName(i.status))}"></i>${esc(i.name)}${md ? `<small class="md">+ ${esc(md)}</small>` : ''}${i.note ? `<small class="nt">✎ ${esc(i.note)}</small>` : ''}${i.cancel_reason ? `<small>(${esc(i.cancel_reason)})</small>` : ''}</span>
+    <span class="qt">${i.qty}</span><span class="sm">${num(i.price * i.qty)}</span></div>`;
 }
 
 function checkPane({ order, room, cart, takeaway, couriers, readonly: ro }) {
@@ -235,19 +235,23 @@ function checkPane({ order, room, cart, takeaway, couriers, readonly: ro }) {
        ${ro ? `<span class="guests">${icon('users', 16)} ${guests}</span>` : `<span class="guests" title="${esc(t('Mehmonlar soni'))}"><button data-g="-1">−</button><span>${icon('users', 16)} ${guests}</span><button data-g="1">+</button></span>`}`;
   const sent = batches(items.filter((i) => i.status !== 'cancelled'));
   const cancelled = items.filter((i) => i.status === 'cancelled');
+  const ready = items.filter((i) => i.status === 'ready').length;
+  let no = 0;
   const total = order ? order.total : 0;
   const share = order && !takeaway ? perPerson(order) : 0;
   const permsOf = App.user.perms || {};
   return `<aside class="checkpane ${UI.drawer ? 'open' : ''}" id="checkpane">
     <div class="cp-head ${dv ? 'dv' : ''}">${head}<button class="icon-btn ghost fab-close" id="cp-close" style="display:none">${icon('x')}</button></div>
     <div class="cp-body">
-      ${sent.map((b, n) => `<div class="batch-title">${icon('send', 13)} ${t('{0}-yuborish', n + 1)} · ${fmtTime(b.at)}</div>${b.items.map((i) => lineHtml(i, ro)).join('')}`).join('')}
-      ${cancelled.length ? `<div class="batch-title">${icon('ban', 13)} ${t('Bekor qilingan')}</div>${cancelled.map((i) => lineHtml(i, ro)).join('')}` : ''}
+      ${items.length || cart.lines.length ? `<div class="tbl-h"><span>№</span><span>${t('Nomi')}</span><span>${t('Soni')}</span><span>${t('Summa')}</span></div>` : ''}
+      ${!ro && ready > 1 ? `<button class="btn ok sm block serve-all" id="serve-all">${icon('hand', 16)} ${t('Hammasini oldim')} (${ready})</button>` : ''}
+      ${sent.map((b, n) => `<div class="batch-title">${icon('send', 13)} ${t('{0}-yuborish', n + 1)} · ${fmtTime(b.at)}</div>${b.items.map((i) => lineHtml(i, ro, ++no)).join('')}`).join('')}
+      ${cancelled.length ? `<div class="batch-title">${icon('ban', 13)} ${t('Bekor qilingan')}</div>${cancelled.map((i) => lineHtml(i, ro, '–')).join('')}` : ''}
       ${cart.lines.length ? `<div class="batch-title" style="color:var(--primary)">${icon('circle-plus', 13)} ${t('Yangi (yuborilmagan)')}</div>
-        ${cart.lines.map((c, idx) => `<div class="line pending"><span class="q">${c.qty}×</span><span class="n">${esc(c.name)}${c.modsText ? `<span class="mods">+ ${esc(c.modsText)}</span>` : ''}</span><span class="p">${money(c.price * c.qty)}</span>
-          <span class="sub">${c.note ? `<span>${icon('sticky-note', 13)} ${esc(c.note)}</span>` : ''}<span class="grow"></span>
-            <button class="icon-btn ghost" data-note="${idx}" title="${esc(t('Izoh'))}">${icon('sticky-note', 18)}</button>
-            <span class="stepper"><button data-dec="${idx}">${icon('minus', 16)}</button><span>${c.qty}</span><button data-inc="${idx}">${icon('plus', 16)}</button></span></span></div>`).join('')}` : ''}
+        ${cart.lines.map((c, idx) => `<div class="row2 pend" data-pline="${idx}" role="button" tabindex="0"><span class="no">${++no}</span>
+          <span class="nm">${esc(c.name)}${c.modsText ? `<small class="md">+ ${esc(c.modsText)}</small>` : ''}${c.note ? `<small class="nt">✎ ${esc(c.note)}</small>` : ''}</span>
+          <span class="qt"><button data-dec="${idx}" aria-label="−">${icon('minus', 14)}</button><b>${c.qty}</b><button data-inc="${idx}" aria-label="+">${icon('plus', 14)}</button></span>
+          <span class="sm">${num(c.price * c.qty)}</span></div>`).join('')}` : ''}
       ${!items.length && !cart.lines.length ? emptyState('utensils', W("Menyudan taom tanlang")) : ''}
     </div>
     <div class="cp-foot">
@@ -348,8 +352,20 @@ const OrderView = {
       if (line) line.qty += 1; else cart.lines.push({ dish_id: x.id, name: x.name, price: m.price, qty: 1, note: '', mods: m.ids, modsText: m.text });
       rerender();
     });
-    pane.querySelectorAll('[data-inc]').forEach((b) => b.onclick = () => { cart.lines[b.dataset.inc].qty += 1; rerender(); });
-    pane.querySelectorAll('[data-dec]').forEach((b) => b.onclick = () => {
+    pane.querySelectorAll('[data-inc]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); cart.lines[b.dataset.inc].qty += 1; rerender(); });
+    // A new (unsent) dish: tap the row — a note, or take it off.
+    pane.querySelectorAll('[data-pline]').forEach((r) => r.onclick = (e) => {
+      if (e.target.closest('button')) return;
+      const idx = Number(r.dataset.pline); const c = cart.lines[idx];
+      openModal({ title: esc(c.name), body: `<p class="muted">${c.qty} × ${money(c.price)}${c.note ? `<br>✎ ${esc(c.note)}` : ''}</p>`,
+        actions: [{ label: t("O'chirish"), cls: 'red-text', onClick: () => { cart.lines.splice(idx, 1); rerender(); } },
+          { label: t('Izoh'), cls: 'primary', icon: 'sticky-note', onClick: async () => {
+            const v = await promptModal(t('Izoh'), t("{0} uchun izoh (masalan: achchiq bo'lmasin)", c.name), { value: c.note });
+            if (v !== null) { c.note = v; rerender(); }
+          } }] });
+    });
+    pane.querySelectorAll('[data-dec]').forEach((b) => b.onclick = (e) => {
+      e.stopPropagation();
       const c = cart.lines[b.dataset.dec];
       c.qty -= 1;
       if (c.qty <= 0) cart.lines.splice(b.dataset.dec, 1);
@@ -398,6 +414,26 @@ const OrderView = {
       try { await POST(`/api/items/${b.dataset.serve}/serve`); refreshView(); } catch (e) { toastError(e); }
     });
     pane.querySelectorAll('[data-cancel-item]').forEach((b) => b.onclick = () => cancelItemDialog(order.items.find((i) => i.id === Number(b.dataset.cancelItem))));
+    // A sent dish: tap the row — "took it" (when ready) or cancel.
+    pane.querySelectorAll('[data-line]').forEach((r) => r.onclick = () => {
+      const it = order.items.find((i) => i.id === Number(r.dataset.line));
+      if (!it) return;
+      const eta = (it.status === 'new' || it.status === 'cooking') && it.eta_at ? ` · ${icon('timer', 14)} <b data-eta="${it.eta_at}"></b>` : '';
+      openModal({ title: esc(it.name),
+        body: `<p class="muted"><span class="chip ${it.status}">${statusName(it.status)}</span> ${it.qty} × ${money(it.price)}${eta}${it.note ? `<br>✎ ${esc(it.note)}` : ''}</p>`,
+        actions: [
+          ...(canCancelItem(it) ? [{ label: t('Bekor qilish'), cls: 'red-text', icon: 'x', onClick: () => { setTimeout(() => cancelItemDialog(it), 0); } }] : []),
+          ...(it.status === 'ready' ? [{ label: t('Oldim'), cls: 'ok', icon: 'hand', onClick: async () => {
+            try { await POST(`/api/items/${it.id}/serve`); refreshView(); } catch (e) { toastError(e); }
+          } }] : [{ label: t('Yopish') }]),
+        ] });
+      tickTimers();
+    });
+    const sa = pane.querySelector('#serve-all');
+    if (sa) sa.onclick = async () => {
+      sa.disabled = true;
+      try { for (const it of order.items.filter((i) => i.status === 'ready')) await POST(`/api/items/${it.id}/serve`); refreshView(); } catch (e) { toastError(e); sa.disabled = false; }
+    };
     if (!order) return;
     const rb = pane.querySelector('#req-bill');
     if (rb) rb.onclick = async () => {

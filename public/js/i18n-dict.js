@@ -1378,6 +1378,7 @@
   "Yana bir kishini ulash": ["Подключить ещё одного человека", "Link one more person"],
   "Telegram botga ulanish": ["Подключить Telegram-бот", "Connect the Telegram bot"],
   "Dostavchik": ["Курьер", "Courier"],
+  "Hammasini oldim": ["Забрал всё", "Took them all"],
   "Kamera topilmadi": ["Камера не найдена", "No camera found"],
     "BUTUN CHEK O'CHIRILDI": ["ЧЕК УДАЛЁН ПОЛНОСТЬЮ","WHOLE CHECK DELETED"],
     "Diqqat! {0}. Butun chek o'chirildi.": ["Внимание! {0}. Чек удалён полностью.","Attention! {0}. The whole check was deleted."],

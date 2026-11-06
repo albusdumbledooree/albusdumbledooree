@@ -2,6 +2,15 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.32.0 — Chek paneli jadval ko'rinishida
+
+- Taom urish ekranidagi chek endi jadval: **№ · Nomi · Soni · Summa**. Har bir taom bitta qatorda — telefonda bir ekranga taxminan ikki baravar ko'p taom sig'adi.
+- Holat rangli nuqta bilan: ko'k — yangi, to'q sariq — tayyorlanmoqda, yashil — tayyor (qatori ham yashil), kulrang — berildi.
+- Qo'shimchalar (+ …) va izoh (✎ …) taom nomi ostida.
+- Taom qatorini bosganda menyu: tayyor taomda "Oldim", "Bekor qilish"; yangi (yuborilmagan) taomda "Izoh" va "O'chirish". − / + tugmalari qatorning o'zida.
+- Tayyor taomlar 2 tadan ko'p bo'lsa — "Hammasini oldim" tugmasi.
+- "1-yuborish · 15:04" ajratgichlari qoladi, raqamlash uzluksiz.
+
 ## 1.31.4 — Logotip tepa-pastida bo'sh joy yo'q
 
 - Logotip faylining o'zidagi bo'sh chet (tepa va pastdagi oq yoki shaffof qism) chekka chiqmaydi — avtomatik kesiladi. Logotipning ko'rinishi va rangi o'zgarmaydi.

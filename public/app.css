@@ -446,6 +446,28 @@ tr.clickable:hover td { background: var(--panel-2); }
 .line .sub .chip { padding: 1px 8px; font-size: 11.5px; }
 .line.cancelled { opacity: .45; }
 .line.cancelled .n { text-decoration: line-through; }
+/* The check as a table: № | name | count | sum (the order screen's check pane). */
+.cp-body .tbl-h, .cp-body .row2 { display: grid; grid-template-columns: 22px minmax(0, 1fr) 38px max-content; gap: 0 8px; align-items: center; }
+.cp-body .tbl-h { font-size: 12px; font-weight: 700; color: var(--muted); padding: 6px 4px; border-bottom: 2px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.cp-body .tbl-h span:nth-child(3) { text-align: center; } .cp-body .tbl-h span:last-child { text-align: right; }
+.cp-body .row2 { padding: 7px 4px; border-bottom: 1px solid var(--panel-2); font-size: 15px; }
+.cp-body .row2[data-line], .cp-body .row2[data-pline] { cursor: pointer; }
+.cp-body .row2[data-line]:hover { background: var(--panel-2); }
+.cp-body .row2 .no { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+.cp-body .row2 .nm { font-weight: 650; line-height: 1.25; overflow-wrap: anywhere; }
+.cp-body .row2 .nm small { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 1px; }
+.cp-body .row2 .nm small.md { color: var(--primary); } .cp-body .row2 .nm small.nt { color: #b45309; font-weight: 700; }
+.cp-body .row2 .qt { text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; }
+.cp-body .row2 .sm { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cp-body .row2 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: #9aa3b2; }
+.cp-body .row2.new .dot { background: #2156e8; } .cp-body .row2.cooking .dot { background: #f59e0b; } .cp-body .row2.ready .dot { background: #16a34a; }
+.cp-body .row2.ready { background: #ecfdf3; }
+.cp-body .row2.cancelled { opacity: .55; } .cp-body .row2.cancelled .nm, .cp-body .row2.cancelled .sm { text-decoration: line-through; }
+.cp-body .row2.pend { background: #fff7db; border-left: 4px solid #f5b301; padding-left: 4px; border-radius: 6px; margin-bottom: 3px; border-bottom: 0; grid-template-columns: 20px minmax(0, 1fr) 84px max-content; }
+.cp-body .row2.pend .qt { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.cp-body .row2.pend .qt button { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); display: grid; place-items: center; padding: 0; color: var(--text); }
+.cp-body .serve-all { margin: 8px 0 2px; }
+:root[data-theme="dark"] .cp-body .row2.ready { background: #0f2a1b; } :root[data-theme="dark"] .cp-body .row2.pend { background: #2d2610; }
 .line.pending { background: #fff7db; border-radius: 8px; padding: 6px 8px; border-bottom: 0; margin-bottom: 4px; border-left: 4px solid #f5b301; }
 :root[data-theme="dark"] .line.pending { background: #2d2610; }
 .stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
