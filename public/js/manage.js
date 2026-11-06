@@ -241,6 +241,8 @@ Views.history = {
     const h = UI.hist;
     const r = histRange();
     const s = d.sums;
+    // A cashier without the boss's leave: the list of checks only (no period totals, no cost, no Excel).
+    const lite = !!s.hidden;
     const f = d.filters || { waiters: [], sections: [], rooms: [] };
     const phone = window.matchMedia('(max-width: 760px)').matches;
     const label = h.status === 'unpaid' ? t("Barcha to'lanmagan cheklar") : h.period === 'all' ? (s.first_at ? t('{0} dan beri', fmtDate(s.first_at)) : '') : `${fmtDate(r.from)}${r.to - r.from > 24 * 60 * MIN ? ` — ${fmtDate(r.to - 1)}` : ''}`;
@@ -255,16 +257,16 @@ Views.history = {
         ${sel('discount', [['', `${t('Chegirma')}: ${t('hammasi')}`], ['yes', t('Chegirmali')], ['no', t('Chegirmasiz')]], h.discount)}
         <div class="scan">${icon('search', 18)}<input type="search" id="h-q" placeholder="${esc(t('Chek raqami, xona yoki ofitsant'))}" value="${esc(h.q)}"></div></div>`;
     const nf = ckFilterCount();
-    const head = `<div class="page-head ck-head"><h1>${t('Cheklar hisoboti')}</h1>
+    const head = `<div class="page-head ck-head"><h1>${lite ? t('Cheklar tarixi') : t('Cheklar hisoboti')}</h1>
         ${h.status === 'unpaid' ? '' : `<div class="seg">${HIST_PERIODS().map(([k, n]) => `<button class="${h.period === k ? 'active' : ''}" data-hp="${k}">${n}</button>`).join('')}</div>`}
         ${h.period === 'custom' && h.status !== 'unpaid' ? `<span class="ck-dates"><input type="date" id="h-from" value="${h.from || localDay()}"> — <input type="date" id="h-to" value="${h.to || localDay()}"></span>` : ''}
         <span class="grow"></span><span class="muted small">${label}</span>
         ${phone ? `<button class="btn ${nf ? 'primary' : ''}" id="h-filters">${icon('list-filter', 18)} ${t('Filtrlar')}${nf ? ` (${nf})` : ''}</button>` : ''}
         ${nf ? `<button class="btn" id="h-clear">${icon('x', 18)} ${t('Filtrlarni tozalash')}</button>` : ''}
-        ${moduleOn('export') ? `<button class="btn primary" id="hist-export" ${s.count ? '' : 'disabled'}>${icon('file-spreadsheet', 18)} Excel</button>` : ''}</div>
+        ${moduleOn('export') && !lite ? `<button class="btn primary" id="hist-export" ${s.count ? '' : 'disabled'}>${icon('file-spreadsheet', 18)} Excel</button>` : ''}</div>
       ${!phone || h.filters ? filters : ''}`;
     const more = d.rows.length < s.count ? `<div id="ck-more" class="ck-more">${icon('loader', 18)} ${t('Yuklanmoqda…')} (${d.rows.length} / ${s.count})</div>` : '';
-    const foot = `<div class="ck-foot ${h.footOpen ? 'full' : ''}" id="ck-foot">
+    const foot = lite ? `<div class="ck-foot"><span><b>${t('Jami')}: ${t('{0} chek', s.count)}</b></span></div>` : `<div class="ck-foot ${h.footOpen ? 'full' : ''}" id="ck-foot">
         <span><b>${t('Jami')}: ${t('{0} chek', s.count)}</b></span><span class="ck-x">${t('{0} mehmon', s.guests)}</span>
         <span class="ck-x">${t('Tannarx')} <b class="num">${num(s.cost)}</b></span><span class="ck-x">${W('Taomlar')} <b class="num">${num(s.subtotal)}</b></span>
         <span class="ck-x">${t('Xizmat')} <b class="num">${num(s.service)}</b></span><span class="ck-x">${t('Chegirma')} <b class="num">${num(s.discount)}</b></span>
@@ -286,17 +288,17 @@ Views.history = {
     }
     return `${head}<div class="card flush ck-card-wrap"><div class="table-wrap"><table class="list ck-table">
         <tr><th>№</th><th>${t('Turi')}</th><th>${t('Ochildi')}</th><th>${t('Yopildi')}</th><th>${roleName('waiter')}</th><th>${isShop() ? t('Mijoz') : t('Stol')}</th>
-          <th class="right">${t('Mehmon')}</th><th class="right">${t('Tannarx')}</th><th class="right">${W('Taomlar')}</th><th class="right">${t('Xizmat')}</th><th class="right">${t('Chegirma')}</th><th class="right">${t('Jami')}</th><th></th></tr>
+          <th class="right">${t('Mehmon')}</th>${lite ? '' : `<th class="right">${t('Tannarx')}</th>`}<th class="right">${W('Taomlar')}</th><th class="right">${t('Xizmat')}</th><th class="right">${t('Chegirma')}</th><th class="right">${t('Jami')}</th><th></th></tr>
         ${d.rows.map((o) => {
           const [c, n] = ckStatus(o);
           const open = h.open === o.id;
           return `<tr class="clickable ck-row ${open ? 'ck-sel' : ''}" data-open="${o.id}"><td><b>${o.id}</b></td>
             <td><span class="chip ${c}">${n}</span>${o.cancelled_count && o.status !== 'cancelled' ? `<br><span class="chip red ck-otkaz" title="${esc(t('Bekor qilingan taomlar'))}">${t('OTKAZ')} ${o.cancelled_count}</span>` : ''}${o.balance > 0 ? `<br><span class="chip orange">${t('Qoldi')} ${num(o.balance)}</span>` : ''}</td>
             <td>${ckTime(o.opened_at)}</td><td>${ckTime(o.closed_at)}</td><td>${esc(o.waiter_name)}</td><td>${ckPlace(o)}</td>
-            <td class="right">${o.guests}</td><td class="right num">${num(o.cost)}</td><td class="right num">${num(o.subtotal)}</td>
+            <td class="right">${o.guests}</td>${lite ? '' : `<td class="right num">${num(o.cost)}</td>`}<td class="right num">${num(o.subtotal)}</td>
             <td class="right num">${ckService(o)}</td><td class="right num">${ckDiscount(o)}</td><td class="right num"><b>${num(o.total)}</b></td>
             <td class="right"><span class="ck-tog ${open ? 'on' : ''}">${icon(open ? 'chevron-up' : 'chevron-down', 18)}</span></td></tr>
-            ${open ? `<tr class="ck-detail"><td colspan="13">${det(o)}</td></tr>` : ''}`;
+            ${open ? `<tr class="ck-detail"><td colspan="${lite ? 12 : 13}">${det(o)}</td></tr>` : ''}`;
         }).join('')}</table></div>${more}</div>${foot}`;
   },
   bind(root, d) {
@@ -1974,8 +1976,9 @@ Views.settings = {
       <h3 style="margin:22px 0 4px">${icon('eye-off', 18)} ${t("Moliya bo'limlari")}</h3>
       <p class="small muted">${t("Hisobot, kirim-chiqim va ish haqini kim ko'rishini siz belgilaysiz. Ish haqini faqat boshliq ko'radi.")}</p>
       ${[['perm_admin_reports', 'shield-check', t('Admin hisobotni ko\'ra oladi')], ['perm_admin_finance', 'shield-check', t('Admin kirim-chiqimni ko\'ra oladi')],
-        ['perm_cashier_reports', 'wallet', t('Kassir hisobotni ko\'ra oladi')], ['perm_cashier_finance', 'wallet', t('Kassir kirim-chiqimni ko\'ra oladi')]]
-        .map(([k, ic, n]) => `<div class="switch-row"><span>${icon(ic, 22)}</span><div class="grow"><b>${n}</b></div><input type="checkbox" name="${k}" ${s[k] ? 'checked' : ''}></div>`).join('')}
+        ['perm_cashier_reports', 'wallet', t('Kassir hisobotni ko\'ra oladi')], ['perm_cashier_finance', 'wallet', t('Kassir kirim-chiqimni ko\'ra oladi')],
+        ['cashier_sums', 'receipt', t("Kassir Cheklar bo'limida umumiy savdo summasini ko'ra oladi"), t("O'chiq bo'lsa kassir faqat cheklar ro'yxatini (ochiq, yopilgan) va har chekning summasini ko'radi; kun yoki oy jami, tannarx va Excel ko'rinmaydi.")]]
+        .map(([k, ic, n, hint]) => `<div class="switch-row"><span>${icon(ic, 22)}</span><div class="grow"><b>${n}</b>${hint ? `<span class="small muted">${hint}</span>` : ''}</div><input type="checkbox" name="${k}" ${s[k] ? 'checked' : ''}></div>`).join('')}
       <div class="switch-row"><span>${icon('lock', 22)}</span><div class="grow"><b>${t("Moliya bo'limiga kirishda parol so'ralsin")}</b>
         <span class="small muted">${t("Yoqilsa, boshliq ham, admin va kassir ham parolni kiritib ochadi. 15 daqiqa ishlatilmasa yana yopiladi.")}</span></div>
         <input type="checkbox" name="finance_lock" ${s.finance_lock ? 'checked' : ''}></div>

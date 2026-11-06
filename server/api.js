@@ -131,6 +131,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     out.service_per_guest = Number(out.service_per_guest) || 0;
     out.demo = out.demo || '0';
     out.waiter_cancel = out.waiter_cancel === '1';
+    // The cashier sees the checks' list; the day's (period's) total takings only when the boss allows.
+    out.cashier_sums = out.cashier_sums === '1';
     out.has_cancel_code = !!out.cancel_code_hash;
     delete out.cancel_code_hash;
     out.auto_lock_minutes = Number(out.auto_lock_minutes) || 0;
@@ -499,7 +501,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   // ---------- Settings ----------
   function updateSettings({ user, body }) {
-    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'receipt_logo_size', 'receipt_group', 'receipt_per_person', 'room_assign', 'delivery_fee', 'big_box_from',
+    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'receipt_logo_size', 'receipt_group', 'receipt_per_person', 'room_assign', 'delivery_fee', 'big_box_from', 'cashier_sums',
       'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo',
       'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', 'cashback_pct', 'qr_order', 'qr_from', 'qr_to',
       'geo_lat', 'geo_lng', 'geo_radius', 'work_from', 'expense_groups', 'staff_types', ...GEO_FLAGS, ...OWNER_SETTINGS];
@@ -581,6 +583,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
         continue;
       }
       if (k === 'waiter_cancel') v = v ? '1' : '0';
+      if (k === 'cashier_sums') v = v ? '1' : '0';
       if (k === 'auto_lock_minutes') v = int(v, 'Avtomatik qulf', { max: 240 });
       if (k === 'service_type' && !['percent', 'per_guest'].includes(v)) throw new HttpError(400, "Xizmat haqi turi noto'g'ri");
       if (k === 'service_per_guest') v = int(v, 'Odam boshiga xizmat haqi', { max: 10_000_000 });
@@ -1843,7 +1846,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   // The cost of the dishes on a check (what they cost the business), cancelled lines left out.
   const COST_OF = "(SELECT COALESCE(SUM(i.cost * (i.qty - i.refunded_qty)), 0) FROM order_items i WHERE i.order_id = o.id AND i.status != 'cancelled')";
-  function listChecks({ query }) {
+  // A cashier without the boss's leave sees each check, not what the period took in total (nor the cost).
+  const hideSums = (user) => user.role === 'cashier' && !settingFlag('cashier_sums');
+  function listChecks({ user, query }) {
     const { where, params, at } = checksWhere(query);
     const limit = Math.min(Number(query.limit) || 100, 500);
     const offset = Math.max(Number(query.offset) || 0, 0);
@@ -1865,6 +1870,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       }
     }
     const out = { rows: rows.map((o) => (o.status === 'open' ? { ...o, ...live(o) } : o)), sums, offset, limit };
+    if (hideSums(user)) {
+      out.rows = out.rows.map(({ cost, ...o }) => o);
+      out.sums = { count: sums.count, first_at: sums.first_at, hidden: true };
+    }
     // The choices for the report's filters (asked once, with the first page).
     if (query.filters) {
       out.filters = {
@@ -1877,7 +1886,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   }
 
   // Excel-friendly CSV (semicolon, UTF-8 BOM) of every check in the filter, with its dishes.
-  function exportChecks({ query }) {
+  function exportChecks({ user, query }) {
+    if (hideSums(user)) throw new HttpError(403, "Cheklarni Excelga olish faqat boshliq ruxsati bilan");
     const { where, params, at } = checksWhere(query);
     const rows = q(`SELECT o.*, r.name room_name, r.number room_number, r.section room_section, w.name waiter_name, c.name cashier_name, ${COST_OF} cost
       ${CHECK_FROM} WHERE ${where} ORDER BY ${at}, o.id`).all(...params)

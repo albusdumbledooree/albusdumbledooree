@@ -2,6 +2,13 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.34.1 — Kassirga cheklar tarixi, umumiy summasiz
+
+- Kassir "Cheklar" bo'limida endi **Cheklar tarixi**ni ko'radi: ochiq va yopilgan cheklar ro'yxati, har chekning o'z summasi va ichidagi taomlar.
+- Kun / hafta / oy bo'yicha umumiy savdo summasi, tannarx ustuni va Excel kassirga ko'rinmaydi (server ham yubormaydi).
+- Boshliq xohlasa yoqib qo'yadi: Sozlamalar → Ruxsatlar → "Kassir Cheklar bo'limida umumiy savdo summasini ko'ra oladi". Standart — o'chiq.
+- Boshliq va admin hammasini avvalgidek ko'radi.
+
 ## 1.34.0 — Yangi biznes turi: Bir martalik idishlar
 
 - Platformada yangi tur: **Bir martalik idishlar** (stakan, konteyner, tarelka, qoshiq-vilka, paket). Namuna mollar bilan ochiladi.

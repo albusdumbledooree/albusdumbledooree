@@ -2889,3 +2889,25 @@ test('disposable tableware: piece / pack / box, three prices, customer tier, sto
   const top = pr.top_qty.find((r) => r.id === cup.id);
   assert.equal(top.qty_text, '17 karobka + 3 pachka + 10 dona');
 });
+
+test("cashier's checks: the list without period totals unless the boss allows", async () => {
+  const boss = await login('ega', 'ega123');
+  const made = await call('POST', '/api/users', boss, { name: 'Kassir Sums', username: 'ksums', password: 'ksums123', role: 'cashier' });
+  assert.equal(made.status, 200, JSON.stringify(made.data));
+  const kassir = await login('ksums', 'ksums123');
+  await call('PUT', '/api/settings', boss, { cashier_sums: false });
+  let r = (await call('GET', '/api/checks?status=all&limit=5', kassir)).data;
+  assert.ok(r.sums.hidden);
+  assert.equal(r.sums.total, undefined);
+  assert.equal(typeof r.sums.count, 'number');
+  assert.ok(r.rows.every((o) => o.cost === undefined && 'total' in o), 'each check keeps its own sum, never the cost');
+  assert.equal((await call('GET', '/api/checks/export?status=all', kassir)).status, 403);
+  // The boss sees everything as before.
+  const b = (await call('GET', '/api/checks?status=all&limit=5', boss)).data;
+  assert.ok(!b.sums.hidden && typeof b.sums.total === 'number');
+  // Allowed: the cashier sees the totals too.
+  await call('PUT', '/api/settings', boss, { cashier_sums: true });
+  r = (await call('GET', '/api/checks?status=all&limit=5', kassir)).data;
+  assert.ok(!r.sums.hidden && typeof r.sums.total === 'number');
+  await call('PUT', '/api/settings', boss, { cashier_sums: false });
+});
