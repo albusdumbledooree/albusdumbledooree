@@ -366,7 +366,10 @@ tr.clickable:hover td { background: var(--panel-2); }
 .tile::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--line); }
 .tile:active { transform: scale(.98); }
 .tile .t-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
-.tile .no { font-size: 27px; font-weight: 850; line-height: 1; letter-spacing: -.02em; }
+.tile .no { font-size: 22px; font-weight: 850; line-height: 1; letter-spacing: -.02em; justify-self: start; align-self: flex-start;
+  /* The room number in its own dark box, so it is never read together with the sum next to it ("1" + "172 000"). */
+  background: var(--brand); color: var(--panel); border-radius: 10px; min-width: 40px; height: 40px; padding: 0 8px; display: inline-grid; place-items: center; }
+.tile .amt .cur { font-size: 11px; font-weight: 700; color: var(--muted); margin-left: 3px; }
 .tile .amt { font-size: 15.5px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .tile .plus { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--panel-2); color: var(--muted); }
 .tile .nm { font-weight: 700; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

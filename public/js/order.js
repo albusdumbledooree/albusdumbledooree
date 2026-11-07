@@ -37,7 +37,7 @@ function roomTile(r) {
   // Another waiter's room: greyed out, with whose it is and the sum, only to look at.
   const other = r.mine === false;
   return `<button class="tile st-${st} ${other ? 'other' : ''}" data-room="${r.id}" ${other ? `data-other="${o ? 1 : 0}" title="${esc(t('Sizga biriktirilmagan'))}"` : ''}>
-    <span class="t-top"><span class="no">${esc(r.number)}</span>${o ? `<span class="amt">${num(o.subtotal)}</span>` : `<span class="plus">${icon(other ? 'lock' : 'plus', other ? 16 : 20)}</span>`}</span>
+    <span class="t-top"><span class="no">${esc(r.number)}</span>${o ? `<span class="amt">${num(o.subtotal)}<span class="cur">${esc(App.settings.currency)}</span></span>` : `<span class="plus">${icon(other ? 'lock' : 'plus', other ? 16 : 20)}</span>`}</span>
     <span class="nm">${esc(r.name)}</span>
     <span class="meta">${o
       ? `${App.user.role !== 'waiter' || other ? `<span>${icon('user-round', 14)} ${esc(o.waiter_name.split(' ').pop())}</span>` : ''}<span>${icon('clock', 14)} <b data-since="${o.opened_at}"></b></span><span>${icon('users', 14)} ${o.guests}</span>`
@@ -51,7 +51,7 @@ function takeawayTile(o) {
   const st = o.items.ready ? 'ready' : o.bill_requested ? 'bill' : o.print_count ? 'printed' : 'busy';
   const cooking = o.items.new + o.items.cooking;
   return `<button class="tile st-${st}" data-order="${o.id}">
-    <span class="t-top"><span class="no">#${o.id}</span><span class="amt">${num(o.total)}</span></span>
+    <span class="t-top"><span class="no">#${o.id}</span><span class="amt">${num(o.total)}<span class="cur">${esc(App.settings.currency)}</span></span></span>
     <span class="nm">${o.delivery ? `${icon('truck', 14)} ` : ''}${esc(o.label || (o.delivery ? t('Dostavka') : t('Olib ketish')))}</span>
     ${o.delivery && o.address ? `<span class="meta"><span>${icon('map-pin', 13)} ${esc(o.address)}</span></span>` : ''}
     <span class="meta">${App.user.role !== 'waiter' ? `<span>${icon('user-round', 14)} ${esc(o.waiter_name.split(' ').pop())}</span>` : ''}<span>${icon('clock', 14)} <b data-since="${o.opened_at}"></b></span>

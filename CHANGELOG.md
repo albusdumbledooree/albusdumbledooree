@@ -2,6 +2,11 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.35.1 — Xona raqami summa bilan aralashmaydi
+
+- Xona (stol) raqami endi qora katak ichida turadi, summaning oxirida "so'm" yoziladi: "1" va "172 000" endi "1 172 000" bo'lib o'qilmaydi.
+- Olib ketish va dostavka kartochkalarida ham shunday. Qorong'i rejimda katak och rangda.
+
 ## 1.35.0 — flowi.uz: dastur rasmlari o'rniga grafika
 
 - Saytdagi 16 ta dastur ekrani rasmi olib tashlandi; o'rniga oddiy, tushunarli grafikalar: buyurtma yo'li (Ofitsant → Oshxona → Kassa → Boshliq), rangli stollar, oshxona qog'ozi, chek, QR-menyu, "Bugun" ro'yxati, mol keldi, skaner, sof foyda tenglamasi.
