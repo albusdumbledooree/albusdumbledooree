@@ -2254,7 +2254,7 @@ test('search engines: Uzbek and Russian front pages, the site map, robots, verif
   const nf = await get('/no-such-page');
   assert.equal(nf.status, 404); assert.match(await nf.text(), /noindex/);
   assert.equal((await get('/c/demo')).status, 200);
-  assert.equal((await get('/landing/rooms.jpg')).status, 200);
+  assert.equal((await get('/landing/og.png')).status, 200);
   // Verification codes: the whole <meta> tag or the code alone; nonsense refused.
   assert.equal((await call('PUT', '/api/platform/settings', admin, { google_verify: 'not a code!' })).status, 400);
   const st = (await call('PUT', '/api/platform/settings', admin, { google_verify: '<meta name="google-site-verification" content="Abc_123-xyzXYZ" />', yandex_verify: 'a1b2c3d4e5f6' })).data;

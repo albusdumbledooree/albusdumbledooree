@@ -2,6 +2,13 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.35.0 — flowi.uz: dastur rasmlari o'rniga grafika
+
+- Saytdagi 16 ta dastur ekrani rasmi olib tashlandi; o'rniga oddiy, tushunarli grafikalar: buyurtma yo'li (Ofitsant → Oshxona → Kassa → Boshliq), rangli stollar, oshxona qog'ozi, chek, QR-menyu, "Bugun" ro'yxati, mol keldi, skaner, sof foyda tenglamasi.
+- Bosh qismda Choyxona birinchi, yonida Restoran, Fast food, Do'kon — hammaga mos, choyxonaga yo'naltirilgan.
+- Grafikalardagi hamma yozuvlar o'zbek va rus tilida.
+- Sayt ancha yengil (1,9 MB rasm o'rniga 0,14 MB); ijtimoiy tarmoqda havola rasmi ham yangi grafika.
+
 ## 1.34.2 — Mol kartasi telefonda tushunarliroq
 
 - Pachka va karobka yozilmagan (faqat dona) molda ortiqcha "+ dona" katagi ko'rinmaydi.

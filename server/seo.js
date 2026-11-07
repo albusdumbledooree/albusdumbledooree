@@ -93,7 +93,7 @@ function createSeo({ publicDir, publicInfo, verify }) {
     const app = {
       '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'FLOWI', url, inLanguage: lang,
       applicationCategory: 'BusinessApplication', operatingSystem: 'Windows, Android, iOS, Web', description: h.description,
-      image: `${origin}/landing/rooms.jpg`,
+      image: `${origin}/landing/og.png`,
       offers: info.plans.map((p) => ({ '@type': 'Offer', name: p.name, price: String(p.price), priceCurrency: 'UZS' })),
     };
     const org = { '@context': 'https://schema.org', '@type': 'Organization', name: 'FLOWI', url: `${origin}/`, logo: `${origin}/icon-512.png` };
@@ -115,7 +115,7 @@ function createSeo({ publicDir, publicInfo, verify }) {
       .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${esc(h.description)}">`)
       .replace(/<meta property="og:title" content="[^"]*">/, `<meta property="og:title" content="${esc(h.title)}">`)
       .replace(/<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${esc(h.og)}">`)
-      .replace(/<meta property="og:image" content="[^"]*">/, `<meta property="og:image" content="${esc(origin)}/landing/rooms.jpg">`)
+      .replace(/<meta property="og:image" content="[^"]*">/, `<meta property="og:image" content="${esc(origin)}/landing/og.png">`)
       .replace('<div class="wrap plans" id="plans"></div>', `<div class="wrap plans" id="plans">${plansHtml(lang)}</div>`);
     const head = [
       `<link rel="canonical" href="${esc(url)}">`,

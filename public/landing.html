@@ -8,7 +8,7 @@
   <meta name="description" content="FLOWI: choyxona, restoran, fast food, do'kon va eshik do'konlari uchun. Buyurtma, QR-menyu, oshxona, kassa, ombor, qarz daftari, sof foyda va kunlik eslatmalar — bitta dasturda. 14 kun bepul.">
   <meta property="og:title" content="FLOWI — choyxona, restoran va do'kon uchun boshqaruv tizimi">
   <meta property="og:description" content="Buyurtma, oshxona, kassa, hisobot va ish haqi — bitta dasturda. 14 kun bepul sinab ko'ring.">
-  <meta property="og:image" content="/landing/rooms.jpg">
+  <meta property="og:image" content="/landing/og.png">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <style>
@@ -228,6 +228,84 @@
       .hero .ctas .btn { width: 100%; }
       .plan .price { font-size: 32px; }
     }
+
+    /* Illustrations (instead of program screenshots) */
+    .ill { --n: #071726; --g: #16a34a; }
+    .ill-hero { margin-top: 48px; padding-bottom: 64px; }
+    .ill-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 22px; }
+    .ill-chips > span { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); color: #fff; border-radius: 999px; padding: 6px 14px; font-weight: 700; font-size: 14px; }
+    .ill-chips > span.main { background: #fff; color: var(--n); }
+    .ill-flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+    .ill-card { background: #fff; color: var(--n); border-radius: 20px; padding: 18px; box-shadow: 0 24px 50px -24px rgba(0,0,0,.55); position: relative; display: flex; flex-direction: column; text-align: left; }
+    .ill-hero .ill-card { min-height: 250px; }
+    .ill-flow .ill-card:not(:last-child)::after { content: ""; position: absolute; right: -17px; top: 50%; width: 16px; height: 2px; background: repeating-linear-gradient(90deg, #9fb6f7 0 4px, transparent 4px 8px); }
+    .ill .ill-who { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 15px; }
+    .ill .ill-who i { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-style: normal; font-size: 22px; flex: none; }
+    .ill .big { font-size: 13px; color: var(--muted); margin-top: auto; padding-top: 12px; font-weight: 600; }
+    .ill .paper { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 12px; font-size: 13.5px; box-shadow: 0 6px 14px -8px rgba(15,23,42,.3); }
+    .ill .paper .l { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+    .ill .paper .l:last-child { border: 0; }
+    .ill .zig { position: relative; padding-bottom: 16px; }
+    .ill .zig::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 10px; background: linear-gradient(-45deg, #f4f6f9 5px, transparent 0) 0 5px / 10px 10px repeat-x, linear-gradient(45deg, #f4f6f9 5px, transparent 0) 0 5px / 10px 10px repeat-x; }
+    .ill .pill { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 3px 9px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+    .ill .pg { background: #dcfce7; color: #15803d; } .ill .po { background: #fef3c7; color: #b45309; } .ill .pb { background: var(--blue-soft); color: var(--blue); }
+    .ill .pn { background: #f1f5f9; color: #64748b; } .ill .pv { background: #f5f3ff; color: #7c3aed; }
+    .ill .pays, .ill .legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+    .ill .bubble { background: var(--blue-soft); border-radius: 14px 14px 14px 4px; padding: 10px 12px; margin-top: 12px; font-size: 13.5px; line-height: 1.45; }
+    .ill .bubble b { display: block; font-size: 18px; color: var(--n); }
+    .ill .gr { color: var(--g); }
+    .ill .or { color: #c2410c; }
+    .ill .tg { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 700; margin-top: 10px; }
+    .ill .tables { display: grid; grid-template-columns: repeat(3, minmax(0, 60px)); justify-content: center; gap: 12px; margin-top: 14px; }
+    .ill .tables span { aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; font-weight: 900; font-size: 15px; border: 3px solid; }
+    .ill .t-free { border-color: #cbd5e1; color: #94a3b8; } .ill .t-busy { border-color: #f59e0b; background: #fffbeb; color: #b45309; }
+    .ill .t-ready { border-color: #16a34a; background: #ecfdf3; color: #15803d; } .ill .t-bill { border-color: #7c3aed; background: #f5f3ff; color: #7c3aed; }
+    .ill .btns { display: flex; gap: 8px; margin-top: 12px; }
+    .ill .btns span { flex: 1; text-align: center; border-radius: 10px; padding: 9px 8px; font-weight: 800; font-size: 13.5px; }
+    .ill .b1 { background: var(--blue); color: #fff; } .ill .b2 { background: #dcfce7; color: #15803d; } .ill .b3 { background: #fee2e2; color: #b91c1c; }
+    .ill .todo { display: grid; gap: 8px; margin-top: 12px; font-size: 14px; font-weight: 600; }
+    .ill .todo > div { background: #f8fafc; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+    .ill .todo .done { color: #15803d; background: #f0fdf4; text-decoration: line-through; }
+    .ill .todo .warn { color: #b45309; background: #fffbeb; }
+    .ill-panel { background: linear-gradient(160deg, #f4f6f9, #e8eefd); border-radius: 24px; padding: 40px 28px; min-height: 360px; display: flex; align-items: center; justify-content: center; gap: 24px; position: relative; overflow: hidden; }
+    .ill-panel .ill-card { width: min(340px, 100%); }
+    .ill-panel .float { position: absolute; background: #fff; border-radius: 14px; padding: 10px 14px; box-shadow: 0 14px 30px -14px rgba(15,23,42,.45); font-weight: 800; font-size: 14px; display: flex; align-items: center; gap: 8px; color: var(--n); }
+    .ill-panel .f-tr { right: 18px; top: 18px; } .ill-panel .f-bl { left: 18px; bottom: 18px; }
+    .ill .eq, .ill .kpis-ill { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; font-weight: 800; }
+    .ill .bx { background: #fff; border-radius: 14px; padding: 10px 14px; text-align: center; box-shadow: 0 10px 24px -14px rgba(15,23,42,.4); }
+    .ill .bx small { display: block; font-size: 12px; color: var(--muted); font-weight: 700; }
+    .ill .bx b { font-size: 19px; }
+    .ill .bx.res { background: var(--g); color: #fff; } .ill .bx.res small { color: #dcfce7; }
+    .ill-panel:has(.kpis-ill), .ill-panel:has(.eq) { flex-direction: column; }
+    .ill .bars { display: flex; align-items: flex-end; gap: 10px; height: 120px; margin-top: 22px; justify-content: center; }
+    .ill .bars i { width: 28px; border-radius: 8px 8px 0 0; background: linear-gradient(#5b8cff, #2156e8); }
+    .ill .bars i:last-child { background: linear-gradient(#4ade80, #16a34a); }
+    .ill .split { display: flex; width: min(340px, 100%); border-radius: 10px; overflow: hidden; margin-top: 16px; font-size: 12px; font-weight: 800; color: #fff; }
+    .ill .split span { padding: 6px 8px; white-space: nowrap; overflow: hidden; }
+    .ill .sp-c { background: #16a34a; } .ill .sp-k { background: #2156e8; } .ill .sp-t { background: #7c3aed; }
+    .ill .chain { display: flex; align-items: center; gap: 8px; justify-content: center; width: 100%; }
+    .ill .ch { background: #fff; border-radius: 16px; padding: 14px 10px; text-align: center; box-shadow: 0 12px 28px -16px rgba(15,23,42,.45); font-size: 26px; flex: 1 1 0; min-width: 0; max-width: 160px; display: grid; gap: 2px; }
+    .ill .ch b { font-size: 15px; } .ill .ch small { font-size: 12.5px; color: var(--muted); font-weight: 700; }
+    .ill .ch.res { background: var(--g); color: #fff; } .ill .ch.res small { color: #dcfce7; }
+    .ill .arr { font-size: 22px; color: #94a3b8; font-weight: 900; }
+    .ill .qr-tent { background: #fff; border-radius: 18px; padding: 16px; text-align: center; box-shadow: 0 18px 36px -18px rgba(15,23,42,.5); display: grid; gap: 8px; justify-items: center; width: 180px; }
+    .ill .qr-box svg { width: 126px; height: 126px; display: block; }
+    .ill .qr-tent b { font-size: 13px; line-height: 1.3; } .ill .qr-tent small { color: var(--muted); font-weight: 700; }
+    .ill .mini-phone { width: 190px; background: #fff; border: 7px solid #0b0f14; border-radius: 28px; padding: 12px 10px; box-shadow: 0 24px 48px -20px rgba(15,23,42,.6); display: grid; gap: 10px; }
+    .ill .mp-h { font-size: 15px; } .ill .mp-g { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .ill .mp-g > span { background: #f8fafc; border: 1px solid var(--line); border-radius: 12px; padding: 8px 6px; text-align: center; font-size: 22px; display: grid; gap: 2px; font-weight: 800; }
+    .ill .mp-g > span { font-size: 12px; } .ill .mp-g > span::first-letter { font-size: 22px; }
+    .ill .mp-g em { font-style: normal; font-weight: 700; color: var(--muted); font-size: 11.5px; }
+    .ill .mp-cart { background: var(--blue); color: #fff; border-radius: 12px; padding: 9px; text-align: center; font-weight: 800; font-size: 13px; }
+    .ill .scan .cam { height: 190px; background: #0f172a; border-radius: 16px; position: relative; display: grid; place-items: center; overflow: hidden; }
+    .ill .scan .code { display: flex; gap: 3px; background: #fff; padding: 14px 12px; border-radius: 6px; }
+    .ill .scan .code i { width: 4px; height: 56px; background: #0f172a; }
+    .ill .scan .code i:nth-child(3n) { width: 2px; } .ill .scan .code i:nth-child(4n) { width: 6px; }
+    .ill .scan .laser { position: absolute; left: 10%; right: 10%; top: 50%; height: 2px; background: #ef4444; box-shadow: 0 0 12px 2px rgba(239,68,68,.8); }
+    .ill-panel.wide { min-height: 0; padding: 30px 20px; }
+    .shop-shot .ill-panel { margin-bottom: 12px; }
+    @media (max-width: 900px) { .ill-flow { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 12px; padding-bottom: 8px; } .ill-flow .ill-card { flex: 0 0 min(300px, 80%); scroll-snap-align: center; } .ill-flow .ill-card::after { display: none; } }
+    @media (max-width: 560px) { .ill-panel { padding: 22px 14px; min-height: 0; flex-wrap: wrap; } .ill-panel .float { position: static; } .ill-panel .ill-card { width: 100%; } .ill .ch { min-width: 0; flex: 1 1 28%; } .ill .arr { display: none; } }
   </style>
 </head>
 <body>
@@ -259,10 +337,14 @@
       <a class="btn ghost" href="#narxlar" data-t="hero_cta2">Narxlarni ko'rish</a>
     </div>
     <p class="note" data-t="hero_note">O'rnatish shart emas · Kompyuter, planshet va telefonda ishlaydi · Kassa uchun Windows dasturi · O'zbek va rus tilida</p>
-    <div class="shots">
-      <div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/rooms.jpg" alt="FLOWI: zal va xonalar holati" width="1600" height="960"></div>
-      <img class="phone" src="/landing/phone-order.jpg" alt="Ofitsant telefoni" width="780" height="1688">
-    </div>
+<div class="ill ill-hero" aria-hidden="true">
+ <div class="ill-chips"><span class="main">🫖 <span data-t="il_c1">Choyxona</span></span><span>🍽️ <span data-t="il_c2">Restoran va kafe</span></span><span>🍔 <span data-t="il_c3">Fast food</span></span><span>🛒 <span data-t="il_c4">Do'kon</span></span></div>
+ <div class="ill-flow">
+  <div class="ill-card"><div class="ill-who"><i style="background:#e8eefd">📱</i><span data-t="il_h1">Ofitsant</span></div><div class="tables"><span class="t-busy">1</span><span class="t-ready">2</span><span class="t-free">3</span><span class="t-bill">4</span><span class="t-busy">5</span><span class="t-free">6</span></div><span class="big" data-t="il_h1b">Buyurtma telefondan — 2 soniyada</span></div>
+  <div class="ill-card"><div class="ill-who"><i style="background:#fef3c7">👨‍🍳</i><span data-t="il_h2">Oshxona</span></div><div class="paper"><div class="l"><span data-t="il_room3"><b>3-xona</b></span><span class="pill po">⏱ 12 <span data-t="il_min">daq</span></span></div><div class="l"><span data-t="il_d1">Lag'mon</span><b>×2</b></div><div class="l"><span data-t="il_d2">Qozon kabob</span><b>×1</b></div></div><span class="big" data-t="il_h2b">Ekranga va printerga o'zi tushadi</span></div>
+  <div class="ill-card"><div class="ill-who"><i style="background:#dcfce7">🧾</i><span data-t="il_h3">Kassa</span></div><div class="paper zig"><div class="l"><span data-t="il_food">Taomlar</span><b>134 000</b></div><div class="l"><span data-t="il_svc">Xizmat 10%</span><b>13 400</b></div><div class="l"><span data-t="il_tot"><b>JAMI</b></span><b>147 400</b></div></div><div class="pays"><span class="pill pg" data-t="il_m1">Naqd</span><span class="pill pb" data-t="il_m2">Karta</span><span class="pill pb" data-t="il_m3">O'tkazma</span></div><span class="big" data-t="il_h3b">Chek bir bosishda yopiladi</span></div>
+  <div class="ill-card"><div class="ill-who"><i style="background:#ede9fe">👤</i><span data-t="il_h4">Siz — boshliq</span></div><div class="bubble"><span data-t="il_today">Bugungi savdo</span><b>4 850 000 <span data-t="il_som">so'm</span></b><span data-t="il_net">Sof foyda:</span> <strong class="gr">+1 200 000</strong></div><div class="tg">✈️ Telegram · 22:00</div><span class="big" data-t="il_h4b">Qayerda bo'lsangiz ham bilib turasiz</span></div>
+ </div></div>
   </div>
 </section>
 
@@ -304,22 +386,32 @@
       <button data-step="3"><span class="n">4</span><span data-t="st4">Hisobot</span></button>
     </div>
     <div class="stage" data-pane="0">
-      <div class="media phone-pair"><img src="/landing/phone-rooms.jpg" alt="" loading="lazy"><img src="/landing/phone-order.jpg" alt="" loading="lazy"></div>
+      <div class="media"><div class="ill ill-panel" aria-hidden="true"><div class="ill-card"><div class="ill-who"><i style="background:#e8eefd">📱</i><span data-t="il_s1t">Ofitsant telefoni</span></div><div class="tables"><span class="t-busy">1</span><span class="t-ready">2</span><span class="t-free">3</span><span class="t-bill">4</span><span class="t-busy">5</span><span class="t-free">6</span></div>
+ <div class="legend"><span class="pill pn" data-t="il_lg1">Bo'sh</span><span class="pill po" data-t="il_lg2">Band</span><span class="pill pg" data-t="il_lg3">Taom tayyor</span><span class="pill pv" data-t="il_lg4">Hisob</span></div></div>
+ <div class="float f-tr">🔔 <span data-t="il_s1f">2-stol: taom tayyor!</span></div></div></div>
       <div><h3 data-t="f1_t">Buyurtma — telefondan</h3><p data-t="f1_p">Ofitsant o'z xonalarini ko'radi, taomni rangli tugmalardan tanlaydi va bir bosishda yuboradi.</p>
         <ul><li data-t="f1_1">Xona holati rangda: bo'sh, band, taom tayyor, hisob so'raldi, bron</li><li data-t="f1_2">"Taom tayyor" — ovozli xabar va telefonga bildirishnoma</li><li data-t="f1_3">Mehmonlar soni, izoh, olib ketish</li></ul></div>
     </div>
     <div class="stage" data-pane="1" hidden>
-      <div class="media"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/kitchen.jpg" alt="" loading="lazy"></div></div>
+      <div class="media"><div class="ill ill-panel" aria-hidden="true"><div class="ill-card"><div class="ill-who"><i style="background:#fef3c7">👨‍🍳</i><span data-t="il_s2t">Oshxona ekrani</span></div>
+ <div class="paper"><div class="l"><span data-t="il_room3b"><b>3-xona</b></span><span class="pill po">⏱ 08:12</span></div><div class="l"><span data-t="il_d1b">Lag'mon</span><b>×2</b></div><div class="l"><span data-t="il_d2b">Qozon kabob</span><b>×1</b></div><div class="l"><span data-t="il_d3b">Achchiq-chuchuk</span><b>×1</b></div></div>
+ <div class="btns"><span class="b1">✓ <span data-t="il_acc">Qabul qilish</span></span><span class="b2"><span data-t="il_rdy">Tayyor</span></span></div></div>
+ <div class="float f-tr">🖨️ <span data-t="il_s2f">Oshxona printeri</span></div><div class="float f-bl">⛔ <span data-t="il_s2g">Stop-list: Manti tugadi</span></div></div></div>
       <div><h3 data-t="f2_t">Oshxona darhol ko'radi</h3><p data-t="f2_p">Yangi buyurtma oshxona ekraniga va printerga o'zi tushadi. Oshpaz "Qabul qilish" va "Tayyor" ni bosadi.</p>
         <ul><li data-t="f2_1">Har bir taomning tayyorlanish vaqti va kechikish ogohlantirishi</li><li data-t="f2_2">Stop-list: tugagan taom ofitsantda ko'rinmaydi</li><li data-t="f2_3">Uch rejim: to'liq, faqat xabar yoki o'chiq</li></ul></div>
     </div>
     <div class="stage" data-pane="2" hidden>
-      <div class="media"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/order.jpg" alt="" loading="lazy"></div></div>
+      <div class="media"><div class="ill ill-panel" aria-hidden="true"><div class="ill-card"><div class="ill-who"><i style="background:#dcfce7">🧾</i><span data-t="il_s3t">Chek #148</span></div>
+ <div class="paper zig"><div class="l"><span data-t="il_d1c">Lag'mon ×2</span><b>60 000</b></div><div class="l"><span data-t="il_d2c">Qozon kabob ×1</span><b>48 000</b></div><div class="l"><span data-t="il_d4c">Choy ×3</span><b>15 000</b></div><div class="l"><span data-t="il_svc2">Xizmat 10%</span><b>12 300</b></div><div class="l"><span data-t="il_tot2"><b>JAMI</b></span><b>135 300</b></div></div></div>
+ <div class="float f-tr">🖨️ <span data-t="il_s3f">Chop etildi</span></div><div class="float f-bl">💵 <span data-t="il_s3g">Qaytim: 14 700</span></div></div></div>
       <div><h3 data-t="f3_t">Kassa — bir bosishda</h3><p data-t="f3_p">Kassir chekni ko'radi, to'lov turini tanlaydi va chop etadi. Qaytim o'zi hisoblanadi.</p>
         <ul><li data-t="f3_1">Naqd, karta, o'tkazma yoki aralash to'lov</li><li data-t="f3_2">Xizmat haqi (foiz yoki kishi boshiga) va chegirma</li><li data-t="f3_3">Chekda sizning logotipingiz, qalin va aniq shrift</li><li data-t="f3_4">Har bir bo'lim o'z printeriga: oshxona, bar, somsaxona. Ikkinchi kompyuterdagi chek ham kassa printeridan chiqadi</li></ul></div>
     </div>
     <div class="stage" data-pane="3" hidden>
-      <div class="media"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/reports.jpg" alt="" loading="lazy"></div></div>
+      <div class="media"><div class="ill ill-panel" aria-hidden="true"><div class="kpis-ill">
+ <div class="bx"><small data-t="il_k1">Savdo</small><b>4,85 mln</b></div><div class="bx"><small data-t="il_k2">Mehmonlar</small><b>126</b></div><div class="bx res"><small data-t="il_k3">Sof foyda</small><b>1,2 mln</b></div></div>
+ <div class="bars"><i style="height:38%"></i><i style="height:52%"></i><i style="height:45%"></i><i style="height:66%"></i><i style="height:58%"></i><i style="height:82%"></i><i style="height:100%"></i></div>
+ <div class="split"><span style="width:58%" class="sp-c"><span data-t="il_m1b">Naqd</span> 58%</span><span style="width:30%" class="sp-k"><span data-t="il_m2b">Karta</span> 30%</span><span style="width:12%" class="sp-t">12%</span></div></div></div>
       <div><h3 data-t="f4_t">Siz — foydani ko'rasiz</h3><p data-t="f4_p">Bugun, hafta yoki oy bo'yicha kirim, chiqim, foyda, mehmonlar va to'lov turlari.</p>
         <ul><li data-t="f4_1">Har bir chek tarixi va Excelga yuklab olish</li><li data-t="f4_2">Xarajatlar va kassa smenasi</li><li data-t="f4_3">Moliya bo'limini parol bilan yopish mumkin</li></ul></div>
     </div>
@@ -341,12 +433,18 @@
     </div>
     <div class="rows">
       <div class="row">
-        <div class="media phones"><img src="/landing/phone-qr.jpg" alt="" loading="lazy" width="780" height="1688"><img src="/landing/phone-qr-cart.jpg" alt="" loading="lazy" width="780" height="1688"></div>
+        <div class="media"><div class="ill ill-panel" aria-hidden="true"><div class="qr-tent"><div class="qr-box"><svg viewBox="0 0 126 126" width="126" height="126" aria-hidden="true"><g fill="#071726"><rect x="48" y="0" width="6" height="6"/><rect x="54" y="0" width="6" height="6"/><rect x="66" y="0" width="6" height="6"/><rect x="48" y="6" width="6" height="6"/><rect x="54" y="6" width="6" height="6"/><rect x="66" y="6" width="6" height="6"/><rect x="72" y="6" width="6" height="6"/><rect x="48" y="12" width="6" height="6"/><rect x="54" y="12" width="6" height="6"/><rect x="60" y="12" width="6" height="6"/><rect x="72" y="12" width="6" height="6"/><rect x="48" y="18" width="6" height="6"/><rect x="72" y="18" width="6" height="6"/><rect x="54" y="24" width="6" height="6"/><rect x="66" y="24" width="6" height="6"/><rect x="72" y="24" width="6" height="6"/><rect x="48" y="30" width="6" height="6"/><rect x="54" y="30" width="6" height="6"/><rect x="66" y="30" width="6" height="6"/><rect x="54" y="36" width="6" height="6"/><rect x="66" y="36" width="6" height="6"/><rect x="72" y="36" width="6" height="6"/><rect x="48" y="42" width="6" height="6"/><rect x="60" y="42" width="6" height="6"/><rect x="66" y="42" width="6" height="6"/><rect x="0" y="48" width="6" height="6"/><rect x="6" y="48" width="6" height="6"/><rect x="24" y="48" width="6" height="6"/><rect x="54" y="48" width="6" height="6"/><rect x="66" y="48" width="6" height="6"/><rect x="72" y="48" width="6" height="6"/><rect x="84" y="48" width="6" height="6"/><rect x="96" y="48" width="6" height="6"/><rect x="0" y="54" width="6" height="6"/><rect x="24" y="54" width="6" height="6"/><rect x="42" y="54" width="6" height="6"/><rect x="54" y="54" width="6" height="6"/><rect x="84" y="54" width="6" height="6"/><rect x="90" y="54" width="6" height="6"/><rect x="102" y="54" width="6" height="6"/><rect x="108" y="54" width="6" height="6"/><rect x="114" y="54" width="6" height="6"/><rect x="120" y="54" width="6" height="6"/><rect x="0" y="60" width="6" height="6"/><rect x="12" y="60" width="6" height="6"/><rect x="18" y="60" width="6" height="6"/><rect x="24" y="60" width="6" height="6"/><rect x="36" y="60" width="6" height="6"/><rect x="42" y="60" width="6" height="6"/><rect x="72" y="60" width="6" height="6"/><rect x="78" y="60" width="6" height="6"/><rect x="84" y="60" width="6" height="6"/><rect x="102" y="60" width="6" height="6"/><rect x="108" y="60" width="6" height="6"/><rect x="114" y="60" width="6" height="6"/><rect x="120" y="60" width="6" height="6"/><rect x="12" y="66" width="6" height="6"/><rect x="18" y="66" width="6" height="6"/><rect x="24" y="66" width="6" height="6"/><rect x="30" y="66" width="6" height="6"/><rect x="72" y="66" width="6" height="6"/><rect x="102" y="66" width="6" height="6"/><rect x="108" y="66" width="6" height="6"/><rect x="114" y="66" width="6" height="6"/><rect x="0" y="72" width="6" height="6"/><rect x="6" y="72" width="6" height="6"/><rect x="12" y="72" width="6" height="6"/><rect x="18" y="72" width="6" height="6"/><rect x="24" y="72" width="6" height="6"/><rect x="30" y="72" width="6" height="6"/><rect x="36" y="72" width="6" height="6"/><rect x="42" y="72" width="6" height="6"/><rect x="48" y="72" width="6" height="6"/><rect x="54" y="72" width="6" height="6"/><rect x="60" y="72" width="6" height="6"/><rect x="78" y="72" width="6" height="6"/><rect x="84" y="72" width="6" height="6"/><rect x="90" y="72" width="6" height="6"/><rect x="96" y="72" width="6" height="6"/><rect x="102" y="72" width="6" height="6"/><rect x="120" y="72" width="6" height="6"/><rect x="54" y="78" width="6" height="6"/><rect x="60" y="78" width="6" height="6"/><rect x="66" y="78" width="6" height="6"/><rect x="72" y="78" width="6" height="6"/><rect x="84" y="78" width="6" height="6"/><rect x="90" y="78" width="6" height="6"/><rect x="108" y="78" width="6" height="6"/><rect x="120" y="78" width="6" height="6"/><rect x="72" y="84" width="6" height="6"/><rect x="78" y="84" width="6" height="6"/><rect x="84" y="84" width="6" height="6"/><rect x="108" y="84" width="6" height="6"/><rect x="114" y="84" width="6" height="6"/><rect x="78" y="90" width="6" height="6"/><rect x="90" y="90" width="6" height="6"/><rect x="96" y="90" width="6" height="6"/><rect x="102" y="90" width="6" height="6"/><rect x="108" y="90" width="6" height="6"/><rect x="114" y="90" width="6" height="6"/><rect x="54" y="96" width="6" height="6"/><rect x="78" y="96" width="6" height="6"/><rect x="84" y="96" width="6" height="6"/><rect x="90" y="96" width="6" height="6"/><rect x="96" y="96" width="6" height="6"/><rect x="102" y="96" width="6" height="6"/><rect x="48" y="102" width="6" height="6"/><rect x="66" y="102" width="6" height="6"/><rect x="96" y="102" width="6" height="6"/><rect x="102" y="102" width="6" height="6"/><rect x="114" y="102" width="6" height="6"/><rect x="54" y="108" width="6" height="6"/><rect x="60" y="108" width="6" height="6"/><rect x="78" y="108" width="6" height="6"/><rect x="84" y="108" width="6" height="6"/><rect x="90" y="108" width="6" height="6"/><rect x="108" y="108" width="6" height="6"/><rect x="54" y="114" width="6" height="6"/><rect x="66" y="114" width="6" height="6"/><rect x="72" y="114" width="6" height="6"/><rect x="102" y="114" width="6" height="6"/><rect x="120" y="114" width="6" height="6"/><rect x="48" y="120" width="6" height="6"/><rect x="54" y="120" width="6" height="6"/><rect x="60" y="120" width="6" height="6"/><rect x="72" y="120" width="6" height="6"/><rect x="78" y="120" width="6" height="6"/><rect x="84" y="120" width="6" height="6"/><rect x="96" y="120" width="6" height="6"/><rect x="102" y="120" width="6" height="6"/><rect x="120" y="120" width="6" height="6"/></g><rect x="0" y="0" width="42" height="42" fill="#071726"/><rect x="6" y="6" width="30" height="30" fill="#fff"/><rect x="12" y="12" width="18" height="18" fill="#071726"/><rect x="84" y="0" width="42" height="42" fill="#071726"/><rect x="90" y="6" width="30" height="30" fill="#fff"/><rect x="96" y="12" width="18" height="18" fill="#071726"/><rect x="0" y="84" width="42" height="42" fill="#071726"/><rect x="6" y="90" width="30" height="30" fill="#fff"/><rect x="12" y="96" width="18" height="18" fill="#071726"/></svg></div><b data-t="il_q1">Menyuni ko'rish uchun skanerlang</b><small>4-<span data-t="il_q1r">stol</span></small></div>
+ <div class="mini-phone"><div class="mp-h"><b data-t="il_q2">Menyu</b></div>
+  <div class="mp-g"><span>🍜<em><span data-t="il_q3">Lag'mon</span></em>30 000</span><span>🍢<em><span data-t="il_q4">Kabob</span></em>25 000</span><span>🥗<em><span data-t="il_q5">Salat</span></em>18 000</span><span>🫖<em><span data-t="il_q6">Choy</span></em>5 000</span></div>
+  <div class="mp-cart">🛒 <span data-t="il_q7">3 ta taom · Yuborish</span></div></div></div></div>
         <div><h3 data-t="qr1_t">Rasmli menyu — o'zbek va rus tilida</h3><p data-t="qr1_p">Tugagan taom menyuda ko'rinmaydi, narxlar har doim yangi. Mehmon kutib o'tirmaydi.</p>
           <ul><li data-t="qr1_1">"Ofitsantni chaqirish" va "Hisob" tugmalari</li><li data-t="qr1_2">Har bir taomga izoh: "achchiq bo'lmasin", "piyozsiz"</li><li data-t="qr1_3">QR kodlarni bir bosishda chop etasiz</li></ul></div>
       </div>
       <div class="row rev">
-        <div class="media"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/qr-approve.jpg" alt="" loading="lazy" width="1280" height="800"></div></div>
+        <div class="media"><div class="ill ill-panel" aria-hidden="true"><div class="ill-card"><div class="ill-who"><i style="background:#ede9fe">🔔</i><span data-t="il_r1">Mehmondan so'rov · 4-stol</span></div>
+ <div class="paper"><div class="l"><span data-t="il_r2">Lag'mon</span><b>×2</b></div><div class="l"><span data-t="il_r3">Choy (choynak)</span><b>×1</b></div><div class="l"><span data-t="il_r4">Izoh: piyozsiz</span></div></div>
+ <div class="btns"><span class="b1">✓ <span data-t="il_r5">Tasdiqlash</span></span><span class="b3">✕ <span data-t="il_r6">Rad etish</span></span></div></div>
+ <div class="float f-tr">🔊 <span data-t="il_r7">"4-stoldan buyurtma"</span></div></div></div>
         <div><h3 data-t="qr2_t">Nazorat sizda qoladi</h3><p data-t="qr2_p">Mehmonning buyurtmasi avval ofitsant yoki kassirga keladi. Tasdiqlansa — chekka qo'shiladi, rad etilsa — mehmon sababini ko'radi.</p>
           <ul><li data-t="qr2_1">Ovozli xabar: qaysi xonadan, nima so'raldi</li><li data-t="qr2_2">Faqat ish vaqtida qabul qilish mumkin</li><li data-t="qr2_3">Xohlasangiz — faqat menyu, buyurtmasiz</li></ul></div>
       </div>
@@ -362,27 +460,38 @@
   </div>
   <div class="wrap rows">
     <div class="row">
-      <div class="media"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/today.jpg" alt="" loading="lazy" width="1600" height="960"></div><img class="phone" src="/landing/phone-today.jpg" alt="" loading="lazy" width="780" height="1688"></div>
+      <div class="media"><div class="ill ill-panel" aria-hidden="true"><div class="ill-card"><div class="ill-who"><i style="background:#e8eefd">📅</i><span data-t="il_t1">Bugun</span></div>
+ <div class="todo"><div class="done">✓ <span data-t="il_t2">Ijara to'lash — 3 000 000</span></div><div>○ <span data-t="il_t3">Yetkazib beruvchiga to'lov</span></div><div>○ <span data-t="il_t4">Qarzni olish: Akmal aka</span></div><div class="warn">⚠ <span data-t="il_t5">Kam qoldi: Choy, Shakar</span></div></div></div>
+ <div class="float f-tr">✈️ 08:00 · <span data-t="il_t6">Telegramga ro'yxat</span></div></div></div>
       <div><span class="tag" data-t="sh1_tag">Hech narsa esdan chiqmaydi</span><h3 data-t="sh1_t">"Bugun" — kirganda birinchi ko'rinadi</h3><p data-t="sh1_p">Bugungi ishlar, o'rnatish va o'lchovlar, kam qolgan mol, kassa va qarzlar — bitta sahifada.</p>
         <ul><li data-t="sh1_1">Ijara, soliq kabi oylik ishlar o'zi takrorlanadi</li><li data-t="sh1_2">Ertalab 08:00 da Telegramga kunlik ro'yxat, vaqtli ishdan 1 soat oldin eslatma</li><li data-t="sh1_3">"Bajarildi" bosilsa — xarajat kassaga o'zi yoziladi</li></ul></div>
     </div>
     <div class="row rev">
-      <div class="media"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/purchase.jpg" alt="" loading="lazy" width="1600" height="960"></div></div>
+      <div class="media"><div class="ill ill-panel" aria-hidden="true"><div class="chain">
+ <div class="ch">📦<b><span data-t="il_pu1">Mol keldi</span></b><small>20 × 190 000</small></div><span class="arr">→</span>
+ <div class="ch">🚚<b><span data-t="il_pu2">Yo'lkira</span></b><small>+200 000</small></div><span class="arr">→</span>
+ <div class="ch res">🧮<b><span data-t="il_pu3">Tannarx</span></b><small>200 000 / 1</small></div></div>
+ <div class="float f-bl">🏬 <span data-t="il_pu4">Omborga qo'shildi</span></div><div class="float f-tr">📒 <span data-t="il_pu5">Qarzimiz: 4 000 000</span></div></div></div>
       <div><h3 data-t="sh2_t">Mol keldi — tannarx o'zi hisoblanadi</h3><p data-t="sh2_p">Yetkazib beruvchi, kelish narxi va yo'lkira kiritiladi. Yo'lkira mollarga taqsimlanadi, haqiqiy tannarx chiqadi.</p>
         <ul><li data-t="sh2_1">Yetkazib beruvchiga qarz va to'lov kuni eslatmasi</li><li data-t="sh2_2">Brak, inventarizatsiya va har bir mol tarixi</li><li data-t="sh2_3">Excel'dan mollarni bir martada yuklash</li></ul></div>
     </div>
     <div class="row">
-      <div class="media phones one"><img src="/landing/phone-scan.jpg" alt="" loading="lazy" width="780" height="1688"></div>
+      <div class="media"><div class="ill ill-panel" aria-hidden="true"><div class="mini-phone scan"><div class="cam"><div class="code"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="laser"></div></div>
+ <div class="mp-cart">✓ <span data-t="il_sc1">Savatga qo'shildi</span></div></div>
+ <div class="float f-tr">🏷️ <span data-t="il_sc2">Yorliq: 58 mm</span></div></div></div>
       <div><span class="tag" data-t="sh3_tag">Skaner shart emas</span><h3 data-t="sh3_t">Telefon kamerasi — shtrix-kod skaneri</h3><p data-t="sh3_p">Mahsulotni kameraga tuting — savatga tushadi. Shtrix-kodi yo'q mollarga dastur o'zi kod beradi va yorliq chop etadi.</p>
         <ul><li data-t="sh3_1">Android va iPhone'da ishlaydi</li><li data-t="sh3_2">Yorliqlar: 58 mm, 40 mm termoprinter yoki A4 varaq</li><li data-t="sh3_3">Oddiy USB skaner ham ishlayveradi</li></ul></div>
     </div>
     <div class="row rev">
-      <div class="media"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/doors-pay.jpg" alt="" loading="lazy" width="1600" height="960"></div></div>
+      <div class="media"><div class="ill ill-panel" aria-hidden="true"><div class="ill-card"><div class="ill-who"><i style="background:#dcfce7">🧾</i><span data-t="il_v1">Sotuv + xizmat</span></div>
+ <div class="paper zig"><div class="l"><span data-t="il_v2">Mahsulot</span><b>1 450 000</b></div><div class="l"><span data-t="il_v3">O'rnatish</span><b>300 000</b></div><div class="l"><span data-t="il_v4">Yetkazib berish</span><b>100 000</b></div><div class="l"><span data-t="il_v5"><b>Avans</b></span><b>1 000 000</b></div><div class="l"><span data-t="il_v6"><b>Qoldi</b></span><b class="or">850 000</b></div></div></div>
+ <div class="float f-tr">🛠️ <span data-t="il_v7">Ertaga 15:00 · usta</span></div></div></div>
       <div><span class="tag" data-t="sh4_tag">Eshik do'konlari uchun</span><h3 data-t="sh4_t">O'rnatish va yetkazish — sotuv ichida</h3><p data-t="sh4_p">Mijozdan qancha olinadi, ustaga qancha beriladi, qachon va qayerga — bitta oynada. Usta ishi "Bugun"ga o'zi tushadi.</p>
         <ul><li data-t="sh4_1">O'lcham, rang, material, ochilish tomoni bo'yicha qidirish</li><li data-t="sh4_2">Avans, nasiya va to'lov kuni</li><li data-t="sh4_3">Ustalar hisobi va nakladnoy chop etish</li></ul></div>
     </div>
     <div class="row">
-      <div class="media"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/profit.jpg" alt="" loading="lazy" width="1600" height="960"></div></div>
+      <div class="media"><div class="ill ill-panel" aria-hidden="true"><div style="width:100%"><div class="eq"><div class="bx"><small data-t="il_pf1">Savdo</small><b>62,4 mln</b></div>−<div class="bx"><small data-t="il_pf2">Tannarx</small><b>41,9 mln</b></div>−<div class="bx"><small data-t="il_pf3">Xarajat</small><b>13,1 mln</b></div>=<div class="bx res"><small data-t="il_pf4">Sof foyda</small><b>7,4 mln</b></div></div>
+ <div class="bars"><i style="height:40%"></i><i style="height:55%"></i><i style="height:48%"></i><i style="height:70%"></i><i style="height:62%"></i><i style="height:85%"></i><i style="height:100%"></i></div></div></div></div>
       <div><h3 data-t="sh5_t">Sof foyda — bir qarashda</h3><p data-t="sh5_p">Savdo − tannarx − xarajatlar = sof foyda. Murakkab hisobotlarsiz, oddiy tilda.</p>
         <ul><li data-t="sh5_1">Eng ko'p foyda keltirgan mollar</li><li data-t="sh5_2">Uzoq vaqt sotilmay yotgan mollar ("o'lik mol")</li><li data-t="sh5_3">Kunlik, haftalik va oylik solishtirish</li></ul></div>
     </div>
@@ -443,7 +552,10 @@
     <div><div class="ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg></div><b data-t="w5">Kiyim do'koni</b><span data-t="w5s">O'lcham, rang, qaytarish</span></div>
     <div><div class="ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20H2"/><path d="M11 4.562v16.157a1 1 0 0 0 1.242.97L19 20V5.562a2 2 0 0 0-1.515-1.94l-4-1A2 2 0 0 0 11 4.561z"/><path d="M11 4H8a2 2 0 0 0-2 2v14"/><path d="M14 12h.01"/><path d="M22 20h-3"/></svg></div><b data-t="w6">Eshik do'koni</b><span data-t="w6s">O'rnatish, ustalar, nasiya</span></div>
   </div>
-  <div class="wrap shop-shot"><div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="/landing/shop-pos.jpg" alt="" loading="lazy"></div><p class="caption" data-t="shop_cap">Do'kon kassasi: mahsulotni bosing yoki shtrix-kodni skanerlang</p></div>
+  <div class="wrap shop-shot"><div class="ill ill-panel wide" aria-hidden="true"><div class="chain">
+ <div class="ch">🔎<b><span data-t="il_sp1">Skanerlash</span></b><small>4780000123456</small></div><span class="arr">→</span>
+ <div class="ch">🛒<b><span data-t="il_sp2">Savat</span></b><small><span data-t="il_sp3">3 ta mahsulot</span></small></div><span class="arr">→</span>
+ <div class="ch res">✓<b><span data-t="il_sp4">Sotildi</span></b><small>87 000 <span data-t="il_som">so'm</span></small></div></div></div><p class="caption" data-t="shop_cap">Do'kon kassasi: mahsulotni bosing yoki shtrix-kodni skanerlang</p></div>
 </section>
 
 <section class="pricing" id="narxlar">
@@ -511,6 +623,102 @@
 (function () {
   'use strict';
   var RU = {
+    il_c1: "Чайхана",
+    il_c2: "Ресторан и кафе",
+    il_c3: "Фастфуд",
+    il_c4: "Магазин",
+    il_h1: "Официант",
+    il_h1b: "Заказ с телефона — за 2 секунды",
+    il_h2: "Кухня",
+    il_room3: "<b>Комната 3</b>",
+    il_min: "мин",
+    il_d1: "Лагман",
+    il_d2: "Казан-кабоб",
+    il_h2b: "Сам появляется на экране и в принтере",
+    il_h3: "Касса",
+    il_food: "Блюда",
+    il_svc: "Обслуживание 10%",
+    il_tot: "<b>ИТОГО</b>",
+    il_m1: "Наличные",
+    il_m2: "Карта",
+    il_m3: "Перевод",
+    il_h3b: "Чек закрывается одним нажатием",
+    il_h4: "Вы — руководитель",
+    il_today: "Продажи за сегодня",
+    il_som: "сум",
+    il_net: "Чистая прибыль:",
+    il_h4b: "Вы в курсе, где бы ни были",
+    il_s1t: "Телефон официанта",
+    il_lg1: "Свободно",
+    il_lg2: "Занято",
+    il_lg3: "Блюдо готово",
+    il_lg4: "Счёт",
+    il_s1f: "Стол 2: блюдо готово!",
+    il_s2t: "Экран кухни",
+    il_room3b: "<b>Комната 3</b>",
+    il_d1b: "Лагман",
+    il_d2b: "Казан-кабоб",
+    il_d3b: "Ачичук",
+    il_acc: "Принять",
+    il_rdy: "Готово",
+    il_s2f: "Принтер кухни",
+    il_s2g: "Стоп-лист: манты закончились",
+    il_s3t: "Чек №148",
+    il_d1c: "Лагман ×2",
+    il_d2c: "Казан-кабоб ×1",
+    il_d4c: "Чай ×3",
+    il_svc2: "Обслуживание 10%",
+    il_tot2: "<b>ИТОГО</b>",
+    il_s3f: "Напечатано",
+    il_s3g: "Сдача: 14 700",
+    il_k1: "Продажи",
+    il_k2: "Гости",
+    il_k3: "Чистая прибыль",
+    il_m1b: "Наличные",
+    il_m2b: "Карта",
+    il_q1: "Отсканируйте, чтобы открыть меню",
+    il_q1r: "стол",
+    il_q2: "Меню",
+    il_q3: "Лагман",
+    il_q4: "Кабоб",
+    il_q5: "Салат",
+    il_q6: "Чай",
+    il_q7: "3 блюда · Отправить",
+    il_r1: "Запрос гостя · стол 4",
+    il_r2: "Лагман",
+    il_r3: "Чай (чайник)",
+    il_r4: "Комментарий: без лука",
+    il_r5: "Подтвердить",
+    il_r6: "Отклонить",
+    il_r7: "«Заказ со стола 4»",
+    il_t1: "Сегодня",
+    il_t2: "Оплатить аренду — 3 000 000",
+    il_t3: "Оплата поставщику",
+    il_t4: "Получить долг: Акмал ака",
+    il_t5: "Мало: чай, сахар",
+    il_t6: "Список в Telegram",
+    il_pu1: "Товар пришёл",
+    il_pu2: "Доставка",
+    il_pu3: "Себестоимость",
+    il_pu4: "Добавлено на склад",
+    il_pu5: "Наш долг: 4 000 000",
+    il_sc1: "Добавлено в корзину",
+    il_sc2: "Этикетка: 58 мм",
+    il_v1: "Продажа + услуга",
+    il_v2: "Товар",
+    il_v3: "Установка",
+    il_v4: "Доставка",
+    il_v5: "<b>Аванс</b>",
+    il_v6: "<b>Осталось</b>",
+    il_v7: "Завтра 15:00 · мастер",
+    il_pf1: "Продажи",
+    il_pf2: "Себестоимость",
+    il_pf3: "Расходы",
+    il_pf4: "Чистая прибыль",
+    il_sp1: "Сканирование",
+    il_sp2: "Корзина",
+    il_sp3: "3 товара",
+    il_sp4: "Продано",
     nav_how: 'Как работает', nav_qr: 'QR-меню', nav_shop: 'Магазины', nav_feat: 'Возможности', nav_price: 'Цены', nav_faq: 'Вопросы', cta_try: 'Попробовать бесплатно',
     hero_eyebrow: 'Чайхана · Ресторан · Фастфуд · Магазин · Магазин дверей',
     new_b: 'Новое', new_t: 'Доставка, добавки к блюдам и панель руководителя',
