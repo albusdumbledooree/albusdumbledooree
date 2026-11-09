@@ -1329,7 +1329,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       const kitchen = d.needs_kitchen === 1 && mode !== 'off';
       const status = !kitchen ? 'served' : mode === 'notify' ? 'cooking' : 'new';
       const mods = modsFor(d, it.mods);
-      const price = idish ? Units.price(d, unit, Units.tierFor(opts.tier, unit, qty, bigFrom))
+      const price = idish ? Units.price(d, unit, Units.TIERS.includes(it.tier) ? it.tier : Units.tierFor(opts.tier, unit, qty, bigFrom))
         : Math.max(0, d.price + mods.reduce((a, m) => a + m.price, 0));
       const modsText = mods.map((m) => m.name).join(', ');
       const id = q(`INSERT INTO order_items (order_id, dish_id, name, price, cost, qty, note, status, needs_kitchen, prep_minutes, created_at, eta_at, served_at, accepted_at, mods, unit, unit_mult)

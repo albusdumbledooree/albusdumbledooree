@@ -1332,3 +1332,8 @@ details.ver summary .grow { flex: 1 1 200px; min-width: 0; }
   .price-grid input { min-width: 0; padding: 8px 4px; font-size: 13px; }
   .price-grid td:first-child { font-size: 13px; }
 }
+
+.tchip { display: inline-flex; align-items: center; gap: 2px; padding: 1px 8px; border-radius: 999px; background: var(--primary-soft); color: var(--primary); font: inherit; font-weight: 800; font-size: 12px; border: 1px solid #c7d6fb; cursor: pointer; vertical-align: 1px; white-space: nowrap; }
+.tchip.ov { background: #fef3c7; color: #b45309; border-color: #fcd34d; }
+:root[data-theme="dark"] .tchip { border-color: transparent; } :root[data-theme="dark"] .tchip.ov { background: #3a2a0d; color: #f59e0b; }
+.unit-opt.on { border-color: var(--primary); background: var(--primary-soft); }

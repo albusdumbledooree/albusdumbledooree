@@ -2851,6 +2851,13 @@ test('disposable tableware: piece / pack / box, three prices, customer tier, sto
   const big = await call('POST', '/api/sales', boss, { tier: 'r', paid_cash: 12 * 210000, items: [{ dish_id: cup.id, qty: 12, unit: 'box' }] });
   assert.equal(big.status, 200, JSON.stringify(big.data));
   assert.equal(big.data.total, 12 * 210000);
+  // One line at its own price inside a wholesale sale (retail), even from 10 boxes; the rest at the sale's tier.
+  const mixed = await call('POST', '/api/sales', boss, { tier: 'o', paid_cash: 10 * 240000 + 220000,
+    items: [{ dish_id: cup.id, qty: 10, unit: 'box', tier: 'r' }, { dish_id: cup.id, qty: 1, unit: 'box' }] });
+  assert.equal(mixed.status, 200, JSON.stringify(mixed.data));
+  assert.equal(mixed.data.total, 10 * 240000 + 220000);
+  const back2 = await call('POST', `/api/orders/${mixed.data.id}/refund`, boss, { items: mixed.data.items.map((i) => ({ item_id: i.id, qty: i.qty })), reason: 'test', method: 'cash' });
+  assert.equal(back2.status, 200, JSON.stringify(back2.data));
   // Not enough on the shelf: the answer says how much is left in boxes.
   const tooMany = await call('POST', '/api/sales', boss, { paid_cash: 1, items: [{ dish_id: cup.id, qty: 100, unit: 'box' }] });
   assert.equal(tooMany.status, 409);
@@ -2887,7 +2894,7 @@ test('disposable tableware: piece / pack / box, three prices, customer tier, sto
   const from = new Date(); from.setHours(0, 0, 0, 0);
   const pr = (await call('GET', `/api/profit?from=${from.getTime()}&to=${from.getTime() + 864e5}`, boss)).data;
   const top = pr.top_qty.find((r) => r.id === cup.id);
-  assert.equal(top.qty_text, '17 karobka + 3 pachka + 10 dona');
+  assert.equal(top.qty_text, '28 karobka + 3 pachka + 10 dona');
 });
 
 test("cashier's checks: the list without period totals unless the boss allows", async () => {

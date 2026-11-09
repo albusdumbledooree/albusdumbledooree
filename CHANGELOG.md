@@ -2,6 +2,12 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.36.1 — Idish: bitta molni boshqa narxda sotish
+
+- Savatdagi har bir mol qatorida narx belgisi ("Optom ▾"). Bosilsa — shu molning o'zi Chakana, Optom yoki Katta optom narxda; "Umumiy narx" — savatdagi kabi.
+- Alohida o'zgartirilgan qator sariq belgi bilan ajralib turadi; tepadagi narx almashtirilsa ham u o'z narxida qoladi (10 karobkadan avtomatik katta optom ham unga qo'yilmaydi).
+- Server ham har qatorni o'z narxida hisoblaydi.
+
 ## 1.36.0 — Yuborilgan taom yonida − / +, qidiruv hamma bo'limdan
 
 - Chekdagi yuborilgan taom yonida "+" — shu taomdan yana bittasi yangi qator bo'lib qo'shiladi (menyudan qayta qidirish shart emas); qo'shimcha tanlovli taomda tanlov so'raladi.

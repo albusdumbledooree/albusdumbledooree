@@ -6,7 +6,8 @@
 const PosCart = { lines: [], label: '', tier: 'r', customer: null };
 
 // A tableware line's price follows its unit, the price tier and the quantity (big wholesale from N boxes).
-function lineTier(c) { return Units.tierFor(PosCart.tier, c.unit, c.qty, App.settings.big_box_from || 0); }
+// A line can take its own price (one item at retail in a wholesale sale); otherwise the sale's tier, big wholesale from N boxes.
+function lineTier(c) { return c.tier || Units.tierFor(PosCart.tier, c.unit, c.qty, App.settings.big_box_from || 0); }
 function linePrice(c) { return c.unit && c.d ? Units.price(c.d, c.unit, lineTier(c)) : c.price; }
 function posTotal() { return PosCart.lines.reduce((s, c) => s + linePrice(c) * c.qty, 0); }
 // What the cart earns: price minus the goods' cost (shown to the boss only).
@@ -19,7 +20,7 @@ function posAdd(x, qty = 1, m = null, unit = null) {
   if (unit) {
     const um = Units.mult(x, unit);
     if (x.stock != null && piecesInCart(x.id) + qty * um > x.stock) return toast(t('"{0}" dan faqat {1} qoldi', x.name, stockLabel(x)), 'warn');
-    const ln = PosCart.lines.find((c) => c.dish_id === x.id && c.unit === unit);
+    const ln = PosCart.lines.find((c) => c.dish_id === x.id && c.unit === unit && !c.tier);
     if (ln) ln.qty += qty;
     else PosCart.lines.push({ dish_id: x.id, name: x.name, unit, d: x, qty, variant: PACK_NAMES()[unit] });
     return;
@@ -80,7 +81,7 @@ Views.pos = {
       const units = Units.unitsOf(c.d);
       const p = linePrice(c);
       return `<div class="line pending idl">
-        <span class="q">${c.qty}</span><span class="n">${esc(c.name)} <span class="small muted">${esc(PACK_NAMES()[c.unit])} × ${num(p)}${lineTier(c) !== PosCart.tier ? ` · ${esc(TIER_NAMES()[lineTier(c)])}` : ''}</span></span><span class="p">${money(p * c.qty)}</span>
+        <span class="q">${c.qty}</span><span class="n">${esc(c.name)} <span class="small muted">${esc(PACK_NAMES()[c.unit])} × ${num(p)}</span> <button type="button" class="tchip ${c.tier ? 'ov' : ''}" data-ltier="${i}" title="${esc(t('Shu mol narxi'))}">${esc(TIER_NAMES()[lineTier(c)])} ▾</button></span><span class="p">${money(p * c.qty)}</span>
         <span class="sub">${units.length > 1 ? `<span class="useg">${units.map((u) => `<button class="${u === c.unit ? 'on' : ''}" data-unit="${i}:${u}">${esc(PACK_NAMES()[u])}</button>`).join('')}</span>` : ''}
           <span class="grow"></span>
           <span class="stepper"><button data-dec="${i}" title="${esc(t('Kamaytirish (0 — olib tashlash)'))}">${icon('minus', 16)}</button><input class="qty-in" type="number" min="0" inputmode="numeric" data-qty="${i}" value="${c.qty}"><button data-inc="${i}">${icon('plus', 16)}</button></span></span></div>`;
@@ -217,11 +218,23 @@ Views.pos = {
       if (fresh.stock != null && piecesInCart(c.dish_id) - c.qty * Units.mult(c.d, c.unit) + c.qty * Units.mult(c.d, u) > fresh.stock) {
         toast(t('"{0}" dan faqat {1} qoldi', c.name, stockLabel(fresh)), 'warn'); return;
       }
-      const same = PosCart.lines.find((x, j) => j !== Number(i) && x.dish_id === c.dish_id && x.unit === u);
+      const same = PosCart.lines.find((x, j) => j !== Number(i) && x.dish_id === c.dish_id && x.unit === u && (x.tier || '') === (c.tier || ''));
       if (same) { same.qty += c.qty; PosCart.lines.splice(i, 1); } else { c.unit = u; c.variant = PACK_NAMES()[u]; }
       rerender();
     });
     root.querySelectorAll('[data-tier]').forEach((b) => b.onclick = () => { PosCart.tier = b.dataset.tier; rerender(); });
+    // One line at another price: its own tier, or back to the sale's.
+    root.querySelectorAll('[data-ltier]').forEach((b) => b.onclick = (e) => {
+      e.stopPropagation();
+      const c = PosCart.lines[b.dataset.ltier];
+      const f = openModal({
+        title: `${icon('coins')} ${esc(c.name)} — ${t('narxi')}`,
+        body: `<div class="unit-pick">${Units.TIERS.map((tr) => `<button type="button" class="unit-opt ${c.tier === tr ? 'on' : ''}" data-lt="${tr}"><b>${esc(TIER_NAMES()[tr])}</b><span class="num">${money(Units.price(c.d, c.unit, tr))}</span></button>`).join('')}
+          <button type="button" class="unit-opt ${c.tier ? '' : 'on'}" data-lt=""><b>${t('Umumiy narx')} (${esc(TIER_NAMES()[PosCart.tier])})</b><span class="small muted">${t('savatdagi kabi')}</span></button></div>`,
+        actions: [{ label: t('Bekor') }],
+      });
+      f.querySelectorAll('[data-lt]').forEach((x) => x.onclick = () => { c.tier = x.dataset.lt || undefined; closeModal(); rerender(); });
+    });
     const pcb = root.querySelector('#pos-cust');
     if (pcb) pcb.onclick = async () => {
       const c = await pickCustomer();
@@ -293,7 +306,7 @@ async function posPayment() {
       const services = getServices();
       if (services.some((s) => !s.date)) { toast(t('Xizmat sanasini tanlang'), 'warn'); return false; }
       const r = await POST('/api/sales', {
-        items: PosCart.lines.map(({ dish_id, qty, mods, unit }) => ({ dish_id, qty, ...(mods ? { mods } : {}), ...(unit ? { unit } : {}) })), label: PosCart.label,
+        items: PosCart.lines.map(({ dish_id, qty, mods, unit, tier }) => ({ dish_id, qty, ...(mods ? { mods } : {}), ...(unit ? { unit } : {}), ...(tier ? { tier } : {}) })), label: PosCart.label,
         ...(isIdish() ? { tier: PosCart.tier } : {}),
         services, phone: (adv ? x.adv_phone : x.svc_phone) || '', debt_due: x.debt_due || '',
         ...(adv ? { advance: true, customer_name: x.adv_name.trim(), discount: Number(x.discount) || 0,
