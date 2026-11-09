@@ -2,6 +2,14 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.38.0 — Platforma: faollik, xatolar, savdo yashirin
+
+- Bizneslar ro'yxatida savdo summasi endi ko'rinmaydi (serverdan ham yuborilmaydi). Uni ko'rish: kartochkadagi ⋮ → **Savdo** (bugun, 7 kun, 30 kun).
+- Kartochkada: "Hozir N kishi dasturda · bugun X/Y xodim · eng ko'pi Z" va **Faollik** havolasi.
+- **Faollik** oynasi: hozir kim ishlayapti (lavozim, qurilma, Android ilova / Windows / telefon / kompyuter), bugun kirmaganlar, eng ko'p bir vaqtda (bugun va 7 kun), soatlar bo'yicha grafik, xatolar (7 kun: rad etilgan amallar — PIN noto'g'ri, to'lov yetarli emas va h.k., dastur xatolari — qaysi telefonda, qaysi joyda), bajarilgan ishlar, ulangan qurilmalar.
+- "Hisob almashib ishlatilyapti" o'rniga aniqroq: "Bitta login bir necha kishida: ISM — 7 kunda N marta boshqa qurilmadan ochildi".
+- Xatolar va faollik shu versiyadan boshlab yig'iladi.
+
 ## 1.37.0 — Android ilova (APK)
 
 - Yangi: **FLOWI Android ilovasi** — `flowi.uz/flowi.apk` dan yuklab olinadi (78 KB), Android 5 va undan yangi hamma telefon va planshetga o'rnatiladi.

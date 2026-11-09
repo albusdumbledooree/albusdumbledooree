@@ -369,7 +369,11 @@ function createPlatform(dataDir) {
       return null;
     } finally { desktopBusy = false; }
   }
-  const remindTimer = setInterval(() => { remindTick().catch(() => {}); tgBackupTick().catch(() => {}); helpbot.remindTick().catch(() => {}); }, 5 * 60 * 1000);
+  const remindTimer = setInterval(() => {
+    remindTick().catch(() => {}); tgBackupTick().catch(() => {}); helpbot.remindTick().catch(() => {});
+    // How many people are in each open business now (the busiest time of the day in the activity view).
+    for (const c of contexts.values()) { try { c.api.sampleUsage(); } catch { /* a closed file */ } }
+  }, 5 * 60 * 1000);
   const desktopTimer = setInterval(() => { desktopTick().catch(() => {}); }, 60 * 60 * 1000);
   const desktopFirst = setTimeout(() => { desktopTick().catch(() => {}); }, 2 * 60 * 1000);
   desktopTimer.unref(); desktopFirst.unref();
@@ -612,7 +616,8 @@ function createPlatform(dataDir) {
         staff: one('SELECT COUNT(*) c FROM users WHERE active = 1').c,
         rooms: one('SELECT COUNT(*) c FROM rooms WHERE active = 1').c,
         orders_30d: one("SELECT COUNT(*) c FROM orders WHERE status = 'closed' AND closed_at >= ?", since).c,
-        sales_30d: one("SELECT COALESCE(SUM(total), 0) s FROM orders WHERE status = 'closed' AND closed_at >= ?", since).s,
+        // Takings are not in the list (the owner asks for them in the card's menu: "Savdo").
+        ...context(row.id).api.activityBrief(),
         last_activity: one('SELECT MAX(created_at) t FROM audit').t,
         // A waiter account opened on another device while still in use elsewhere: likely shared by several people.
         shared: db.prepare(`SELECT u.name, COUNT(*) c FROM audit a JOIN users u ON u.id = a.user_id
@@ -906,6 +911,8 @@ function createPlatform(dataDir) {
     ['POST', '/api/platform/helpbot/relink', true, helpbot.relink],
     ['POST', '/api/platform/helpbot/test', true, helpbot.test],
     ['DELETE', '/api/platform/helpbot', true, helpbot.unlink],
+    ['GET', '/api/platform/tenants/:id/activity', true, ({ params }) => { const c = context(Number(params.id)); if (!c) throw new HttpError(404, 'Topilmadi'); return c.api.activity(); }],
+    ['GET', '/api/platform/tenants/:id/sales', true, ({ params }) => { const c = context(Number(params.id)); if (!c) throw new HttpError(404, 'Topilmadi'); return c.api.salesBrief(); }],
     ['GET', '/api/platform/tenants/:id/payments', true, ({ params }) => ({ payments: helpbot.forTenant(params.id).payments(), help: helpbot.forTenant(params.id).status() })],
     ['POST', '/api/platform/tenants/:id/payments', true, ({ params, body, admin }) => helpbot.manualPayment(params.id, Number(body.months), admin && admin.name)],
   ].map(([method, pattern, auth, handler]) => ({

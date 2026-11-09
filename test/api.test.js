@@ -2926,3 +2926,28 @@ test('browser code runs on older phones: no "?." or "??" (Android 9 WebView does
     assert.ok(!/\?\?|\?\.(?!\d)/.test(src), `${f}: "?." yoki "??" — eski telefonlarda ishlamaydi, nn(a, b) ishlating`);
   }
 });
+
+test('platform: activity of a business (online, errors, peak) and takings only on request', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  const made = await call('POST', '/api/platform/tenants', admin, { name: 'Faollik', code: 'faollik', owner_name: 'E', owner_username: 'faol', owner_password: 'faol12345', plan: 'biznes', sample: true });
+  assert.equal(made.status, 200, JSON.stringify(made.data));
+  const boss = await login('faol', 'faol12345', 'faollik');
+  await call('POST', '/api/users', boss, { name: 'Ofitsant Ali', username: 'ali', password: 'ali123', role: 'waiter' });
+  const ali = await login('ali', 'ali123', 'faollik');
+  // A refused action and a program error on the waiter's screen.
+  assert.equal((await call('POST', '/api/orders/999999/close', ali, {})).status >= 400, true);
+  assert.equal((await call('POST', '/api/client-error', ali, { message: 'x is not a function', source: 'order.js:12', view: '#/room/1', ua: 'Mozilla/5.0 FLOWI-Android/1.0.0' })).status, 200);
+  const list = (await call('GET', '/api/platform/tenants', admin)).data;
+  const t = (list.tenants || list).find((x) => x.code === 'faollik');
+  assert.equal(t.sales_30d, undefined, 'takings are not in the list');
+  assert.ok(t.online >= 2);
+  const a = (await call('GET', `/api/platform/tenants/${t.id}/activity`, admin)).data;
+  assert.ok(a.online >= 2 && a.people.some((p) => p.name === 'Ofitsant Ali' && p.online));
+  assert.ok(a.errors.some((e) => e.kind === 'client' && /not a function/.test(e.message) && e.client === 'android'));
+  assert.ok(a.errors.some((e) => e.kind === 'api' && /Ali/.test(e.who)));
+  assert.equal(a.hours.length, 24);
+  const s = (await call('GET', `/api/platform/tenants/${t.id}/sales`, admin)).data;
+  assert.equal(typeof s.d30.s, 'number');
+  // Only the platform owner sees it.
+  assert.equal((await call('GET', `/api/platform/tenants/${t.id}/sales`, boss)).status, 401);
+});

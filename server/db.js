@@ -738,6 +738,24 @@ CREATE INDEX IF NOT EXISTS idx_work_day ON work_log(day, user_id);
 `);
   // Until when a worker's phone counts as being inside the business (a GPS check or a cashier's confirmation).
   addCol('sessions', 'geo_until', 'INTEGER');
+  // What a session runs on (the Android app, the Windows program, a phone or computer browser) — for the platform's activity view.
+  addCol('sessions', 'ua', "TEXT NOT NULL DEFAULT ''");
+  db.exec(`
+-- What went wrong for the staff: refused actions (wrong PIN, not enough paid…) and program errors on their screens.
+CREATE TABLE IF NOT EXISTS error_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at INTEGER NOT NULL,
+  user_id INTEGER,
+  kind TEXT NOT NULL DEFAULT 'api',
+  status INTEGER NOT NULL DEFAULT 0,
+  path TEXT NOT NULL DEFAULT '',
+  message TEXT NOT NULL DEFAULT '',
+  client TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_error_log_at ON error_log(at);
+-- How many people were in the program, every 5 minutes (the busiest time of the day).
+CREATE TABLE IF NOT EXISTS usage_samples (at INTEGER PRIMARY KEY, online INTEGER NOT NULL);
+`);
   // Workers who never open the program (a tandir baker, a dishwasher, a guard): on the staff list and the payroll only.
   addCol('users', 'app', 'INTEGER NOT NULL DEFAULT 1');
   addCol('users', 'position', "TEXT NOT NULL DEFAULT ''");

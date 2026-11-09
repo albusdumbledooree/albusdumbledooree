@@ -103,6 +103,8 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     const { pathname } = url;
+    // For the platform's activity view: what went wrong, for whom (filled in below once the business is known).
+    const seen = { api: null, user: null, pattern: '' };
     try {
       // A choyxona's own pictures (logo, desktop background): /media/<code>/<id>
       const media = /^\/media\/([a-z0-9-]+)\/(\d+)$/.exec(pathname);
@@ -205,6 +207,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       if (byCode) platform.assertActive(ctx);
       else if (ctx.row.status !== 'active') throw new HttpError(401, 'Choyxona bloklangan');
       const { api } = ctx;
+      seen.api = api;
 
       if (pathname === '/api/events' && req.method === 'GET') {
         const user = api.authenticate(token);
@@ -218,6 +221,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       const found = api.match(req.method, pathname);
       if (!found) throw new HttpError(404, 'Topilmadi');
       const { route, params } = found;
+      seen.pattern = route.pattern;
       // Term over (after the grace days): everything can still be seen and exported, nothing new is written.
       if (req.method !== 'GET' && !READ_ONLY_OK.has(route.pattern) && platform.planFor(ctx.row).read_only) {
         throw new HttpError(402, "Obuna muddati tugagan. Ma'lumotlar saqlanib turibdi — ko'rish mumkin, yangi yozish uchun to'lovni yangilang");
@@ -231,13 +235,20 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       } else if (route.roles) {
         user = api.authenticate(token);
         if (!user) throw new HttpError(401, api.wasKicked(token) ? 'Bu hisob boshqa qurilmada ochildi. Qayta kiring' : 'Tizimga kiring');
+        seen.user = user;
+        api.noteClient(token, req.headers['user-agent']);
         if (!route.roles.includes(user.role)) throw new HttpError(403, "Sizda bu amal uchun huquq yo'q");
         api.guard(route, user, req.headers['x-finance']);
         api.workGate(route, user);
       }
       reply(await route.handler({ user, device, params, body, query, token, ip }));
     } catch (err) {
-      if (err instanceof HttpError) return send(res, err.status, err.code ? { error: err.message, code: err.code } : { error: err.message });
+      if (err instanceof HttpError) {
+        // Refused actions of a signed-in person (or a wrong PIN on a shared device) are kept for the platform's view.
+        if (seen.api && seen.user && err.status !== 401 && err.status !== 402) seen.api.logError(seen.user, 'api', err.status, seen.pattern, err.message);
+        return send(res, err.status, err.code ? { error: err.message, code: err.code } : { error: err.message });
+      }
+      if (seen.api) seen.api.logError(seen.user, 'server', 500, seen.pattern, err && err.message);
       console.error(err);
       send(res, 500, { error: 'Serverda xatolik' });
     }

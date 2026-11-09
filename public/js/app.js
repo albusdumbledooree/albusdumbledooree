@@ -532,3 +532,26 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && Ap
   setInterval(() => { if (App.device) OrderPrinter.load().then(() => OrderPrinter.sync()); }, 30000);
   render();
 })();
+
+// ---------- Program errors on this screen go to the platform's activity view (a few per page load) ----------
+(function () {
+  let sent = 0;
+  function report(message, source) {
+    if (!App.token || !App.user || sent >= 5 || !message) return;
+    sent += 1;
+    try {
+      fetch('/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${App.token}` },
+        body: JSON.stringify({ message: String(message).slice(0, 200), source: String(source || '').slice(0, 80), view: location.hash.slice(0, 60), ua: navigator.userAgent }) }).catch(() => {});
+    } catch { /* never in the way */ }
+  }
+  window.addEventListener('error', (e) => {
+    const src = e.filename ? `${e.filename.split('/').pop()}:${e.lineno}` : '';
+    report(e.message, src);
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const r = e.reason;
+    // Refusals from the server (wrong PIN, not enough paid) are kept by the server itself.
+    if (r && r.status) return;
+    report(r && r.message ? r.message : String(r), 'promise');
+  });
+}());

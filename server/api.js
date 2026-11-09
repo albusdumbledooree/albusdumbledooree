@@ -317,6 +317,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     if (!user.pin_hash) throw new HttpError(400, "PIN o'rnatilmagan. Boshliqqa murojaat qiling");
     if (!verifyPassword(String(body.pin ?? ''), user.pin_hash)) {
       pinFailures.set(key, !f || now() - f.first >= mins * MIN ? { count: 1, first: now() } : { ...f, count: f.count + 1 });
+      logError(user, 'api', 401, '/api/device/pin', "PIN noto'g'ri", '', true);
       throw new HttpError(401, "PIN noto'g'ri");
     }
     pinFailures.delete(key);
@@ -2528,6 +2529,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['GET', '/api/customers', MONEY, pro.listCustomers],
     ['POST', '/api/customers', MONEY, pro.saveCustomer],
     ['GET', '/api/customers/:id', MONEY, pro.customerDetail],
+    ['POST', '/api/client-error', ['owner', 'admin', 'cashier', 'waiter', 'chef'], ({ user, body }) => {
+      logError(user, 'client', 0, str(body.view, 'Sahifa', { max: 60 }), `${str(body.message, 'Xato', { max: 200 })}${body.source ? ` (${str(body.source, 'Joy', { max: 80 })})` : ''}`, clientOf(body.ua));
+      return { ok: true };
+    }],
     ['GET', '/api/customers/:id/last-sale', ['owner', 'admin', 'cashier', 'waiter'], customerLastSale],
     ['PUT', '/api/customers/:id', MONEY, pro.saveCustomer],
     ['POST', '/api/customers/:id/pay', MONEY, pro.payDebt],
@@ -2570,7 +2575,96 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return null;
   }
 
-  return { match, guard, workGate: (route, user) => work.gate(route, user), authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, planInfo, wasKicked, summary, ROLES,
+  // ---------- For the platform: who uses the program, what goes wrong (no money here; sales are asked separately) ----------
+  const ERR_SKIP = /^(Tizimga kiring|Bu hisob boshqa qurilmada ochildi)/;
+  const recentErr = new Map();
+  function logError(user, kind, status, pathName, message, client = '', every = false) {
+    const msg = String(message || '').slice(0, 300);
+    if (!msg || ERR_SKIP.test(msg)) return;
+    // The same message from the same person within a minute is one entry (a button pressed five times).
+    const key = `${user ? user.id : 0}|${msg}`;
+    if (!every && now() - (recentErr.get(key) || 0) < MIN) return;
+    recentErr.set(key, now());
+    if (recentErr.size > 2000) recentErr.clear();
+    try {
+      q('INSERT INTO error_log (at, user_id, kind, status, path, message, client) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(now(), user ? user.id : null, kind, status || 0, String(pathName || '').slice(0, 120), msg, String(client || '').slice(0, 40));
+      if (Math.random() < 0.01) q('DELETE FROM error_log WHERE at < ?').run(now() - 60 * 24 * 60 * MIN);
+    } catch { /* never in the way of the request */ }
+  }
+  // The kind of client a session runs on, noted once per session.
+  const noted = new Set();
+  function clientOf(ua) {
+    const u = String(ua || '');
+    if (/FLOWI-Android/.test(u)) return 'android';
+    if (/Electron|FLOWI\//.test(u)) return 'windows';
+    if (/Android|iPhone|iPad|Mobile/i.test(u)) return 'phone';
+    return u ? 'browser' : '';
+  }
+  function noteClient(token, ua) {
+    if (!token || noted.has(token)) return;
+    noted.add(token);
+    if (noted.size > 5000) noted.clear();
+    const c = clientOf(ua);
+    if (c) q("UPDATE sessions SET ua = ? WHERE token = ? AND ua = ''").run(c, token);
+  }
+  const ONLINE = 3 * MIN;
+  function onlineCount() {
+    return q("SELECT COUNT(DISTINCT user_id) c FROM sessions WHERE via != 'platform' AND last_seen >= ?").get(now() - ONLINE).c;
+  }
+  function sampleUsage() {
+    const at = Math.floor(now() / (5 * MIN)) * 5 * MIN;
+    q('INSERT OR REPLACE INTO usage_samples (at, online) VALUES (?, ?)').run(at, onlineCount());
+    if (Math.random() < 0.02) q('DELETE FROM usage_samples WHERE at < ?').run(now() - 90 * 24 * 60 * MIN);
+  }
+  function dayStartTs(t = now()) { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); }
+  function activityBrief() {
+    const today = dayStartTs();
+    const online = onlineCount();
+    const peak = Math.max(online, q('SELECT COALESCE(MAX(online), 0) m FROM usage_samples WHERE at >= ?').get(today).m);
+    const staffToday = q("SELECT COUNT(DISTINCT user_id) c FROM audit WHERE created_at >= ? AND action IN ('login', 'pin_login')").get(today).c;
+    return { online, peak_today: peak, staff_today: staffToday };
+  }
+  function activity() {
+    const today = dayStartTs();
+    const week = now() - 7 * 24 * 60 * MIN;
+    const people = q(`SELECT u.id, u.name, u.role, MAX(s.last_seen) seen, (SELECT ua FROM sessions x WHERE x.user_id = u.id ORDER BY x.last_seen DESC LIMIT 1) ua,
+        (SELECT d.name FROM sessions x JOIN devices d ON d.id = x.device_id WHERE x.user_id = u.id ORDER BY x.last_seen DESC LIMIT 1) device
+      FROM users u JOIN sessions s ON s.user_id = u.id AND s.via != 'platform' WHERE u.active = 1 GROUP BY u.id ORDER BY seen DESC LIMIT 60`).all()
+      .map((p) => ({ ...p, online: now() - (p.seen || 0) < ONLINE }));
+    const lastIn = new Map(q("SELECT user_id, MAX(created_at) t FROM audit WHERE action IN ('login', 'pin_login') AND created_at >= ? GROUP BY user_id").all(today).map((r) => [r.user_id, r.t]));
+    const staff = q("SELECT id, name, role FROM users WHERE active = 1 AND role != 'owner' ORDER BY name").all();
+    const samples = q('SELECT at, online FROM usage_samples WHERE at >= ? ORDER BY at').all(today);
+    const hours = Array.from({ length: 24 }, (_, h) => ({ h, max: 0 }));
+    for (const s of samples) { const h = new Date(s.at).getHours(); hours[h].max = Math.max(hours[h].max, s.online); }
+    const nowH = new Date().getHours(); hours[nowH].max = Math.max(hours[nowH].max, onlineCount());
+    const peakAt = samples.reduce((b, s) => (s.online > b.online ? s : b), { online: 0, at: null });
+    const week7 = q('SELECT COALESCE(MAX(online), 0) m FROM usage_samples WHERE at >= ?').get(week).m;
+    const errors = q(`SELECT e.kind, e.message, COUNT(*) c, MAX(e.at) last, GROUP_CONCAT(DISTINCT u.name) who, MAX(e.client) client
+      FROM error_log e LEFT JOIN users u ON u.id = e.user_id WHERE e.at >= ? GROUP BY e.kind, e.message ORDER BY c DESC, last DESC LIMIT 30`).all(week);
+    const count = (sql, ...a) => q(sql).get(...a).c;
+    const ok = {
+      closed: count("SELECT COUNT(*) c FROM orders WHERE status = 'closed' AND closed_at >= ?", week),
+      sent: count("SELECT COALESCE(SUM(qty), 0) c FROM order_items WHERE created_at >= ? AND status != 'cancelled'", week),
+      cancelled: count("SELECT COALESCE(SUM(qty), 0) c FROM order_items WHERE cancelled_at >= ? AND status = 'cancelled'", week),
+      deleted: count("SELECT COUNT(*) c FROM orders WHERE status = 'cancelled' AND closed_at >= ?", week),
+      logins: count("SELECT COUNT(*) c FROM audit WHERE action IN ('login', 'pin_login') AND created_at >= ?", week),
+    };
+    const shared = q(`SELECT u.name, COUNT(*) c FROM audit a JOIN users u ON u.id = a.user_id
+      WHERE a.action = 'session_kicked' AND a.created_at >= ? GROUP BY a.user_id HAVING c >= 2 ORDER BY c DESC`).all(week);
+    const devices = q('SELECT name, last_seen FROM devices ORDER BY last_seen DESC').all();
+    return { ...activityBrief(), staff_total: staff.length, people, came_today: staff.map((u) => ({ ...u, at: lastIn.get(u.id) || null })),
+      hours, peak_at: peakAt.at, peak_week: Math.max(week7, onlineCount()), errors, ok, shared, devices };
+  }
+  // Takings, only when the platform owner asks for them (never in the list of businesses).
+  function salesBrief() {
+    const sum = (from) => q("SELECT COALESCE(SUM(total), 0) s, COUNT(*) c FROM orders WHERE status = 'closed' AND closed_at >= ?").get(from);
+    const d = (n) => now() - n * 24 * 60 * MIN;
+    return { today: sum(dayStartTs()), d7: sum(d(7)), d30: sum(d(30)) };
+  }
+
+  return { logError, noteClient, sampleUsage, activityBrief, activity, salesBrief,
+    match, guard, workGate: (route, user) => work.gate(route, user), authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, planInfo, wasKicked, summary, ROLES,
     guestInfo: guest.info, guestImage: guest.image, guestRequest: guest.request, morningText, eveningText, soonTexts };
 }
 

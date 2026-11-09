@@ -87,7 +87,8 @@ function tenantCard(t) {
       <span>${icon('star', 15)}</span><span><span class="chip plan-${esc(t.plan_info.key)}">${esc(t.plan_info.name)}</span>${t.is_branch ? ' <span class="chip">Filial</span>' : ''}${branchNote(t)}
         · ${feeHtml(t)}
         ${t.plan_info.max_staff > 0 && !t.error ? `<br><span class="small ${t.staff - (t.owners || []).length >= t.plan_info.max_staff ? 'warn' : 'muted'}">Xodimlar: ${t.staff - (t.owners || []).length}/${t.plan_info.max_staff}</span>` : ''}</span>
-      ${t.shared && t.shared.length ? `<span>${icon('triangle-alert', 15)}</span><span class="small warn" title="Oxirgi 7 kunda bu hisoblar band paytida boshqa qurilmadan ochilgan">Hisob almashib ishlatilyapti: ${t.shared.map((x) => `${esc(x.name)} (${x.c} marta)`).join(', ')}</span>` : ''}
+      ${t.shared && t.shared.length ? `<span>${icon('triangle-alert', 15)}</span><span class="small warn" title="Bir xodimning logini band paytida boshqa qurilmadan ochilgan — bir login bilan bir necha kishi ishlayotgan bo'lishi mumkin">Bitta login bir necha kishida: ${t.shared.map((x) => `<b>${esc(x.name)}</b> — 7 kunda ${x.c} marta boshqa qurilmadan ochildi`).join(', ')}</span>` : ''}
+      ${t.error ? '' : `<span>${icon('activity', 15)}</span><span class="small">${t.online ? `<b class="green-text">Hozir ${t.online} kishi dasturda</b>` : '<span class="muted">Hozir hech kim yo\'q</span>'} · bugun ${t.staff_today}/${Math.max(0, t.staff - (t.owners || []).length)} xodim · eng ko'pi ${t.peak_today} · <a href="#" data-actopen="${t.id}">Faollik</a></span>`}
       <span>${icon('send', 15)}</span><span class="small"><a href="#" data-tgopen="${t.id}">${t.telegram && t.telegram.chats.length
         ? `Telegram: ${t.telegram.chats.map(esc).join(', ')}${t.telegram.report_time ? ` · ${esc(t.telegram.report_time)}` : ' · hisobot o\'chiq'}` : '<span class="muted">Telegram ulanmagan</span>'}</a></span>
       <span>${icon('calendar', 15)}</span><span>${due}${t.plan_info.read_only ? ' <span class="chip red">Faqat ko\'rish</span>' : ''} · <a href="#" class="small" data-payopen="${t.id}">To'lovlar</a></span>
@@ -96,7 +97,7 @@ function tenantCard(t) {
     </div>
     ${t.error ? `<p class="small red">${esc(t.error)}</p>` : `<div class="tc-stats">
       <div><b>${t.staff}</b><span>xodim</span></div><div><b>${t.orders_30d}</b><span>chek / 30 kun</span></div>
-      <div><b>${num(t.sales_30d)}</b><span>savdo / 30 kun</span></div></div>
+      <div><b>${t.online || 0}</b><span>hozir dasturda</span></div></div>
       <p class="small muted">Oxirgi faollik: ${t.last_activity ? fmtDateTime(t.last_activity) : '—'}</p>`}
     <footer>
       <button class="btn sm primary" data-imp="${t.id}" title="Boshliq sifatida kirish">${icon('log-in', 16)} Kirish</button>
@@ -595,6 +596,7 @@ function bind(root) {
   root.querySelectorAll('[data-term]').forEach((b) => b.onclick = () => termDialog(byId(b.dataset.term)));
   root.querySelectorAll('[data-more]').forEach((b) => b.onclick = () => moreMenu(byId(b.dataset.more)));
   root.querySelectorAll('[data-tgopen]').forEach((a) => a.onclick = (e) => { e.preventDefault(); tenantTelegram(byId(a.dataset.tgopen)); });
+  root.querySelectorAll('[data-actopen]').forEach((a) => a.onclick = (e) => { e.preventDefault(); tenantActivity(byId(a.dataset.actopen)); });
   root.querySelectorAll('[data-payopen]').forEach((a) => a.onclick = (e) => { e.preventDefault(); tenantPayments(byId(a.dataset.payopen)); });
 }
 
@@ -638,8 +640,67 @@ function termDialog(t) {
   show();
 }
 
+// ---------- Takings: never in the list, only here on request ----------
+async function tenantSales(t) {
+  let s;
+  try { s = await GET(`/api/platform/tenants/${t.id}/sales`); } catch (e) { return toastError(e); }
+  const row = (n, x) => `<div class="sales-row"><span>${n}</span><span class="small muted">${x.c} chek</span><b class="num">${money(x.s)}</b></div>`;
+  openModal({ title: `${icon('coins')} ${esc(t.name)} — savdo`,
+    body: `${row('Bugun', s.today)}${row('7 kun', s.d7)}${row('30 kun', s.d30)}<p class="small muted" style="margin-top:10px">Bu summa ro'yxatda ko'rinmaydi — faqat shu yerda, so'ralganda.</p>`,
+    actions: [{ label: 'Yopish' }] });
+}
+
+// ---------- Activity: who is in the program, the busiest time, what went wrong ----------
+const ROLE_UZ = { owner: 'Boshliq', admin: 'Admin', cashier: 'Kassir', waiter: 'Ofitsant', chef: 'Oshpaz' };
+const CLIENT_UZ = { android: 'Android ilova', windows: 'Windows dastur', phone: 'telefon brauzeri', browser: 'kompyuter brauzeri' };
+function ago(ts) {
+  if (!ts) return '—';
+  const m = Math.floor((Date.now() - ts) / 60000);
+  if (m < 2) return 'hozir';
+  if (m < 60) return `${m} daq oldin`;
+  const d = new Date(ts); const today = new Date(); today.setHours(0, 0, 0, 0);
+  return d >= today ? `bugun ${fmtTime(ts)}` : fmtDateTime(ts);
+}
+async function tenantActivity(t) {
+  let a;
+  try { a = await GET(`/api/platform/tenants/${t.id}/activity`); } catch (e) { return toastError(e); }
+  const max = Math.max(1, ...a.hours.map((h) => h.max));
+  const nowH = new Date().getHours();
+  const hours = a.hours.filter((h) => h.h >= 7 && h.h <= Math.max(nowH, 23));
+  const absent = a.came_today.filter((u) => !u.at);
+  openModal({ size: 'wide', title: `${icon('activity')} ${esc(t.name)} — faollik`,
+    body: `<div class="act-grid">
+        <div class="k"><b class="green-text">● ${a.online}</b><span>hozir dasturda</span></div>
+        <div class="k"><b>${a.staff_today} / ${a.staff_total}</b><span>bugun kirgan xodim</span></div>
+        <div class="k"><b>${a.peak_today}</b><span>eng ko'p bir vaqtda${a.peak_at ? ` (${fmtTime(a.peak_at)})` : ''}</span></div>
+        <div class="k"><b>${a.peak_week}</b><span>eng ko'p — 7 kunda</span></div></div>
+      <h3 class="act-h">Kim ishlayapti</h3>
+      ${a.people.length ? a.people.slice(0, 20).map((p) => `<div class="on-row"><i class="${p.online ? '' : 'off'}"></i><span class="who"><b>${esc(p.name)}</b>
+        <span class="muted small">${esc(ROLE_UZ[p.role] || p.role)}${p.device ? ` · ${esc(p.device)}` : ''}${p.ua ? ` · ${esc(CLIENT_UZ[p.ua] || p.ua)}` : ''}</span></span><span class="small muted when">${ago(p.seen)}</span></div>`).join('')
+        : '<p class="muted">Hali hech kim kirmagan</p>'}
+      ${absent.length ? `<p class="small muted" style="margin-top:6px">Bugun kirmagan: ${absent.map((u) => esc(u.name)).join(', ')}</p>` : ''}
+      <h3 class="act-h">Bugun soatlar bo'yicha (nechta odam dasturda)</h3>
+      <div class="hbars">${hours.map((h) => `<span class="${h.max === a.peak_today && h.max ? 'pk' : ''}" style="height:${Math.max(3, (h.max / max) * 100)}%" title="${h.h}:00 — ${h.max} kishi"></span>`).join('')}</div>
+      <div class="hlbl"><span>${hours[0].h}:00</span><span>${hours[hours.length - 1].h}:00</span></div>
+      <h3 class="act-h">Xatolar (7 kun)</h3>
+      ${a.errors.length ? a.errors.map((e) => `<div class="err-row"><span class="chip ${e.kind === 'api' ? 'orange' : 'red'}">${e.c}×</span>
+        <span><b>${e.kind === 'client' ? 'Dastur xatosi' : e.kind === 'server' ? 'Server xatosi' : esc(e.message)}</b>${e.kind !== 'api' ? ` <span class="small muted">— ${esc(e.message)}</span>` : ''}
+          <span class="small muted">· ${esc(e.who || 'qurilma')}${e.client ? ` · ${esc(CLIENT_UZ[e.client] || e.client)}` : ''}</span></span>
+        <span class="small muted">${ago(e.last)}</span></div>`).join('') : '<p class="muted">Xato yo\'q</p>'}
+      <h3 class="act-h">Bajarilgan ishlar (7 kun)</h3>
+      <div class="ok-row"><span>Kirishlar</span><b>${a.ok.logins}</b></div>
+      <div class="ok-row"><span>Yopilgan cheklar</span><b>${a.ok.closed}</b></div>
+      <div class="ok-row"><span>Oshxonaga / chekka yozilgan taomlar</span><b>${a.ok.sent}</b></div>
+      <div class="ok-row"><span>Bekor qilingan taomlar</span><b>${a.ok.cancelled}</b></div>
+      <div class="ok-row"><span>O'chirilgan cheklar</span><b>${a.ok.deleted}</b></div>
+      ${a.shared.length ? `<div class="ok-row"><span>Bitta login bir necha kishida</span><b class="warn">${a.shared.map((x) => `${esc(x.name)} ${x.c}×`).join(', ')}</b></div>` : ''}
+      ${a.devices.length ? `<h3 class="act-h">Ulangan qurilmalar (${a.devices.length})</h3>${a.devices.map((d) => `<div class="ok-row"><span>${esc(d.name)}</span><span class="small muted">${ago(d.last_seen)}</span></div>`).join('')}` : ''}`,
+    actions: [{ label: 'Yopish' }] });
+}
+
 function moreMenu(t) {
   const acts = [
+    ['sales', 'coins', 'Savdo'],
     ['copy', 'link', 'Kirish havolasini nusxalash'],
     ['tg', 'send', 'Telegram hisobot'],
     ['reset', 'key-round', 'Boshliq parolini tiklash'],
@@ -652,7 +713,8 @@ function moreMenu(t) {
   form.querySelectorAll('[data-act]').forEach((b) => b.onclick = async () => {
     closeModal();
     const k = b.dataset.act;
-    if (k === 'copy') {
+    if (k === 'sales') tenantSales(t);
+    else if (k === 'copy') {
       const url = siteUrl(t.code);
       try { await navigator.clipboard.writeText(url); toast(`Nusxa olindi: ${url}`, 'ok'); } catch { prompt('Havola:', url); }
     } else if (k === 'tg') tenantTelegram(t);
