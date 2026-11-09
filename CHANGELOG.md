@@ -2,6 +2,10 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.35.3 — Idish: faqat donalab sotiladigan mol ham optom narxda
+
+- Pachka/karobkasi yo'q (faqat dona) mollarda Chakana / Optom / Katta optom tanlanganda narx o'zgarmay qolardi. Endi kartochkadagi narx, savatdagi summa va chek tanlangan narxda bo'ladi (mijozning narxi ham).
+
 ## 1.35.2 — Asosiy (kassa) kompyuterda tezroq va bosish yo'qolmaydi
 
 - Kassa hamma xonalarning o'zgarishini oladi. Kechqurun o'zgarishlar ketma-ket kelganda ekran yangilanishni kutib "qotib" qolardi — endi kamida sekundda bir marta yangilanadi.

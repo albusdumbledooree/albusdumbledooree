@@ -114,6 +114,7 @@ Views.pos = {
             ${showShift ? `<button class="btn ${shift ? '' : 'primary'}" id="shift">${icon(shift ? 'lock' : 'circle-plus', 16)} ${shift ? t('Smenani yopish') : t('Smenani ochish')}</button>` : ''}</div>
           ${filters}
           <div class="dishes">${list.map((x) => dishTile(menu, x, { qty: (PosCart.lines.find((c) => c.dish_id === x.id) || {}).qty, sub: productSub(x),
+            ...(idish && !Units.hasUnits(x) ? { price: num(Units.price(x, 'piece', PosCart.tier)) } : {}),
             ...(idish && Units.hasUnits(x) ? { price: `${num(Units.price(x, bigUnit(x), PosCart.tier))}<small>/${esc(PACK_NAMES()[bigUnit(x)])}</small>` } : {}) })).join('') || emptyState('search', W('Taom topilmadi'))}</div>
         </div>
       </section>
@@ -142,6 +143,8 @@ Views.pos = {
       if (!found) { toast(t('Topilmadi: {0}', v), 'warn'); scan.select(); return; }
       UI.search = '';
       if (isIdish() && Units.hasUnits(found)) { pickUnit(found, PosCart.tier).then((u) => { if (u) posAdd(found, 1, null, u); rerender(); }); return; }
+      // Tableware sold only by the piece still takes the price of the chosen tier (wholesale, big wholesale).
+      if (isIdish()) { posAdd(found, 1, null, 'piece'); rerender(); return; }
       posAdd(found);
       rerender();
     };
@@ -155,7 +158,8 @@ Views.pos = {
           bind: (m) => { const b = m.querySelector('[data-newp]'); if (b) b.onclick = () => { Scanner.close(); UI.pendingBarcode = code; location.hash = '#/menuadmin'; }; } };
       }
       const before = (PosCart.lines.find((c) => c.dish_id === found.id) || {}).qty || 0;
-      posAdd(found);
+      // Tableware: the camera adds one piece at the chosen tier (packs and boxes are picked on the screen).
+      if (isIdish()) posAdd(found, 1, null, 'piece'); else posAdd(found);
       const now = (PosCart.lines.find((c) => c.dish_id === found.id) || {}).qty || 0;
       rerender();
       if (now === before) return { ok: false, text: t('"{0}" tugagan', found.name) };
@@ -170,6 +174,7 @@ Views.pos = {
     root.querySelectorAll('[data-dish]').forEach((b) => b.onclick = async () => {
       const x = menu.dishes.find((y) => y.id === Number(b.dataset.dish));
       if (isIdish() && Units.hasUnits(x)) { const u = await pickUnit(x, PosCart.tier); if (u) { posAdd(x, 1, null, u); rerender(); } return; }
+      if (isIdish()) { posAdd(x, 1, null, 'piece'); rerender(); return; }
       if (!(x.mods || []).length) { posAdd(x); rerender(); return; }
       const m = await pickMods(menu, x);
       if (m) { posAdd(x, 1, m); rerender(); }
@@ -237,7 +242,7 @@ Views.pos = {
         const x = menu.dishes.find((y) => y.id === it.dish_id);
         const before = PosCart.lines.length + piecesInCart(it.dish_id);
         if (x && it.unit !== 'piece' && Units.mult(x, it.unit)) posAdd(x, it.qty, null, it.unit);
-        else if (x && Units.hasUnits(x)) posAdd(x, it.qty, null, 'piece');
+        else if (x && isIdish()) posAdd(x, it.qty, null, 'piece');
         else if (x) posAdd(x, it.qty);
         if (!x || PosCart.lines.length + piecesInCart(it.dish_id) === before) missed++;
       }
