@@ -187,6 +187,16 @@ async function logout() {
   endSession();
 }
 
+// A finger or the mouse is down: a fresh screen drawn now would swallow the tap (the button under it is replaced
+// between "press" and "release"). On a busy till (every room's change redraws it) the fresh data waits for the release.
+const Press = { down: false, pending: null };
+document.addEventListener('pointerdown', () => { Press.down = true; }, { capture: true, passive: true });
+['pointerup', 'pointercancel'].forEach((ev) => document.addEventListener(ev, () => {
+  Press.down = false;
+  // Let the click run first, then draw what came while the button was held.
+  if (Press.pending) setTimeout(() => { const p = Press.pending; Press.pending = null; if (p && p.view === currentView && p.seq === loadSeq) renderView(p.data); }, 120);
+}, { capture: true, passive: true }));
+
 async function refreshView(showLoading = false) {
   const view = currentView;
   if (!view || view.public) return;
@@ -197,6 +207,7 @@ async function refreshView(showLoading = false) {
   try {
     const data = view.load ? await view.load(currentParams) : {};
     if (seq !== loadSeq || view !== currentView || data === null) return;
+    if (Press.down && !showLoading) { Press.pending = { view, seq, data }; return; }
     renderView(data);
   } catch (e) {
     if (seq !== loadSeq) return;
@@ -304,9 +315,15 @@ setInterval(() => { if (App.user && !document.hidden) refreshPrinters(); }, 6000
 Live.on('printers', () => refreshPrinters());
 
 // ---------- Live reactions ----------
+// Changes that come one after another are drawn once; on a busy evening the screen still refreshes at least once a second.
 const refreshSoon = (() => {
-  let timer = null;
-  return () => { clearTimeout(timer); timer = setTimeout(() => refreshView(), 250); };
+  let timer = null; let first = 0;
+  return () => {
+    const now = Date.now();
+    if (!timer) first = now;
+    clearTimeout(timer);
+    timer = setTimeout(() => { timer = null; refreshView(); }, now - first > 1000 ? 0 : 250);
+  };
 })();
 
 Live.on('*', (type) => {
@@ -365,7 +382,13 @@ Live.on('payroll', (d) => {
   if (text) toast(text, d.type === 'fine' ? 'warn' : 'ok', 8000);
 });
 
-async function refreshBadges() {
+// Many changes come at once on a busy evening: the counters are asked once for the lot.
+let badgeTimer = null;
+function refreshBadges() {
+  clearTimeout(badgeTimer);
+  return new Promise((ok) => { badgeTimer = setTimeout(() => loadBadges().then(ok, ok), 400); });
+}
+async function loadBadges() {
   try {
     const role = App.user.role;
     if (role === 'waiter' && App.kitchenMode !== 'off') {

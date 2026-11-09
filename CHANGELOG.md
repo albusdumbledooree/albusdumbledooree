@@ -2,6 +2,12 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.35.2 — Asosiy (kassa) kompyuterda tezroq va bosish yo'qolmaydi
+
+- Kassa hamma xonalarning o'zgarishini oladi. Kechqurun o'zgarishlar ketma-ket kelganda ekran yangilanishni kutib "qotib" qolardi — endi kamida sekundda bir marta yangilanadi.
+- Tugma bosilib turgan paytda ekran qayta chizilmaydi (avval bosish "yutilib" ketardi, bir necha marta yoki bosib turish kerak edi). Yangi ma'lumot qo'l qo'yib yuborilgandan keyin chiziladi.
+- Belgilar (tayyor taomlar, hisob so'rovlari, oshxona soni) bir nechta o'zgarish uchun bir marta so'raladi — server va kompyuterga yuk kamaydi.
+
 ## 1.35.1 — Xona raqami summa bilan aralashmaydi
 
 - Xona (stol) raqami endi qora katak ichida turadi, summaning oxirida "so'm" yoziladi: "1" va "172 000" endi "1 172 000" bo'lib o'qilmaydi.
