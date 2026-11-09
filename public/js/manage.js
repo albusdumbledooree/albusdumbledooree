@@ -905,8 +905,8 @@ function ingredientForm(r = {}, units = ['kg', 'g', 'l', 'ml', 'dona']) {
     title: `${icon('warehouse')} ${r.id ? esc(r.name) : t('Yangi masalliq')}`,
     body: `<div class="form-grid"><label class="field">${t('Nomi')}<input name="name" value="${esc(r.name || '')}" required placeholder="${esc(t('Masalan: Guruch'))}"></label>
       <label class="field">${t("O'lchov")}<select name="unit">${units.map((u) => `<option value="${u}" ${r.unit === u ? 'selected' : ''}>${UNIT_NAMES()[u] || u}</option>`).join('')}</select></label>
-      <label class="field">${t('Narx (1 birlik uchun)')}<input type="number" name="cost" min="0" value="${r.cost ?? ''}"></label>
-      <label class="field">${t('Minimal qoldiq (ogohlantirish)')}<input type="number" name="min_stock" min="0" step="0.001" value="${r.min_stock ?? ''}"></label>
+      <label class="field">${t('Narx (1 birlik uchun)')}<input type="number" name="cost" min="0" value="${nn(r.cost, '')}"></label>
+      <label class="field">${t('Minimal qoldiq (ogohlantirish)')}<input type="number" name="min_stock" min="0" step="0.001" value="${nn(r.min_stock, '')}"></label>
       ${r.id ? '' : `<label class="field">${t('Hozirgi qoldiq')}<input type="number" name="stock" min="0" step="0.001"></label>`}</div>`,
     actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: 'primary', onClick: async (f) => {
       const x = formData(f);
@@ -976,7 +976,7 @@ async function recipeDialog(dish) {
   if (!rows.length) return toast(t("Avval Ombor bo'limida masalliq qo'shing"), 'warn');
   const line = (it = {}, i = 1) => `<div class="rec-line form-grid" style="grid-template-columns:2fr 1fr auto auto;align-items:end">
       <label class="field">${i ? '' : t('Masalliq')}<select name="ing">${rows.map((r) => `<option value="${r.id}" ${it.ingredient_id === r.id ? 'selected' : ''}>${esc(r.name)} (${UNIT_NAMES()[r.unit] || r.unit})</option>`).join('')}</select></label>
-      <label class="field">${i ? '' : t('1 porsiyaga')}<input type="number" name="qty" min="0" step="0.001" value="${it.qty ?? ''}" placeholder="${esc(t('1 porsiyaga'))}"></label>
+      <label class="field">${i ? '' : t('1 porsiyaga')}<input type="number" name="qty" min="0" step="0.001" value="${nn(it.qty, '')}" placeholder="${esc(t('1 porsiyaga'))}"></label>
       <span class="rec-cost small muted" style="min-width:90px;padding-bottom:12px"></span>
       <button type="button" class="icon-btn danger" data-rm>${icon('x', 18)}</button></div>`;
   const form = openModal({
@@ -1100,7 +1100,7 @@ Views.menuadmin = {
     const shop = isShop();
     const q = (UI.menuSearch || '').toLowerCase();
     const list = dishes.filter((d) => !q || `${d.name} ${d.barcode} ${d.size} ${d.color} ${d.material || ''} ${d.side || ''}`.toLowerCase().includes(q));
-    const groups = [...categories, { id: null, name: t("Bo'limsiz"), icon: '' }].map((c) => ({ c, ds: list.filter((d) => (d.category_id ?? null) === c.id) }));
+    const groups = [...categories, { id: null, name: t("Bo'limsiz"), icon: '' }].map((c) => ({ c, ds: list.filter((d) => (nn(d.category_id, null)) === c.id) }));
     const low = dishes.filter((d) => d.stock != null && (d.min_stock != null ? d.stock <= d.min_stock : d.stock <= (isDoors() || isIdish() ? 0 : 3)));
     const idish = isIdish();
     return `<div class="page-head"><h1>${idish ? t('Ombor') : W('Menyu')}</h1>
@@ -1114,7 +1114,7 @@ Views.menuadmin = {
         ${c.id ? `<button class="icon-btn" data-edit-cat="${c.id}">${icon('pencil', 18)}</button><button class="icon-btn danger" data-del-cat="${c.id}">${icon('trash-2', 18)}</button>` : ''}</div>
         ${ds.length ? `<div class="table-wrap"><table>
         ${ds.map((d) => `<tr><td style="width:44px;font-size:24px">${d.photo ? `<img class="dish-thumb" src="${dishPhoto(d.photo)}" alt="" loading="lazy">` : esc(d.icon)}</td><td><b>${esc(d.name)}</b>${variantOf(d) ? ` <span class="chip">${esc(variantOf(d))}</span>` : ''}<br>
-            <span class="small muted">${shop ? `${d.barcode ? `${icon('scan-barcode', 13)} ${esc(d.barcode)} · ` : ''}${icon('package', 13)} ${idish ? `<b class="${d.stock != null && d.stock <= 0 ? 'red' : d.min_stock != null && d.stock <= d.min_stock ? 'orange-text' : ''}">${esc(stockLabel(d))}</b>` : `${d.stock ?? '∞'} ${esc(d.unit)}`}`
+            <span class="small muted">${shop ? `${d.barcode ? `${icon('scan-barcode', 13)} ${esc(d.barcode)} · ` : ''}${icon('package', 13)} ${idish ? `<b class="${d.stock != null && d.stock <= 0 ? 'red' : d.min_stock != null && d.stock <= d.min_stock ? 'orange-text' : ''}">${esc(stockLabel(d))}</b>` : `${nn(d.stock, '∞')} ${esc(d.unit)}`}`
               : d.needs_kitchen ? `${icon('chef-hat', 13)} ${d.prep_minutes} ${t('daq')}` : `${icon('check', 13)} ${t('Darhol')}`}</span></td>
           <td class="right num">${idish && Units.hasUnits(d) ? `<b>${money(Units.price(d, bigUnit(d), 'r'))}</b><span class="small muted"> / ${esc(PACK_NAMES()[bigUnit(d)])}</span>${d.cost ? `<br><span class="small muted">${money(Math.round(d.cost * Units.mult(d, bigUnit(d))))}</span>` : ''}`
             : `<b>${money(d.price)}</b>${shop && d.cost ? `<br><span class="small muted">${money(d.cost)}</span>` : ''}`}</td>
@@ -1137,7 +1137,7 @@ Views.menuadmin = {
       title: `${icon('list')} ${c.id ? t("Bo'limni tahrirlash") : t("Yangi bo'lim")}`,
       body: `<div class="form-grid"><label class="field">${t('Nomi')}<input name="name" value="${esc(c.name || '')}" required></label>
         <label class="field">${t('Belgi (emoji)')}<input name="icon" value="${esc(c.icon || '🍽️')}"></label>
-        <label class="field">${t('Tartib')}<input type="number" name="sort" value="${c.sort ?? categories.length}"></label></div>
+        <label class="field">${t('Tartib')}<input type="number" name="sort" value="${nn(c.sort, categories.length)}"></label></div>
         <div class="field" style="margin-top:12px">${t('Rangi (buyurtma ekranida taomlar shu rangda chiqadi)')}
           <div class="row" style="margin-top:6px"><input type="hidden" name="color" value="${esc(c.color || '')}">
             <button type="button" class="swatch auto ${c.color ? '' : 'on'}" data-col="">${t('Avto')}</button>
@@ -1158,8 +1158,8 @@ Views.menuadmin = {
       body: `<div class="form-grid">
         <label class="field">${t('Nomi')}<input name="name" value="${esc(d.name || '')}" required></label>
         <label class="field">${t("Bo'lim")}<select name="category_id"><option value="">—</option>${categories.map((c) => `<option value="${c.id}" ${c.id === d.category_id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
-        <label class="field">${t('Narxi')}<input type="number" name="price" min="0" value="${d.price ?? ''}" required></label>
-        <label class="field">${t('Tannarxi')}<input type="number" name="cost" min="0" value="${d.cost ?? 0}"></label>
+        <label class="field">${t('Narxi')}<input type="number" name="price" min="0" value="${nn(d.price, '')}" required></label>
+        <label class="field">${t('Tannarxi')}<input type="number" name="cost" min="0" value="${nn(d.cost, 0)}"></label>
         ${shop ? `<label class="field">${t('Shtrix-kod')}<span class="input-btn"><input name="barcode" value="${esc(d.barcode || '')}" placeholder="${esc(t('Skanerlang yoki yozing'))}">${camOk() ? `<button type="button" class="icon-btn" data-cam title="${esc(t('Kamera bilan skanerlash'))}">${icon('camera', 18)}</button>` : ''}</span></label>
           ${App.biz === 'clothing' ? `<label class="field">${t("O'lcham")}<input name="size" value="${esc(d.size || '')}" placeholder="S, M, L, 42"></label>
           <label class="field">${t('Rang')}<input name="color" value="${esc(d.color || '')}"></label>` : ''}
@@ -1169,13 +1169,13 @@ Views.menuadmin = {
           <label class="field">${t('Ochilish tomoni')}<select name="side"><option value="">—</option>${SIDES().map((x) => `<option ${d.side === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
           <datalist id="dl-mat">${MATERIALS().map((x) => `<option value="${esc(x)}">`).join('')}</datalist>
           <datalist id="dl-sizes">${[...new Set(dishes.map((x) => x.size).filter(Boolean))].map((x) => `<option value="${esc(x)}">`).join('')}</datalist>` : ''}
-          <label class="field">${t('Kam qolganda ogohlantirish (dona)')}<input type="number" name="min_stock" min="0" value="${d.min_stock ?? ''}" placeholder="${isDoors() ? '1' : '3'}"></label>
+          <label class="field">${t('Kam qolganda ogohlantirish (dona)')}<input type="number" name="min_stock" min="0" value="${nn(d.min_stock, '')}" placeholder="${isDoors() ? '1' : '3'}"></label>
           ${suppliers.length ? `<label class="field">${t('Yetkazib beruvchi')}<select name="supplier_id"><option value="">—</option>${suppliers.map((s) => `<option value="${s.id}" ${d.supplier_id === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>` : ''}
           <label class="field">${t("O'lchov birligi")}<select name="unit">${['dona', 'kg', 'litr', 'metr', 'quti', 'juft'].map((u) => `<option ${(d.unit || 'dona') === u ? 'selected' : ''}>${u}</option>`).join('')}</select></label>`
-        : `<label class="field">${t('Tayyorlash vaqti (daq)')}<input type="number" name="prep_minutes" min="0" value="${d.prep_minutes ?? 15}"></label>
+        : `<label class="field">${t('Tayyorlash vaqti (daq)')}<input type="number" name="prep_minutes" min="0" value="${nn(d.prep_minutes, 15)}"></label>
           <input type="hidden" name="unit" value="${esc(d.unit || 'porsiya')}">`}
         <label class="field">${t('Belgi (emoji)')}<input name="icon" value="${esc(d.icon || (shop ? '📦' : '🍽️'))}"></label>
-        <label class="field">${t("Qoldiq (bo'sh = cheksiz)")}<input type="number" name="stock" min="0" value="${d.stock ?? ''}"></label></div>
+        <label class="field">${t("Qoldiq (bo'sh = cheksiz)")}<input type="number" name="stock" min="0" value="${nn(d.stock, '')}"></label></div>
         ${shop ? '<input type="hidden" name="needs_kitchen" value="">' : `<label class="check" style="margin-top:14px"><input type="checkbox" name="needs_kitchen" ${d.needs_kitchen === 0 ? '' : 'checked'}> ${icon('chef-hat', 18)} ${t('Oshxonada tayyorlanadi')}</label>`}
         ${!shop && modifiers.length ? `<h3 style="margin:18px 0 8px">${icon('list', 18)} ${t("Qo'shimcha tanlovlar")}</h3>
           <div class="cat-pick">${modifiers.map((g) => `<label class="pill"><input type="checkbox" data-mg value="${g.id}" ${(d.mods || []).includes(g.id) ? 'checked' : ''}><span>${esc(g.name)}</span></label>`).join('')}</div>
@@ -1244,7 +1244,7 @@ Views.menuadmin = {
 function stockMenu(d) {
   openModal({
     title: `${icon('package')} ${esc(d.name)}`,
-    body: `<p class="muted" style="margin-top:0">${esc(variantOf(d))} · ${t('Omborda')}: <b>${d.stock ?? '∞'}</b></p>
+    body: `<p class="muted" style="margin-top:0">${esc(variantOf(d))} · ${t('Omborda')}: <b>${nn(d.stock, '∞')}</b></p>
       <div class="stack" style="gap:8px">
         <button type="button" class="btn block" data-a="wo">${icon('trash-2', 18)} ${t('Brak / hisobdan chiqarish')}</button>
         <button type="button" class="btn block" data-a="cnt">${icon('list', 18)} ${t('Sanash (haqiqiy soni)')}</button>
@@ -1259,7 +1259,7 @@ function stockMenu(d) {
 function receiveDialog(d) {
   openModal({
     title: `${icon('package-plus')} ${esc(d.name)} — ${t('Kirim qilish')}`,
-    body: `<p class="muted">${t('Hozirgi qoldiq')}: <b>${d.stock ?? '∞'} ${esc(d.unit)}</b></p>
+    body: `<p class="muted">${t('Hozirgi qoldiq')}: <b>${nn(d.stock, '∞')} ${esc(d.unit)}</b></p>
       <div class="form-grid"><label class="field">${t('Keldi (soni)')}<input type="number" name="qty" min="1" required></label>
         <label class="field">${t('Tannarxi (1 dona)')}<input type="number" name="cost" min="0" value="${d.cost || ''}"></label></div>
       ${moduleOn('finance') ? `<label class="check" style="margin-top:12px"><input type="checkbox" name="expense" checked> ${t('Xarajat sifatida yozilsin (Mahsulotlar)')}</label>` : ''}`,
@@ -1333,8 +1333,8 @@ Views.staff = {
             <label class="field">${t('Maosh turi')}<select name="pay_type">${Object.entries(PAY_TYPES()).map(([k, v]) => `<option value="${k}" ${k === 'monthly' ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
             <label class="field">${t('Summa')}<input type="number" name="pay_amount" min="0" step="1000" placeholder="${esc(t('Masalan: 3 000 000'))}"></label></div>` : ''}
           <div id="perm-box" style="margin-top:14px"><h3 style="margin-bottom:8px">${t('Huquqlar')}</h3><div class="form-grid">
-            <label class="field"><span>${icon('printer', 15)} ${t('Printerdan chek chiqarish')}</span>${permSel('perm_print', u.perm_print ?? null, (DEF[role] || [1])[0])}</label>
-            <label class="field"><span>${icon('wallet', 15)} ${t('Chekni yopish (to\'lov qabul qilish)')}</span>${permSel('perm_close', u.perm_close ?? null, (DEF[role] || [1, 1])[1])}</label></div></div>
+            <label class="field"><span>${icon('printer', 15)} ${t('Printerdan chek chiqarish')}</span>${permSel('perm_print', nn(u.perm_print, null), (DEF[role] || [1])[0])}</label>
+            <label class="field"><span>${icon('wallet', 15)} ${t('Chekni yopish (to\'lov qabul qilish)')}</span>${permSel('perm_close', nn(u.perm_close, null), (DEF[role] || [1, 1])[1])}</label></div></div>
           ${u.id && u.id !== App.user.id ? `<label class="check" style="margin-top:14px"><input type="checkbox" name="active" ${u.active ? 'checked' : ''}> ${t('Faol (o\'chirilsa tizimga kira olmaydi)')}</label>` : ''}`,
         actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: 'primary', onClick: async (f) => {
           const d = formData(f);
@@ -1463,7 +1463,7 @@ function modifierGroupDialog(g, categories, dishes) {
   const opt = (o = { name: '', price: 0 }) => `<div class="opt-row" data-oid="${o.id || ''}"><input data-on placeholder="${esc(t('Variant nomi'))}" value="${esc(o.name)}" maxlength="60">
     <input type="number" data-op step="500" value="${o.price || 0}" title="${esc(t('Narx farqi'))}"><button type="button" class="icon-btn danger" data-orm>${icon('trash-2', 16)}</button></div>`;
   const linked = new Set(dishes.filter((d) => (d.mods || []).includes(g.id)).map((d) => d.id));
-  const byCat = [...categories, { id: null, name: t("Bo'limsiz") }].map((c) => ({ c, ds: dishes.filter((d) => (d.category_id ?? null) === c.id) })).filter((x) => x.ds.length);
+  const byCat = [...categories, { id: null, name: t("Bo'limsiz") }].map((c) => ({ c, ds: dishes.filter((d) => (nn(d.category_id, null)) === c.id) })).filter((x) => x.ds.length);
   const form = openModal({
     title: `${icon('list')} ${g.id ? esc(g.name) : t('Yangi guruh')}`, size: 'wide',
     body: `<div class="form-grid"><label class="field">${t('Guruh nomi')}<input name="name" value="${esc(g.name || '')}" placeholder="${esc(t('Masalan: Achchiqligi'))}" required maxlength="60"></label>
@@ -1626,7 +1626,7 @@ Views.settings = {
         <label class="field" id="sv-guest">${t('Bir kishi uchun')} (${esc(s.currency)})<input type="number" name="service_per_guest" min="0" step="500" value="${s.service_per_guest}"></label></div>
       <p class="small muted" style="margin-top:8px">${t("Xizmat haqi faqat shu yerda o'zgaradi. Olib ketishda xizmat haqi olinmaydi.")}</p>
       ${isIdish() ? `<h3 style="margin:18px 0 10px">${icon('package', 18)} ${t('Katta optom')}</h3>
-      <div class="form-grid"><label class="field">${t('Bir xil moldan necha karobka olinsa katta optom narxi qo\'yiladi')}<input type="number" name="big_box_from" min="0" value="${s.big_box_from ?? 10}"></label></div>
+      <div class="form-grid"><label class="field">${t('Bir xil moldan necha karobka olinsa katta optom narxi qo\'yiladi')}<input type="number" name="big_box_from" min="0" value="${nn(s.big_box_from, 10)}"></label></div>
       <p class="small muted" style="margin-top:8px">${t("0 — faqat \"Katta optom\" mijozlarga. Mijozning narxi Mijozlar bo'limida belgilanadi.")}</p>` : ''}
       ${isShop() ? '' : `<h3 style="margin:18px 0 10px">${icon('truck', 18)} ${t('Dostavka')}</h3>
       <div class="form-grid"><label class="field">${t('Yetkazib berish haqi')} (${esc(s.currency)})<input type="number" name="delivery_fee" min="0" step="1000" value="${s.delivery_fee || 0}"></label></div>
@@ -1637,7 +1637,7 @@ Views.settings = {
         <option value="menu" ${s.staff_meal_price !== 'cost' ? 'selected' : ''}>${t('Menyu narxida')}</option>
         <option value="cost" ${s.staff_meal_price === 'cost' ? 'selected' : ''}>${t('Tannarxda (taomga kiritilgan tannarx)')}</option></select></label></div>` : ''}
       ${moduleOn('customers') ? `<h3 style="margin:18px 0 10px">${icon('gift', 18)} ${t('Keshbek')}</h3>
-      <div class="form-grid"><label class="field">${t("Mijozga to'lagan pulining necha foizi bonus bo'lib qaytadi, %")}<input type="number" name="cashback_pct" min="0" max="30" step="0.5" value="${s.cashback_pct ?? 3}"></label></div>
+      <div class="form-grid"><label class="field">${t("Mijozga to'lagan pulining necha foizi bonus bo'lib qaytadi, %")}<input type="number" name="cashback_pct" min="0" max="30" step="0.5" value="${nn(s.cashback_pct, 3)}"></label></div>
       <p class="small muted" style="margin-top:8px">${t("Bonus keyingi tashrifda chekdan ayiriladi. 0 qo'ysangiz keshbek o'chadi.")}</p>` : ''}
       <h3 style="margin:18px 0 10px">${icon('list', 18)} ${t('Kategoriyalar')}</h3>
       <div class="form-grid">
@@ -2164,8 +2164,9 @@ Views.settings = {
       <div class="card"><div class="card-head"><h2>${icon('languages')} ${t('Til va ko\'rinish')}</h2></div>
         <div class="stack">${langSelect('me-lang')}
           <div class="seg">${[['light', 'sun', t("Yorug'")], ['dark', 'moon', t("Qorong'i")]].map(([k, ic, n]) => `<button class="${(store('cp_theme') || 'light') === k ? 'active' : ''}" data-theme="${k}">${icon(ic, 16)} ${n}</button>`).join('')}</div>
+          ${window.FlowiAndroid ? `<button class="btn" id="app-setup">${icon('smartphone', 18)} ${t("Biznes kodini o'zgartirish (ilova)")}</button>` : `${/Android/i.test(navigator.userAgent) ? `<a class="btn" href="/flowi.apk" download>${icon('smartphone', 18)} ${t('Android ilovani yuklab olish')}</a>` : ''}
           <button class="btn" id="install">${icon('download', 18)} ${t("Ilovani o'rnatish (ish stoli / telefon)")}</button>
-          <button class="btn" id="full">${icon('maximize', 18)} ${t("To'liq ekran")}</button>
+          <button class="btn" id="full">${icon('maximize', 18)} ${t("To'liq ekran")}</button>`}
           ${keyboardSelect()}</div></div>
       ${App.device ? `<div class="card"><div class="card-head"><h2>${icon('printer')} ${t('Buyurtma printeri')}</h2></div>
         <p style="margin:0">${t('Buyurtma printeri')}: <b>${OrderPrinter.on() ? t('yoqilgan') : t("o'chiq")}</b></p>
@@ -2198,7 +2199,8 @@ Views.settings = {
   bind_me(root) {
     bindLang(root, 'me-lang');
     root.querySelectorAll('[data-theme]').forEach((b) => b.onclick = () => { store('cp_theme', b.dataset.theme); applyTheme(); refreshView(); });
-    root.querySelector('#install').onclick = installApp;
+    const ins = root.querySelector('#install'); if (ins) ins.onclick = installApp;
+    const aps = root.querySelector('#app-setup'); if (aps) aps.onclick = () => FlowiAndroid.openSetup();
     root.querySelector('#kb-mode').onchange = (e) => { Keyboard.setMode(e.target.value); toast(t('Saqlandi'), 'ok'); };
     const kb = root.querySelector('#kiosk-bat');
     if (kb) kb.onclick = downloadKioskLauncher;

@@ -310,8 +310,8 @@ function payDialog({ title, max, url, extra = {} }) {
 function writeoffDialog(d) {
   openModal({
     title: `${icon('trash-2')} ${esc(d.name)} — ${t('brak / hisobdan chiqarish')}`,
-    body: `<p class="muted" style="margin-top:0">${esc(variantOf(d))} · ${t('Omborda')}: <b>${d.stock ?? '∞'}</b> · ${t('Tannarx')}: ${money(d.cost)}</p>
-      <div class="form-grid"><label class="field">${t('Soni')}<input type="number" name="qty" min="1" max="${d.stock ?? ''}" value="1"></label>
+    body: `<p class="muted" style="margin-top:0">${esc(variantOf(d))} · ${t('Omborda')}: <b>${nn(d.stock, '∞')}</b> · ${t('Tannarx')}: ${money(d.cost)}</p>
+      <div class="form-grid"><label class="field">${t('Soni')}<input type="number" name="qty" min="1" max="${nn(d.stock, '')}" value="1"></label>
         <label class="field">${t('Sabab')}<input name="reason" required placeholder="${esc(t("Masalan: singan, tirnalgan, nuqsonli"))}"></label></div>
       <p class="small muted">${t("Zarar foyda hisobotida \"Brak va yo'qotish\" bo'lib ko'rinadi.")}</p>`,
     actions: [{ label: t('Bekor') }, { label: t('Hisobdan chiqarish'), cls: 'danger', onClick: async (f) => {
@@ -323,8 +323,8 @@ function writeoffDialog(d) {
 function countDialog(d) {
   openModal({
     title: `${icon('list')} ${esc(d.name)} — ${t('sanash')}`,
-    body: `<p class="muted" style="margin-top:0">${esc(variantOf(d))} · ${t('Dasturda')}: <b>${d.stock ?? 0}</b></p>
-      <label class="field">${t('Haqiqatda nechta bor')}<input type="number" name="qty" min="0" value="${d.stock ?? 0}" required></label>`,
+    body: `<p class="muted" style="margin-top:0">${esc(variantOf(d))} · ${t('Dasturda')}: <b>${nn(d.stock, 0)}</b></p>
+      <label class="field">${t('Haqiqatda nechta bor')}<input type="number" name="qty" min="0" value="${nn(d.stock, 0)}" required></label>`,
     actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: 'primary', onClick: async (f) => {
       const r = await POST(`/api/dishes/${d.id}/count`, { qty: Number(f.qty.value) });
       toast(r.diff ? t('Farq: {0} ta', r.diff > 0 ? `+${r.diff}` : r.diff) : t("Hammasi to'g'ri"), r.diff < 0 ? 'warn' : 'ok'); refreshView();
@@ -339,7 +339,7 @@ async function stockHistoryDialog(d) {
     ...h.sales.map((s) => ({ at: s.created_at, kind: [t('Sotildi'), ''], qty: -s.qty, sum: s.price, note: `#${s.order_id}`, who: '' }))].sort((a, b) => b.at - a.at).slice(0, 120);
   openModal({
     title: `${icon('history')} ${esc(d.name)}`, size: 'wide',
-    body: `<p class="muted" style="margin-top:0">${esc(variantOf(d))} · ${t('Omborda')}: <b>${d.stock ?? '∞'}</b> · ${t('Tannarx')}: ${money(d.cost)} · ${t('Narx')}: ${money(d.price)}</p>
+    body: `<p class="muted" style="margin-top:0">${esc(variantOf(d))} · ${t('Omborda')}: <b>${nn(d.stock, '∞')}</b> · ${t('Tannarx')}: ${money(d.cost)} · ${t('Narx')}: ${money(d.price)}</p>
       ${rows.length ? `<div class="table-wrap"><table><tr><th>${t('Sana')}</th><th>${t('Nima')}</th><th class="right">${t('Soni')}</th><th class="right">${t('Narx')}</th><th>${t('Izoh')}</th></tr>
         ${rows.map((r) => `<tr><td class="small">${fmtDateTime(r.at)}</td><td><span class="chip ${r.kind[1]}">${r.kind[0]}</span></td><td class="right num">${r.qty > 0 ? '+' : ''}${r.qty}</td>
           <td class="right num">${money(r.sum)}</td><td class="small">${esc(r.note || '')} ${r.who ? `<span class="muted">${esc(r.who)}</span>` : ''}</td></tr>`).join('')}</table></div>` : `<p class="muted">${t("Hali harakat yo'q")}</p>`}`,
@@ -396,7 +396,7 @@ function importDialog() {
     const { rows } = parsePasted(form.text.value);
     const keys = Object.keys(names).filter((k) => rows.some((r) => r[k] !== undefined));
     form.querySelector('#imp-prev').innerHTML = rows.length ? `<b>${t('{0} ta mol topildi', rows.length)}</b><div class="table-wrap" style="max-height:240px;margin-top:6px"><table>
-      <tr>${keys.map((k) => `<th>${names[k]}</th>`).join('')}</tr>${rows.slice(0, 50).map((r) => `<tr>${keys.map((k) => `<td>${esc(r[k] ?? '')}</td>`).join('')}</tr>`).join('')}</table></div>` : '';
+      <tr>${keys.map((k) => `<th>${names[k]}</th>`).join('')}</tr>${rows.slice(0, 50).map((r) => `<tr>${keys.map((k) => `<td>${esc(nn(r[k], ''))}</td>`).join('')}</tr>`).join('')}</table></div>` : '';
   };
 }
 
@@ -546,7 +546,7 @@ Views.profit = {
       const lines = [['Ko\'rsatkich', 'Summa'], ['Savdo', d.revenue], ['Mollar tannarxi', d.goods_cost], ['Ustalar va yetkazish', d.service_cost], ["Brak va yo'qotish", d.damage],
         ...d.running.map((r) => [r.category, r.amount]), ['Boshqa kirim', d.other_income], ['Sof foyda', d.net], [], ['Mol', 'Belgilari', 'Sotildi', 'Savdo', 'Foyda'],
         ...d.top_qty.map((r) => [r.name, r.variant, r.qty, r.revenue, r.profit]), [], ["O'lik mollar", 'Belgilari', 'Omborda', 'Qotgan pul'], ...d.dead.map((r) => [r.name, r.variant, r.stock, r.frozen])];
-      const csv = '﻿' + lines.map((l) => l.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
+      const csv = '﻿' + lines.map((l) => l.map((c) => `"${String(nn(c, '')).replace(/"/g, '""')}"`).join(';')).join('\r\n');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
       a.download = `foyda-${isoDay(d.from)}_${isoDay(d.to - 1)}.csv`;
@@ -745,7 +745,7 @@ async function telegramSettingsHtml() {
             <button class="icon-btn danger" data-tg-del="${esc(c.id)}" title="${esc(t('Uzish'))}">${icon('x', 16)}</button></div>`).join('')}</div>
           ${linkBlock || `<button class="btn sm" id="tg-link" style="margin-top:8px">${icon('plus', 16)} ${t("Yana bir kishini qo'shish")}</button>`}
           <div class="form-grid" style="margin:12px 0"><label class="field">${t('Kunlik hisobot vaqti')}<select id="tg-time">
-            ${['', '20:00', '21:00', '22:00', '22:30', '23:00', '23:30'].map((x) => `<option value="${x}" ${(s.report_time ?? '23:00') === x ? 'selected' : ''}>${x || t("Yubormaslik")}</option>`).join('')}</select></label></div>
+            ${['', '20:00', '21:00', '22:00', '22:30', '23:00', '23:30'].map((x) => `<option value="${x}" ${(nn(s.report_time, '23:00')) === x ? 'selected' : ''}>${x || t("Yubormaslik")}</option>`).join('')}</select></label></div>
           <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" id="tg-report">${icon('chart-column', 16)} ${t('Hisobotni hozir yuborish')}</button>
             <button class="btn" id="tg-test">${icon('send', 16)} ${t('Sinov xabari')}</button></div>`
         : linkBlock || `<button class="btn primary" id="tg-link">${icon('send', 18)} ${t('Telegramni ulash')}</button>`}</div>` };

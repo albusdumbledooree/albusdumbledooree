@@ -4,6 +4,8 @@
  * "call the waiter", "the bill". What is sent is a request: a worker approves it before it reaches the check.
  */
 (function () {
+  // "a ?? b" for older phones (their browser does not know "??").
+  const nn = (a, b) => (a != null ? a : b);
   const KEY = (/^\/q\/(\d+-[A-Za-z0-9]{12})/.exec(location.pathname) || [])[1];
   const T = {
     ru: {
@@ -31,8 +33,8 @@
   };
   const LANGS = ['uz', 'ru'];
   let lang = (() => { try { const l = localStorage.getItem('guest_lang'); return LANGS.includes(l) ? l : (navigator.language || '').startsWith('ru') ? 'ru' : 'uz'; } catch { return 'uz'; } })();
-  const t = (s, ...a) => ((lang !== 'uz' && T[lang] && T[lang][s]) || s).replace(/\{(\d)\}/g, (_, i) => a[i] ?? '');
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const t = (s, ...a) => ((lang !== 'uz' && T[lang] && T[lang][s]) || s).replace(/\{(\d)\}/g, (_, i) => (a[i] != null ? a[i] : ''));
+  const esc = (s) => String(nn(s, '')).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const store = (k, v) => { try { if (v === undefined) return JSON.parse(localStorage.getItem(k)); localStorage.setItem(k, JSON.stringify(v)); } catch { return null; } return v; };
   const guestId = store('guest_id') || store('guest_id', `g${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
   const CART_KEY = `guest_cart_${KEY}`;
@@ -120,7 +122,7 @@
       : ['off', 'closed'].includes(s.order.why) ? t("Hozir QR orqali buyurtma qabul qilinmaydi — ofitsantga ayting.") : '';
     const q = search.trim().toLowerCase();
     const shown = s.dishes.filter((d) => (cat === 'all' || d.category_id === Number(cat)) && (!q || `${d.name} ${d.description}`.toLowerCase().includes(q)));
-    const groups = [...s.categories, { id: null, name: '' }].map((c) => ({ c, ds: shown.filter((d) => (d.category_id ?? null) === c.id || (c.id === null && !s.categories.some((x) => x.id === d.category_id))) }))
+    const groups = [...s.categories, { id: null, name: '' }].map((c) => ({ c, ds: shown.filter((d) => (nn(d.category_id, null)) === c.id || (c.id === null && !s.categories.some((x) => x.id === d.category_id))) }))
       .filter((g) => g.ds.length);
     const count = cartCount();
     app.innerHTML = `

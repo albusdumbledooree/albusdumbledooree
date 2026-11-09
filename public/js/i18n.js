@@ -5,6 +5,8 @@
  * Server messages arrive already filled in (e.g. '"Manti" tugagan'), so tServer() also matches
  * them against the placeholder patterns.
  */
+// "a ?? b" written for older phones: their built-in browser (Android 9 and older) does not know "??" and "?.".
+function nn(a, b) { return a != null ? a : b; }
 const LANGS = { uz: "O'zbekcha", ru: 'Русский', en: 'English' };
 let LANG = (() => { try { return JSON.parse(localStorage.getItem('cp_lang')) || 'uz'; } catch { return 'uz'; } })();
 if (!LANGS[LANG]) LANG = 'uz';
@@ -14,7 +16,7 @@ const I18N = { ru: {}, en: {} };
 function t(s, ...args) {
   let out = s;
   if (LANG !== 'uz' && I18N[LANG][s] !== undefined) out = I18N[LANG][s];
-  return args.length ? out.replace(/\{(\d+)\}/g, (_, i) => (args[i] ?? '')) : out;
+  return args.length ? out.replace(/\{(\d+)\}/g, (_, i) => (nn(args[i], ''))) : out;
 }
 
 const patternCache = {};
@@ -39,8 +41,8 @@ function tServer(msg) {
     if (!m) continue;
     // Captured parts may be field names ("Summa kiritilmagan") that have their own translation.
     const vals = [];
-    p.order.forEach((n, i) => { vals[n] = d[m[i + 1]] ?? m[i + 1]; });
-    return p.v.replace(/\{(\d+)\}/g, (_, i) => vals[i] ?? '');
+    p.order.forEach((n, i) => { vals[n] = d[m[i + 1]] != null ? d[m[i + 1]] : m[i + 1]; });
+    return p.v.replace(/\{(\d+)\}/g, (_, i) => (vals[i] != null ? vals[i] : ''));
   }
   return msg;
 }

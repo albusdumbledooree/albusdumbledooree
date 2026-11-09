@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FLOWI — aloqa yo'q</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #071726; color: #fff; font: 17px/1.5 system-ui, Roboto, sans-serif; text-align: center; padding: 24px; }
+  h1 { font-size: 26px; margin: 0 0 8px; } p { color: #b9c4d3; margin: 0 0 6px; } small { color: #7d8ba0; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; background: #f59e0b; display: inline-block; margin-right: 8px; animation: blink 1.2s infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  button { margin-top: 18px; font: inherit; font-weight: 700; border: 0; border-radius: 12px; padding: 12px 22px; background: #2156e8; color: #fff; display: block; width: 100%; max-width: 320px; margin-left: auto; margin-right: auto; }
+  button.ghost { background: transparent; border: 1px solid #33465e; color: #b9c4d3; margin-top: 10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1><span class="dot"></span><span id="t">Internet yo'q</span></h1>
+  <p id="p">FLOWI serveriga ulanib bo'lmadi. Aloqa tiklanishi bilan o'zi qayta ochiladi.</p>
+  <button id="retry">Hozir urinib ko'rish</button>
+  <button class="ghost" id="change">Biznes kodini o'zgartirish</button>
+  <p style="margin-top:18px"><small id="s">Ma'lumotlar serverda saqlanadi — hech narsa yo'qolmaydi.</small></p>
+</main>
+<script>
+(function () {
+  if (/^ru/i.test(navigator.language || '')) {
+    document.getElementById('t').textContent = 'Нет интернета';
+    document.getElementById('p').textContent = 'Не удалось подключиться к серверу FLOWI. Как только связь появится, откроется само.';
+    document.getElementById('retry').textContent = 'Попробовать сейчас';
+    document.getElementById('change').textContent = 'Сменить код заведения';
+    document.getElementById('s').textContent = 'Данные хранятся на сервере — ничего не пропадёт.';
+  }
+  var url = window.FlowiAndroid ? FlowiAndroid.getUrl() : '';
+  var busy = false;
+  function tryOpen() {
+    if (!url || busy) return;
+    busy = true;
+    fetch(url, { mode: 'no-cors', cache: 'no-store' }).then(function () { FlowiAndroid.retry(); }).catch(function () { busy = false; });
+  }
+  document.getElementById('retry').onclick = tryOpen;
+  document.getElementById('change').onclick = function () { FlowiAndroid.openSetup(); };
+  setInterval(tryOpen, 5000);
+}());
+</script>
+</body>
+</html>

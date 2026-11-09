@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FLOWI</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(700px 400px at 80% -10%, rgba(33,86,232,.45), transparent 60%), #071726; color: #fff;
+    font: 17px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 24px 18px; }
+  main { width: min(420px, 100%); }
+  .logo { font-weight: 900; font-size: 40px; letter-spacing: -1px; margin-bottom: 4px; }
+  p { color: #b9c4d3; margin: 0 0 22px; }
+  label { display: block; font-weight: 700; font-size: 14px; color: #dbe3ee; margin-bottom: 8px; }
+  .box { display: flex; align-items: center; background: #fff; border-radius: 14px; overflow: hidden; }
+  .box span { color: #64748b; padding: 0 0 0 14px; font-size: 16px; white-space: nowrap; }
+  input { flex: 1; min-width: 0; border: 0; outline: 0; font: inherit; font-size: 19px; font-weight: 700; padding: 15px 14px 15px 2px; color: #0f172a; background: transparent; }
+  button { width: 100%; margin-top: 16px; font: inherit; font-weight: 800; font-size: 18px; border: 0; border-radius: 14px; padding: 15px; background: #2156e8; color: #fff; }
+  button:disabled { opacity: .5; }
+  small { display: block; color: #7d8ba0; margin-top: 18px; font-size: 13.5px; }
+  .err { color: #fca5a5; font-weight: 700; margin-top: 12px; min-height: 1.4em; }
+  a { color: #93b4ff; }
+</style>
+</head>
+<body>
+<main>
+  <div class="logo">FLOWI</div>
+  <p id="lead">Ishxonangiz kodini kiriting — keyingi safar dastur o'zi ochiladi.</p>
+  <label for="code" id="lbl">Biznes kodi</label>
+  <div class="box"><span>flowi.uz/c/</span><input id="code" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="navruz"></div>
+  <div class="err" id="err"></div>
+  <button id="go">Kirish</button>
+  <small id="hint">Kodni boshliqdan so'rang. Boshqa server bo'lsa, to'liq manzilni yozing (masalan: choyxona.uz/c/kod).</small>
+</main>
+<script>
+(function () {
+  var ru = /^ru/i.test(navigator.language || '');
+  if (ru) {
+    document.getElementById('lead').textContent = 'Введите код заведения — в следующий раз программа откроется сама.';
+    document.getElementById('lbl').textContent = 'Код заведения';
+    document.getElementById('go').textContent = 'Войти';
+    document.getElementById('hint').textContent = 'Код спросите у руководителя. Если другой сервер — введите полный адрес (например: chaixana.uz/c/kod).';
+  }
+  var inp = document.getElementById('code');
+  var err = document.getElementById('err');
+  var cur = window.FlowiAndroid ? FlowiAndroid.getUrl() : '';
+  if (cur) inp.value = /^https:\/\/flowi\.uz\/c\//.test(cur) ? cur.replace('https://flowi.uz/c/', '') : cur;
+  function go() {
+    var v = inp.value.trim();
+    if (!v) { err.textContent = ru ? 'Введите код' : 'Kodni kiriting'; inp.focus(); return; }
+    var btn = document.getElementById('go'); btn.disabled = true; err.textContent = '';
+    // The business must exist: its address answers with the program, a wrong code with "not found".
+    window.onFlowiCheck = function (code) {
+      if (code >= 200 && code < 400) { FlowiAndroid.setUrl(v); return; }
+      btn.disabled = false;
+      err.textContent = code === 404 ? (ru ? 'Такого кода нет' : 'Bunday kod topilmadi')
+        : (ru ? 'Нет связи с сервером. Проверьте интернет.' : "Serverga ulanib bo'lmadi. Internetni tekshiring.");
+    };
+    FlowiAndroid.check(v);
+  }
+  document.getElementById('go').onclick = go;
+  inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+  setTimeout(function () { inp.focus(); }, 300);
+}());
+</script>
+</body>
+</html>

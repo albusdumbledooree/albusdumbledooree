@@ -2,6 +2,15 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.37.0 — Android ilova (APK)
+
+- Yangi: **FLOWI Android ilovasi** — `flowi.uz/flowi.apk` dan yuklab olinadi (78 KB), Android 5 va undan yangi hamma telefon va planshetga o'rnatiladi.
+- Birinchi ochilganda biznes kodi bir marta yoziladi, keyin ilova to'g'ri o'sha biznesni ochadi. Kodni o'zgartirish: Sozlamalar → "Biznes kodini o'zgartirish" yoki "orqaga" tugmasini bosib turish.
+- "Taom tayyor" — ilova orqada bo'lsa telefonga bildirishnoma (ovoz va titrash bilan) keladi; xabar telefonning o'z ovozi bilan aytiladi.
+- Kamera (shtrix-kod, selfi), joylashuv (davomat), fayl tanlash ishlaydi; ekran o'chmaydi; "orqaga" ilovani tasodifan yopmaydi; internet uzilsa o'zi qayta ulanadi.
+- Eski telefonlar uchun: dastur kodi eski ichki brauzerlar (Android 9 va undan eski, Chrome 74) ham tushunadigan qilib yozildi; bu test bilan tekshiriladi.
+- Ilova kodi `android/` papkasida; GitHub'da avtomatik yig'iladi (imzo kaliti repozitoriy sirlarida saqlanadi, kodda emas).
+
 ## 1.36.1 — Idish: bitta molni boshqa narxda sotish
 
 - Savatdagi har bir mol qatorida narx belgisi ("Optom ▾"). Bosilsa — shu molning o'zi Chakana, Optom yoki Katta optom narxda; "Umumiy narx" — savatdagi kabi.

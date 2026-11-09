@@ -26,7 +26,7 @@ function fixedForm(fc = {}, cats = App.settings.expense_categories) {
     body: `<div class="form-grid">
         <label class="field">${t('Nomi')}<input name="name" value="${esc(fc.name || '')}" placeholder="${esc(t('Masalan: Ijara'))}" required></label>
         <label class="field">${t('Kategoriya')}<select name="category">${list.map((c) => `<option ${c === fc.category ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
-        <label class="field">${t('Har oy summasi')}<input type="number" name="amount" min="0" step="1000" value="${fc.amount ?? ''}"></label>
+        <label class="field">${t('Har oy summasi')}<input type="number" name="amount" min="0" step="1000" value="${nn(fc.amount, '')}"></label>
         <label class="field">${t("Har oyning nechanchi kuni to'lanadi")}<input type="number" name="due_day" min="1" max="31" value="${fc.due_day || 1}"></label></div>
       <label class="check" style="margin-top:12px"><input type="checkbox" name="variable" ${fc.variable ? 'checked' : ''}> ${t("Summasi har oy o'zgaradi (svet, gaz, suv) — to'lashda to'g'rilanadi")}</label>`,
     actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: 'primary', icon: 'check', onClick: async (f) => {

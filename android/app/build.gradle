@@ -1,0 +1,36 @@
+plugins { id 'com.android.application' }
+
+// The release key comes from the environment (GitHub secrets or a local file that is never committed).
+def ks = System.getenv('FLOWI_KEYSTORE') ?: "${rootDir}/flowi-release.jks"
+
+android {
+    namespace 'uz.flowi.app'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'uz.flowi.app'
+        minSdk 21
+        targetSdk 35
+        versionCode 1
+        versionName '1.0.0'
+    }
+    signingConfigs {
+        release {
+            if (file(ks).exists()) {
+                storeFile file(ks)
+                storePassword System.getenv('FLOWI_KEYSTORE_PASSWORD') ?: ''
+                keyAlias System.getenv('FLOWI_KEY_ALIAS') ?: 'flowi'
+                keyPassword System.getenv('FLOWI_KEY_PASSWORD') ?: (System.getenv('FLOWI_KEYSTORE_PASSWORD') ?: '')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig file(ks).exists() ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}

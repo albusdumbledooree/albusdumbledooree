@@ -73,7 +73,7 @@ function idishDishForm(d, categories, suppliers) {
   const bu = bigUnit(d);
   const bm = Units.mult(d, bu) || 1;
   const cell = (u, tr) => (u === 'piece' && tr === 'r'
-    ? `<input type="number" name="price" min="0" value="${d.price ?? ''}" required>`
+    ? `<input type="number" name="price" min="0" value="${nn(d.price, '')}" required>`
     : `<input type="number" data-t="${u}.${tr}" min="0" value="${(tiers[u] || {})[tr] || ''}" placeholder="${esc(t('avto'))}">`);
   return openModal({
     title: `${icon('package')} ${d.id ? esc(d.name) : t('Yangi mahsulot')}`, size: 'wide',

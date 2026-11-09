@@ -689,7 +689,7 @@ async function tenantTelegram(t) {
           <button type="button" class="btn sm" id="tgcheck">${icon('refresh-cw', 16)} Ulandimi?</button></div></div>`
         : `<button type="button" class="btn sm" id="tglink" style="margin-top:10px">${icon('plus', 16)} ${st.chats.length ? "Yana bir kishini qo'shish (havola)" : 'Ulash havolasini olish'}</button>`}
       <div class="form-grid" style="margin-top:14px"><label class="field">Kunlik hisobot vaqti<select name="time">
-        ${['', '20:00', '21:00', '22:00', '22:30', '23:00', '23:30'].map((x) => `<option value="${x}" ${(st.report_time ?? '23:00') === x ? 'selected' : ''}>${x || 'Yubormaslik'}</option>`).join('')}</select></label></div>`,
+        ${['', '20:00', '21:00', '22:00', '22:30', '23:00', '23:30'].map((x) => `<option value="${x}" ${(nn(st.report_time, '23:00')) === x ? 'selected' : ''}>${x || 'Yubormaslik'}</option>`).join('')}</select></label></div>`,
     actions: st.bot_ready && st.chats.length ? [{ label: 'Yopish', onClick: () => {} },
       { label: 'Hisobotni hozir yuborish', cls: 'primary', icon: 'send', onClick: async () => { await POST(`/api/platform/tenants/${t.id}/telegram/report`); toast('Yuborildi', 'ok'); return false; } }]
       : [{ label: 'Yopish', onClick: () => {} }],

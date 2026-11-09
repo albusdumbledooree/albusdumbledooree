@@ -39,7 +39,7 @@ const ROOM_TYPE_ICONS = { banket: 'party-popper', vip: 'star', supa: 'sofa', sto
 
 // ---------- Formatting ----------
 function esc(v) {
-  return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return String(nn(v, '')).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 function num(n) { return Math.round(Number(n) || 0).toLocaleString('ru-RU').replace(/[\s,]/g, ' '); }
 function moneyText(n) { return `${num(n)} ${App.settings.currency || "so'm"}`; }
@@ -350,7 +350,10 @@ const Voice = {
     const p = this.prefs();
     this.chime(kind);
     if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-    if (!p.enabled || !('speechSynthesis' in window)) return;
+    if (!p.enabled) return;
+    // The Android app: the phone's own voice (its built-in browser window cannot speak).
+    if (window.FlowiAndroid && FlowiAndroid.speak) { setTimeout(() => FlowiAndroid.speak(text, LANG), 550); return; }
+    if (!('speechSynthesis' in window)) return;
     setTimeout(() => {
       const u = new SpeechSynthesisUtterance(text);
       const v = this.pick();
@@ -380,6 +383,8 @@ function spokenRoom(number, name) {
 const spokenQty = (q) => (LANG === 'uz' ? uzNumber(q) : String(q));
 
 function notifySystem(title, body) {
+  // The Android app shows it as a phone notification when the app is not on the screen.
+  if (window.FlowiAndroid && FlowiAndroid.notify) { try { FlowiAndroid.notify(title, body); } catch { /* ignore */ } return; }
   if (!('Notification' in window) || Notification.permission !== 'granted' || !document.hidden) return;
   try { new Notification(title, { body, icon: '/icon-192.png', tag: title + body }); } catch { /* ignore */ }
 }
@@ -751,7 +756,7 @@ function receiptBody(o, s = App.settings) {
     const groups = new Map();
     for (const i of live) {
       const k = i.category_name || '';
-      if (!groups.has(k)) groups.set(k, { sort: i.category_name ? i.category_sort ?? 0 : 1e9, items: [] });
+      if (!groups.has(k)) groups.set(k, { sort: i.category_name ? nn(i.category_sort, 0) : 1e9, items: [] });
       groups.get(k).items.push(i);
     }
     lines = [...groups.entries()].sort((x, y) => x[1].sort - y[1].sort).map(([k, g]) => `${k ? `<tr class="sec"><td colspan="3">${esc(k)}</td></tr>` : `<tr class="sec"><td colspan="3">${t('Boshqa')}</td></tr>`}${g.items.map(row).join('')}`).join('');
@@ -895,7 +900,7 @@ function downloadKioskLauncher() {
 }
 
 function downloadCsv(filename, rows) {
-  const csv = '﻿' + rows.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
+  const csv = '﻿' + rows.map((r) => r.map((c) => `"${String(nn(c, '')).replace(/"/g, '""')}"`).join(';')).join('\r\n');
   downloadBlob(filename, new Blob([csv], { type: 'text/csv;charset=utf-8' }));
 }
 function downloadBlob(filename, blob) {
@@ -964,9 +969,9 @@ const Screen = {
       }
     } catch { /* not allowed now; retried on the next visit */ }
   },
-  canFullscreen() { return !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen); },
+  canFullscreen() { return !window.FlowiAndroid && !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen); },
   isFull() { return !!(document.fullscreenElement || document.webkitFullscreenElement); },
-  standalone() { return window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches || navigator.standalone === true; },
+  standalone() { return !!window.FlowiAndroid || window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches || navigator.standalone === true; },
   // iPhone Safari has no full-screen mode for sites: there the app is added to the home screen instead.
   toggleFull() {
     const el = document.documentElement;

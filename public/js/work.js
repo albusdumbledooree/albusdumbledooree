@@ -116,7 +116,7 @@ const Work = {
     try {
       p.pos = await Geo.get();
       const r = await POST('/api/geo/check', p.pos);
-      p.inside = !!r.ok; p.dist = r.dist ?? 0;
+      p.inside = !!r.ok; p.dist = nn(r.dist, 0);
       if (this.gate === 'geo' && r.ok) { p.locating = false; await this.refresh(); this.gate = null; return this.done(); }
     } catch (e) { p.gpsErr = e.message; p.pos = null; }
     p.locating = false;

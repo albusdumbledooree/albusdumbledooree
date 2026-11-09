@@ -1,0 +1,6 @@
+flowi-release.jks
+*.jks
+local.properties
+.gradle/
+build/
+app/build/

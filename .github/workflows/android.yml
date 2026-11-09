@@ -1,0 +1,56 @@
+# FLOWI for Android: builds the phone app (a window onto the business's FLOWI site) and puts FLOWI-<version>.apk
+# on the "Releases" page. The signing key is kept in the repository's secrets (never in the code):
+#   ANDROID_KEYSTORE_B64 — the .jks file in base64; ANDROID_KEYSTORE_PASSWORD — its password.
+# Without them the build is signed with a test key (fine to try, but phones will not update it over the real one).
+name: FLOWI Android ilovasi
+
+on:
+  push:
+    paths:
+      - 'android/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEY: ${{ secrets.ANDROID_KEYSTORE_B64 != '' }}
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Kalit
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: if [ -n "$KS" ]; then echo "$KS" | base64 -d > "$RUNNER_TEMP/flowi.jks"; fi
+      - name: APK yasash
+        env:
+          FLOWI_KEYSTORE: ${{ runner.temp }}/flowi.jks
+          FLOWI_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon
+      - name: Versiya
+        id: v
+        run: echo "version=$(grep versionName app/build.gradle | sed -E "s/.*'(.*)'.*/\1/")" >> "$GITHUB_OUTPUT"
+      - run: cp app/build/outputs/apk/release/app-release.apk "FLOWI-${{ steps.v.outputs.version }}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FLOWI-android-${{ steps.v.outputs.version }}
+          path: android/FLOWI-*.apk
+      - uses: softprops/action-gh-release@v2
+        if: env.HAS_KEY == 'true'
+        with:
+          tag_name: android-v${{ steps.v.outputs.version }}
+          name: FLOWI Android ${{ steps.v.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          make_latest: false
+          body: FLOWI — telefon va planshet uchun ilova (Android 5 va undan yangi).
+          files: android/FLOWI-*.apk

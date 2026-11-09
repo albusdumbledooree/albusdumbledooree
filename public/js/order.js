@@ -217,7 +217,7 @@ function checkPane({ order, room, cart, takeaway, couriers, readonly: ro }) {
   const subtotalPending = cart.lines.reduce((s, c) => s + c.price * c.qty, 0);
   const guests = order ? order.guests : cart.guests || 1;
   const dr = order ? DvDrafts[order.id] || {} : {};
-  const dv = order ? (order.delivery ? { name: dr.name ?? order.label, phone: dr.phone ?? order.phone, address: dr.address ?? order.address } : null) : cart.delivery;
+  const dv = order ? (order.delivery ? { name: nn(dr.name, order.label), phone: nn(dr.phone, order.phone), address: nn(dr.address, order.address) } : null) : cart.delivery;
   // Delivery: the customer's name, phone and address are all optional; the cashier also picks the courier.
   const pickCourier = dv && !order && !isCourier() && couriers && couriers.length;
   const head = dv
@@ -717,14 +717,14 @@ function openPayment(order) {
     if (mode === 'mix') for (const m of ['cash', 'card', 'transfer']) form[`paid_${m}`].value = '';
   };
   form.querySelectorAll('[data-m]').forEach((b) => b.onclick = () => { staffPay.on = false; setMode(b.dataset.m); calc(); });
-  mixBtn.onclick = () => { staffPay.on = false; setMode('mix'); form.querySelector('[data-staff-pay]')?.classList.remove('active'); calc(); form.paid_cash.focus(); };
+  mixBtn.onclick = () => { staffPay.on = false; setMode('mix'); { const sp = form.querySelector('[data-staff-pay]'); if (sp) sp.classList.remove('active'); } calc(); form.paid_cash.focus(); };
   form.paid_cash.addEventListener('input', () => { cashTyped = true; });
-  form.querySelector('[data-staff-pay]')?.addEventListener('click', () => { setMode(null); });
+  { const sp = form.querySelector('[data-staff-pay]'); if (sp) sp.addEventListener('click', () => { setMode(null); }); }
   form.querySelectorAll('[data-open]').forEach((b) => b.onclick = () => {
     const box = form.querySelector(`#${b.dataset.open}`);
     box.hidden = !box.hidden;
     b.classList.toggle('on', !box.hidden);
-    if (!box.hidden) box.querySelector('input')?.focus();
+    if (!box.hidden && box.querySelector('input')) box.querySelector('input').focus();
   });
   calc();
 }

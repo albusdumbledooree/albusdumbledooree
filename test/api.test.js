@@ -2918,3 +2918,11 @@ test("cashier's checks: the list without period totals unless the boss allows", 
   assert.ok(!r.sums.hidden && typeof r.sums.total === 'number');
   await call('PUT', '/api/settings', boss, { cashier_sums: false });
 });
+
+test('browser code runs on older phones: no "?." or "??" (Android 9 WebView does not know them)', () => {
+  const dir = path.join(__dirname, '..', 'public', 'js');
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.js'))) {
+    const src = fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    assert.ok(!/\?\?|\?\.(?!\d)/.test(src), `${f}: "?." yoki "??" — eski telefonlarda ishlamaydi, nn(a, b) ishlating`);
+  }
+});

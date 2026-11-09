@@ -1445,6 +1445,8 @@
   "narxi": ["цена", "price"],
   "Umumiy narx": ["Общая цена", "Sale's price"],
   "savatdagi kabi": ["как у корзины", "as the cart"],
+  "Biznes kodini o'zgartirish (ilova)": ["Сменить код заведения (приложение)", "Change business code (app)"],
+  "Android ilovani yuklab olish": ["Скачать приложение для Android", "Download the Android app"],
   "Kamera topilmadi": ["Камера не найдена", "No camera found"],
     "BUTUN CHEK O'CHIRILDI": ["ЧЕК УДАЛЁН ПОЛНОСТЬЮ","WHOLE CHECK DELETED"],
     "Diqqat! {0}. Butun chek o'chirildi.": ["Внимание! {0}. Чек удалён полностью.","Attention! {0}. The whole check was deleted."],

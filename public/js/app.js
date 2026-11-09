@@ -61,7 +61,7 @@ function parseHash() {
 }
 
 // A child page lights up its parent tab, unless the role has no such tab (chef opens Ombor directly).
-const parentOf = (name) => (CHILD_OF[name] && Views[CHILD_OF[name]].roles.includes(App.user?.role) ? CHILD_OF[name] : name);
+const parentOf = (name) => (CHILD_OF[name] && Views[CHILD_OF[name]].roles.includes((App.user && App.user.role)) ? CHILD_OF[name] : name);
 
 function navHtml() {
   const { name } = parseHash();
