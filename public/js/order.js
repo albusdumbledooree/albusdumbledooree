@@ -206,7 +206,10 @@ function lineHtml(i, ro = false, no = '') {
   return `<div class="row2 ${i.status}"${act ? ` data-line="${i.id}" role="button" tabindex="0"` : ''}>
     <span class="no">${no}</span>
     <span class="nm"><i class="dot" title="${esc(statusName(i.status))}"></i>${esc(i.name)}${md ? `<small class="md">+ ${esc(md)}</small>` : ''}${i.note ? `<small class="nt">✎ ${esc(i.note)}</small>` : ''}${i.cancel_reason ? `<small>(${esc(i.cancel_reason)})</small>` : ''}</span>
-    <span class="qt">${i.qty}</span><span class="sm">${num(i.price * i.qty)}</span></div>`;
+    ${!ro && i.status !== 'cancelled' && i.dish_id ? `<span class="qt step">${canCancelItem(i)
+      ? `<button data-less="${i.id}" aria-label="−" title="${esc(t('Bekor qilish'))}">${icon('minus', 14)}</button>`
+      : `<button data-less="${i.id}" class="lk" aria-label="🔒" title="${esc(t('Kamaytirish faqat boshliq ruxsati bilan'))}">${icon('lock', 13)}</button>`}<b>${i.qty}</b><button data-more="${i.id}" aria-label="+" title="${esc(t('Yana bitta'))}">${icon('plus', 14)}</button></span>`
+      : `<span class="qt">${i.qty}</span>`}<span class="sm">${num(i.price * i.qty)}</span></div>`;
 }
 
 function checkPane({ order, room, cart, takeaway, couriers, readonly: ro }) {
@@ -304,7 +307,8 @@ const OrderView = {
     const { menu, key } = d;
     const cart = cartOf(key);
     const q = UI.search.toLowerCase();
-    const dishes = menu.dishes.filter((x) => (UI.category === 'all' || x.category_id === Number(UI.category)) && (!q || x.name.toLowerCase().includes(q)));
+    // A search looks through the whole menu, whichever group is open.
+    const dishes = menu.dishes.filter((x) => (q ? x.name.toLowerCase().includes(q) : UI.category === 'all' || x.category_id === Number(UI.category)));
     const pendingCount = cart.lines.reduce((s, c) => s + c.qty, 0);
     const kitchenOn = App.kitchenMode !== 'off';
     return `<div class="order">
@@ -414,6 +418,27 @@ const OrderView = {
       try { await POST(`/api/items/${b.dataset.serve}/serve`); refreshView(); } catch (e) { toastError(e); }
     });
     pane.querySelectorAll('[data-cancel-item]').forEach((b) => b.onclick = () => cancelItemDialog(order.items.find((i) => i.id === Number(b.dataset.cancelItem))));
+    // A sent dish: "+" puts one more of it among the new (unsent) dishes; "−" cancels one — only with the right to cancel.
+    pane.querySelectorAll('[data-more]').forEach((b) => b.onclick = async (e) => {
+      e.stopPropagation();
+      const it = order.items.find((i) => i.id === Number(b.dataset.more));
+      const x = it && d.menu && d.menu.dishes.find((y) => y.id === it.dish_id);
+      if (!x) return toast(t("Bu taom menyuda yo'q"), 'warn');
+      if (!x.available) return toast(t('"{0}" tugagan', x.name), 'warn');
+      const m = await pickMods(d.menu, x);
+      if (!m) return;
+      const key = m.ids.join(',');
+      const line = cart.lines.find((c) => c.dish_id === x.id && !c.note && (c.mods || []).join(',') === key);
+      if (line) line.qty += 1; else cart.lines.push({ dish_id: x.id, name: x.name, price: m.price, qty: 1, note: '', mods: m.ids, modsText: m.text });
+      rerender();
+    });
+    pane.querySelectorAll('[data-less]').forEach((b) => b.onclick = (e) => {
+      e.stopPropagation();
+      const it = order.items.find((i) => i.id === Number(b.dataset.less));
+      if (!it) return;
+      if (!canCancelItem(it)) return toast(t('Kamaytirish faqat boshliq ruxsati bilan'), 'warn');
+      cancelItemDialog(it, 1);
+    });
     // A sent dish: tap the row — "took it" (when ready) or cancel.
     pane.querySelectorAll('[data-line]').forEach((r) => r.onclick = () => {
       const it = order.items.find((i) => i.id === Number(r.dataset.line));
@@ -490,7 +515,7 @@ function confirmSend(d, cart) {
   });
 }
 
-function cancelItemDialog(item) {
+function cancelItemDialog(item, startQty = null) {
   const waiter = App.user.role === 'waiter';
   const needReason = waiter || item.status !== 'new';
   let pad;
@@ -510,7 +535,8 @@ function cancelItemDialog(item) {
       refreshView();
     } }],
   });
-  let qty = item.qty;
+  let qty = startQty ? Math.min(item.qty, startQty) : item.qty;
+  if (form.querySelector('#cq')) form.querySelector('#cq').textContent = qty;
   form.querySelectorAll('[data-cq]').forEach((b) => b.onclick = () => {
     const v = b.dataset.cq;
     qty = v === 'all' ? item.qty : Math.min(item.qty, Math.max(1, qty + Number(v)));

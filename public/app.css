@@ -450,7 +450,7 @@ tr.clickable:hover td { background: var(--panel-2); }
 .line.cancelled { opacity: .45; }
 .line.cancelled .n { text-decoration: line-through; }
 /* The check as a table: № | name | count | sum (the order screen's check pane). */
-.cp-body .tbl-h, .cp-body .row2 { display: grid; grid-template-columns: 22px minmax(0, 1fr) 38px max-content; gap: 0 8px; align-items: center; }
+.cp-body .tbl-h, .cp-body .row2 { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto max-content; gap: 0 8px; align-items: center; }
 .cp-body .tbl-h { font-size: 11.5px; font-weight: 700; color: var(--muted); padding: 6px 4px; border-bottom: 2px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 1; }
 .cp-body .tbl-h span:nth-child(3) { text-align: center; } .cp-body .tbl-h span:last-child { text-align: right; }
 .cp-body .row2 { padding: 5px 4px; border-bottom: 1px solid var(--panel-2); font-size: 14px; }
@@ -469,8 +469,10 @@ tr.clickable:hover td { background: var(--panel-2); }
 .cp-body .row2.ready { background: #ecfdf3; }
 .cp-body .row2.cancelled { opacity: .55; } .cp-body .row2.cancelled .nm, .cp-body .row2.cancelled .sm { text-decoration: line-through; }
 .cp-body .row2.pend { background: #fff7db; border-left: 4px solid #f5b301; padding-left: 4px; border-radius: 6px; margin-bottom: 3px; border-bottom: 0; grid-template-columns: 20px minmax(0, 1fr) 84px max-content; }
-.cp-body .row2.pend .qt { display: flex; align-items: center; justify-content: center; gap: 4px; }
-.cp-body .row2.pend .qt button { width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); display: grid; place-items: center; padding: 0; color: var(--text); }
+.cp-body .row2.pend .qt, .cp-body .row2 .qt.step { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.cp-body .row2 .qt.step b { min-width: 16px; text-align: center; }
+.cp-body .row2 .qt button.lk { color: #94a3b8; }
+.cp-body .row2 .qt button { width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); display: grid; place-items: center; padding: 0; color: var(--text); }
 .cp-body .serve-all { margin: 8px 0 2px; }
 :root[data-theme="dark"] .cp-body .row2.ready { background: #0f2a1b; } :root[data-theme="dark"] .cp-body .row2.pend { background: #2d2610; }
 .line.pending { background: #fff7db; border-radius: 8px; padding: 6px 8px; border-bottom: 0; margin-bottom: 4px; border-left: 4px solid #f5b301; }

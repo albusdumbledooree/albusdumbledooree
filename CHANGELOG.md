@@ -2,6 +2,12 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.36.0 — Yuborilgan taom yonida − / +, qidiruv hamma bo'limdan
+
+- Chekdagi yuborilgan taom yonida "+" — shu taomdan yana bittasi yangi qator bo'lib qo'shiladi (menyudan qayta qidirish shart emas); qo'shimcha tanlovli taomda tanlov so'raladi.
+- "−" — bitta taomni bekor qilish. Ruxsati yo'q ofitsantda qulf belgisi turadi; kod bilan bekor qilish yoqilgan bo'lsa kod so'raladi; boshliq, admin, kassirda bekor qilish oynasi (1 dona) ochiladi. Hammasi tarixga yoziladi.
+- Taom qidiruvi endi qaysi bo'lim ochiq bo'lishidan qat'i nazar butun menyudan qidiradi.
+
 ## 1.35.3 — Idish: faqat donalab sotiladigan mol ham optom narxda
 
 - Pachka/karobkasi yo'q (faqat dona) mollarda Chakana / Optom / Katta optom tanlanganda narx o'zgarmay qolardi. Endi kartochkadagi narx, savatdagi summa va chek tanlangan narxda bo'ladi (mijozning narxi ham).
