@@ -197,19 +197,42 @@ function canCancelItem(i) {
   return App.user.role === 'waiter' && App.settings.waiter_cancel;
 }
 
+/* The same dish sent several times shows as one row with the summed count: the same dish, choices, note, unit and price.
+   Each sending stays its own line in the kitchen, on the tickets and in the history; only this view adds them up. */
+const STATUS_RANK = { ready: 4, cooking: 3, new: 2, served: 1 };
+function groupSent(items) {
+  const out = [];
+  const byKey = {};
+  for (const i of items) {
+    const key = i.dish_id ? [i.dish_id, i.unit || '', i.price, modsText(i), i.note || ''].join('|') : `x${i.id}`;
+    const g = byKey[key];
+    if (g) g.items.push(i);
+    else out.push((byKey[key] = { items: [i] }));
+  }
+  return out;
+}
+// The row shows the group as one dish: the count and sum added up, the "most urgent" state (ready first).
+function groupItem(g) {
+  if (g.items.length === 1) return g.items[0];
+  const last = g.items.reduce((a, b) => (b.created_at > a.created_at || (b.created_at === a.created_at && b.id > a.id) ? b : a));
+  const status = g.items.reduce((s, i) => ((STATUS_RANK[i.status] || 0) > (STATUS_RANK[s] || 0) ? i.status : s), 'served');
+  return Object.assign({}, last, { qty: g.items.reduce((s, i) => s + i.qty, 0), status, group: g.items });
+}
+
 /* One row of the check, like a printed bill: № | name (its choices and note under it) | count | sum. The dish's state is a
    coloured dot (a ready dish: the whole row green). Tapping the row opens what can be done with it (took it, cancel),
-   so no buttons stand between the lines. */
+   so no buttons stand between the lines. "−" takes one off the latest sending of the dish. */
 function lineHtml(i, ro = false, no = '') {
   const md = modsText(i);
-  const act = !ro && (i.status === 'ready' || canCancelItem(i));
-  return `<div class="row2 ${i.status}"${act ? ` data-line="${i.id}" role="button" tabindex="0"` : ''}>
+  const parts = i.group || [i];
+  const act = !ro && parts.some((p) => p.status === 'ready' || canCancelItem(p));
+  return `<div class="row2 ${i.status}"${act ? ` data-line="${parts.map((p) => p.id).join(',')}" role="button" tabindex="0"` : ''}>
     <span class="no">${no}</span>
     <span class="nm"><i class="dot" title="${esc(statusName(i.status))}"></i>${esc(i.name)}${md ? `<small class="md">+ ${esc(md)}</small>` : ''}${i.note ? `<small class="nt">✎ ${esc(i.note)}</small>` : ''}${i.cancel_reason ? `<small>(${esc(i.cancel_reason)})</small>` : ''}</span>
     ${!ro && i.status !== 'cancelled' && i.dish_id ? `<span class="qt step">${canCancelItem(i)
       ? `<button data-less="${i.id}" aria-label="−" title="${esc(t('Bekor qilish'))}">${icon('minus', 14)}</button>`
       : `<button data-less="${i.id}" class="lk" aria-label="🔒" title="${esc(t('Kamaytirish faqat boshliq ruxsati bilan'))}">${icon('lock', 13)}</button>`}<b>${i.qty}</b><button data-more="${i.id}" aria-label="+" title="${esc(t('Yana bitta'))}">${icon('plus', 14)}</button></span>`
-      : `<span class="qt">${i.qty}</span>`}<span class="sm">${num(i.price * i.qty)}</span></div>`;
+      : `<span class="qt">${i.qty}</span>`}<span class="sm">${num(parts.reduce((s, p) => s + p.price * p.qty, 0))}</span></div>`;
 }
 
 function checkPane({ order, room, cart, takeaway, couriers, readonly: ro }) {
@@ -236,7 +259,7 @@ function checkPane({ order, room, cart, takeaway, couriers, readonly: ro }) {
     : `<span class="avatar">${esc(room.number)}</span><div class="grow"><b>${esc(room.name)}</b>
        <span class="small muted">${order ? `${icon('user-round', 13)} ${esc(order.waiter.name)} · ${icon('clock', 13)} ${fmtTime(order.opened_at)}` : t("Bo'sh")}</span></div>
        ${ro ? `<span class="guests">${icon('users', 16)} ${guests}</span>` : `<span class="guests" title="${esc(t('Mehmonlar soni'))}"><button data-g="-1">−</button><span>${icon('users', 16)} ${guests}</span><button data-g="1">+</button></span>`}`;
-  const sent = batches(items.filter((i) => i.status !== 'cancelled'));
+  const sent = groupSent(items.filter((i) => i.status !== 'cancelled')).map(groupItem);
   const cancelled = items.filter((i) => i.status === 'cancelled');
   const ready = items.filter((i) => i.status === 'ready').length;
   let no = 0;
@@ -248,7 +271,7 @@ function checkPane({ order, room, cart, takeaway, couriers, readonly: ro }) {
     <div class="cp-body">
       ${items.length || cart.lines.length ? `<div class="tbl-h"><span>№</span><span>${t('Nomi')}</span><span>${t('Soni')}</span><span>${t('Summa')}</span></div>` : ''}
       ${!ro && ready > 1 ? `<button class="btn ok sm block serve-all" id="serve-all">${icon('hand', 16)} ${t('Hammasini oldim')} (${ready})</button>` : ''}
-      ${sent.map((b) => b.items.map((i) => lineHtml(i, ro, ++no)).join('')).join('')}
+      ${sent.map((i) => lineHtml(i, ro, ++no)).join('')}
       ${cancelled.length ? `<div class="batch-title">${icon('ban', 13)} ${t('Bekor qilingan')}</div>${cancelled.map((i) => lineHtml(i, ro, '–')).join('')}` : ''}
       ${cart.lines.length ? `<div class="pend-gap"></div>
         ${cart.lines.map((c, idx) => `<div class="row2 pend" data-pline="${idx}" role="button" tabindex="0"><span class="no">${++no}</span>
@@ -441,8 +464,10 @@ const OrderView = {
     });
     // A sent dish: tap the row — "took it" (when ready) or cancel.
     pane.querySelectorAll('[data-line]').forEach((r) => r.onclick = () => {
-      const it = order.items.find((i) => i.id === Number(r.dataset.line));
-      if (!it) return;
+      const parts = r.dataset.line.split(',').map((id) => order.items.find((i) => i.id === Number(id))).filter(Boolean);
+      if (!parts.length) return;
+      if (parts.length > 1) return groupDialog(parts);
+      const it = parts[0];
       const eta = (it.status === 'new' || it.status === 'cooking') && it.eta_at ? ` · ${icon('timer', 14)} <b data-eta="${it.eta_at}"></b>` : '';
       openModal({ title: esc(it.name),
         body: `<p class="muted"><span class="chip ${it.status}">${statusName(it.status)}</span> ${it.qty} × ${money(it.price)}${eta}<br>${icon('send', 13)} ${t('Yuborildi')}: ${fmtTime(it.created_at)}${it.note ? `<br>✎ ${esc(it.note)}` : ''}</p>`,
@@ -454,6 +479,24 @@ const OrderView = {
         ] });
       tickTimers();
     });
+    // A dish sent several times: each sending on its own line, with its time and state.
+    function groupDialog(parts) {
+      const ready = parts.filter((p) => p.status === 'ready');
+      const form = openModal({ title: esc(parts[0].name),
+        body: `<div class="grp-parts">${parts.map((p) => `<div class="grp-part">
+          <span class="chip ${p.status}">${statusName(p.status)}</span>
+          <span class="grow"><b>${p.qty} × ${money(p.price)}</b><small class="muted">${icon('send', 12)} ${fmtTime(p.created_at)}${(p.status === 'new' || p.status === 'cooking') && p.eta_at ? ` · ${icon('timer', 12)} <b data-eta="${p.eta_at}"></b>` : ''}</small></span>
+          ${canCancelItem(p) ? `<button type="button" class="icon-btn ghost red-text" data-pc="${p.id}" title="${esc(t('Bekor qilish'))}">${icon('x', 16)}</button>` : ''}</div>`).join('')}</div>`,
+        actions: ready.length ? [{ label: t('Yopish') }, { label: `${t('Oldim')}${ready.length > 1 ? ` (${ready.length})` : ''}`, cls: 'ok', icon: 'hand', onClick: async () => {
+          try { for (const p of ready) await POST(`/api/items/${p.id}/serve`); refreshView(); } catch (e) { toastError(e); }
+        } }] : [{ label: t('Yopish') }] });
+      form.querySelectorAll('[data-pc]').forEach((b) => b.onclick = () => {
+        const p = parts.find((x) => x.id === Number(b.dataset.pc));
+        closeModal();
+        setTimeout(() => cancelItemDialog(p), 0);
+      });
+      tickTimers();
+    }
     const sa = pane.querySelector('#serve-all');
     if (sa) sa.onclick = async () => {
       sa.disabled = true;

@@ -2,6 +2,13 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.38.1 — Chekda bir xil taomlar bitta qatorda
+
+- Bir xil taom qayta yuborilsa, chekda alohida qator emas — yuqoridagi qatorga soni qo'shiladi (taom, qo'shimcha tanlovi, izohi va narxi bir xil bo'lsa).
+- Izohli taom (masalan "achchiq") alohida qatorda qoladi.
+- Qatorni bossangiz har bir yuborilgani vaqti va holati bilan ko'rinadi; tayyorlarini "Oldim" bilan olish, keraklisini bekor qilish mumkin.
+- "−" oxirgi yuborilganidan bittasini bekor qiladi. Oshxona ekrani, oshxona qog'ozi va tarix o'zgarmaydi.
+
 ## 1.38.0 — Platforma: faollik, xatolar, savdo yashirin
 
 - Bizneslar ro'yxatida savdo summasi endi ko'rinmaydi (serverdan ham yuborilmaydi). Uni ko'rish: kartochkadagi ⋮ → **Savdo** (bugun, 7 kun, 30 kun).
