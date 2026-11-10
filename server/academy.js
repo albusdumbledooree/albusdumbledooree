@@ -92,8 +92,10 @@ function grade(content, qids, answers) {
 }
 
 // ---------- One business: its workers' lessons and tests ----------
-function createAcademy(db, { content = () => DEFAULT, full = () => true } = {}) {
+function createAcademy(db, { content = () => DEFAULT, full = () => true, hidden = () => false } = {}) {
   const q = (sql) => db.prepare(sql);
+  // Hidden for this business by the platform: every Akademiya address answers "not here" (the progress is kept).
+  const open = (fn) => (args) => { if (hidden()) throw new HttpError(404, "Akademiya bu biznesda yoqilmagan"); return fn(args); };
   const now = () => Date.now();
   const openModule = (m) => full() || m.free;
 
@@ -206,7 +208,7 @@ function createAcademy(db, { content = () => DEFAULT, full = () => true } = {}) 
     return { learners: r.learners, lessons: r.lessons, tests: r.tests, certified: r.certified };
   }
 
-  return { home, lessonDone, startTest, finishTest, team, certificate, brief };
+  return { home: open(home), lessonDone: open(lessonDone), startTest: open(startTest), finishTest: open(finishTest), team: open(team), certificate: open(certificate), brief, hidden };
 }
 
 // ---------- The open test on the site (no login) ----------
@@ -247,8 +249,12 @@ function createPublicAcademy(pdb, { pget, pset, now = Date.now }) {
   }
   function reset() { pset('academy_content', ''); cached = null; return { ok: true, content: content() }; }
   const custom = () => !!pget('academy_content', '');
+  // The open test on the site can be switched off (certificates already given can still be checked).
+  const siteOn = () => pget('academy_site', '1') !== '0';
+  function setSite(on) { pset('academy_site', on ? '1' : '0'); return { ok: true, site: siteOn() }; }
 
   function start({ body, ip }) {
+    if (!siteOn()) throw new HttpError(403, 'Test vaqtincha yopiq');
     if (body.website) throw new HttpError(400, "So'rov noto'g'ri"); // a hidden field only robots fill in
     const name = s(body.name, 60);
     if (name.length < 2) throw new HttpError(400, 'Ismingizni yozing');
@@ -284,7 +290,7 @@ function createPublicAcademy(pdb, { pget, pset, now = Date.now }) {
     const n = (v) => Number(v) || 0;
     return { all: { started: n(all.started), finished: n(all.finished), passed: n(all.passed) }, month: { started: n(month.started), finished: n(month.finished), passed: n(month.passed) }, last };
   }
-  return { content, save, reset, custom, start, finish, cert, stats };
+  return { content, save, reset, custom, siteOn, setSite, start, finish, cert, stats };
 }
 
 module.exports = { createAcademy, createPublicAcademy, cleanContent, bank, draw, grade, PASS_PCT, TEST_SIZE, DEFAULT };

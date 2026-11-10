@@ -272,6 +272,7 @@ async function afterLogin() {
   App.tenant = me.tenant;
   App.disabled = me.disabled || [];
   App.kitchenMode = me.kitchen_mode || 'full';
+  App.academyOff = !!me.academy_off;
   App.biz = me.business_type || 'choyxona';
   App.money = me.money || {};
   App.plan = me.plan || null;
@@ -333,9 +334,9 @@ Live.on('*', (type) => {
 Live.on('settings', async () => {
   try {
     const me = await GET('/api/me');
-    const changed = JSON.stringify([me.disabled, me.kitchen_mode, me.business_type, me.money]) !== JSON.stringify([App.disabled, App.kitchenMode, App.biz, App.money]);
+    const changed = JSON.stringify([me.disabled, me.kitchen_mode, me.business_type, me.money, !!me.academy_off]) !== JSON.stringify([App.disabled, App.kitchenMode, App.biz, App.money, !!App.academyOff]);
     const workBefore = JSON.stringify([Work.gate, App.settings.att_qr, Work.state && Work.state.rules]);
-    App.settings = me.settings; App.disabled = me.disabled || []; App.kitchenMode = me.kitchen_mode; App.user = me.user;
+    App.settings = me.settings; App.disabled = me.disabled || []; App.kitchenMode = me.kitchen_mode; App.academyOff = !!me.academy_off; App.user = me.user;
     Work.load(me.work);
     const workChanged = workBefore !== JSON.stringify([Work.gate, App.settings.att_qr, Work.state && Work.state.rules]);
     App.biz = me.business_type || 'choyxona'; App.money = me.money || {};

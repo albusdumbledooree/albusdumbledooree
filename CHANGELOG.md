@@ -2,6 +2,14 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.40.0 — Akademiya: har bir biznes uchun alohida boshqaruv va saytdagi testni yoqish/o'chirish
+
+- Biznesni tahrirlash oynasida **"Akademiya bu biznesda"**: Tarif bo'yicha / To'liq ochiq / Faqat bepul modullar / Yashirin.
+- **Qo'shimcha oylik to'lov** Akademiya uchun (ixtiyoriy): biznesning oylik to'loviga qo'shiladi, to'lov botida ham shu summa. "Yashirin" bo'lsa olinmaydi.
+- "Yashirin" bo'lsa xodimlar menyusida Akademiya ko'rinmaydi. O'qilgan darslar va natijalar saqlanib qoladi, qayta ochilsa joyida turadi.
+- Platforma → Akademiya: **"Saytda ochiq test"** tugmasi. O'chirilsa bosh sahifadagi havola yo'qoladi, /test sahifasida "Test vaqtincha yopiq" chiqadi. Berilgan sertifikatlarni tekshirish ishlayveradi.
+- Platforma → Akademiya: hamma restoran va choyxonalar ro'yxati, har birining holati va qo'shimcha to'lovi. Bosib o'zgartirsa bo'ladi.
+
 ## 1.39.0 — FLOWI Akademiya: xodimlar uchun darslar va ofitsantlik testi
 
 - **Akademiya** bo'limi: 8 modul, 32 dars, 96 savol (kutib olish, muloqot, dasturxon va choy odobi, menyu va tavsiya, FLOWI'da ishlash, qiyin mijoz, gigiena, hisob-kitob odobi).

@@ -3024,3 +3024,40 @@ test('akademiya: lessons, free modules on Start, final test graded on the server
   const page = await fetch(`${base}/test`);
   assert.equal(page.status, 200); assert.match(await page.text(), /Ofitsantlik/);
 });
+
+test('akademiya per business (plan / full / free / hidden, extra fee) and the site test on/off', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  const made = await call('POST', '/api/platform/tenants', admin, { name: 'Akad2', code: 'akad2', owner_name: 'E', owner_username: 'akad2', owner_password: 'akad12345', plan: 'start', sample: true });
+  assert.equal(made.status, 200, JSON.stringify(made.data));
+  const boss = await login('akad2', 'akad12345', 'akad2');
+  const tl = (await call('GET', '/api/platform/tenants', admin)).data;
+  const t = (tl.tenants || tl).find((x) => x.code === 'akad2');
+  const fee0 = t.plan_info.fee;
+  assert.equal((await call('GET', '/api/academy', boss)).data.full, false, 'Start: by plan, free modules only');
+  // Fully open as a gift, with an extra fee.
+  assert.equal((await call('PUT', `/api/platform/tenants/${t.id}`, admin, { academy_mode: 'full', academy_price: 50000 })).status, 200);
+  assert.equal((await call('GET', '/api/academy', boss)).data.full, true);
+  const t2 = ((await call('GET', '/api/platform/tenants', admin)).data.tenants || []).find((x) => x.code === 'akad2') || (await call('GET', '/api/platform/tenants', admin)).data.find((x) => x.code === 'akad2');
+  assert.equal(t2.plan_info.fee, fee0 + 50000); assert.equal(t2.plan_info.academy_fee, 50000);
+  // Only the free part.
+  await call('PUT', `/api/platform/tenants/${t.id}`, admin, { academy_mode: 'free' });
+  assert.equal((await call('GET', '/api/academy', boss)).data.full, false);
+  // Hidden: no section, no fee; the progress is kept.
+  await call('PUT', `/api/platform/tenants/${t.id}`, admin, { academy_mode: 'off' });
+  assert.equal((await call('GET', '/api/academy', boss)).status, 404);
+  assert.equal((await call('GET', '/api/me', boss)).data.academy_off, true);
+  const tl3 = (await call('GET', '/api/platform/tenants', admin)).data;
+  assert.equal((tl3.tenants || tl3).find((x) => x.code === 'akad2').plan_info.academy_fee, 0);
+  assert.equal((await call('PUT', `/api/platform/tenants/${t.id}`, admin, { academy_mode: 'nope' })).status, 400);
+  const ov = (await call('GET', '/api/platform/academy', admin)).data;
+  assert.equal(ov.tenants.find((x) => x.code === 'akad2').mode, 'off');
+  // The site test switched off: no new tests, the front page hides the link; certificates can still be checked.
+  const p = (await call('POST', '/api/public/test', null, { name: 'Oldin' })).data;
+  assert.equal((await call('PUT', '/api/platform/academy/site', admin, { on: false })).data.site, false);
+  assert.equal((await call('GET', '/api/public/info')).data.academy_site, false);
+  assert.equal((await call('POST', '/api/public/test', null, { name: 'Ali' })).status, 403);
+  assert.equal((await call('POST', '/api/public/test/finish', null, { key: p.key, answers: {} })).status, 200, 'a test already started can be finished');
+  assert.equal((await call('PUT', '/api/platform/academy/site', boss, { on: true })).status, 401);
+  await call('PUT', '/api/platform/academy/site', admin, { on: true });
+  assert.equal((await call('POST', '/api/public/test', null, { name: 'Ali' })).status, 200);
+});

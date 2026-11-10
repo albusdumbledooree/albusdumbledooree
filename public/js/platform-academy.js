@@ -16,11 +16,12 @@ function academyHtml() {
   return `<div class="kpis">
       ${kpiP('Saytdagi test', pub.month.started, `30 kunda · jami ${pub.all.started}`, 'graduation-cap')}
       ${kpiP("Testdan o'tdi (sayt)", pub.month.passed, `30 kunda · jami ${pub.all.passed}`, 'award', 'good')}
-      ${kpiP("Bizneslarda o'qiyapti", learners, `${A.tenants.length} ta biznesda`, 'users')}
+      ${kpiP("Bizneslarda o'qiyapti", learners, `${A.tenants.filter((t) => t.learners).length} ta biznesda`, 'users')}
       ${kpiP('Sertifikat olgan xodim', certified, '', 'circle-check', 'good')}
     </div>
-    <div class="card" style="margin-bottom:14px"><b>${icon('link', 16)} Ochiq test havolasi</b>
-      <p class="small muted" style="margin:6px 0 0">Hamma uchun: <a href="/test" target="_blank" rel="noopener"><b>${esc(location.origin)}/test</b></a> — bosh sahifada ham tugma bor. Sertifikatni tekshirish: <b>/test?c=KOD</b></p></div>
+    <div class="card pa-site" style="margin-bottom:14px"><div class="row" style="flex-wrap:nowrap"><div class="grow"><b>${icon('link', 16)} Saytda ochiq test</b>
+        <p class="small muted" style="margin:4px 0 0">${A.site ? `Hamma uchun: <a href="/test" target="_blank" rel="noopener"><b>${esc(location.host)}/test</b></a> — bosh sahifada ham havola bor.` : "O'chiq: bosh sahifada havola yo'q, /test sahifasida \"Test vaqtincha yopiq\" chiqadi."} Berilgan sertifikatlarni tekshirish (<b>/test?c=KOD</b>) doim ishlaydi.</p></div>
+      <label class="switch" title="Saytdagi testni yoqish / o'chirish"><input type="checkbox" id="pa-site" ${A.site ? 'checked' : ''}><span></span></label></div></div>
     <div class="pa-grid">
       <div class="card"><div class="row" style="margin-bottom:8px"><b class="grow">${icon('book-open', 16)} Darslar</b>
           <span class="small muted">${C.modules.length} modul · ${lessons} dars · ${questions} savol${A.custom ? ' · <span class="chip">tahrirlangan</span>' : ''}</span></div>
@@ -33,14 +34,36 @@ function academyHtml() {
           ${A.custom ? `<button class="btn sm red-text" id="pa-reset">${icon('rotate-ccw', 15)} Asl darslarga qaytarish</button>` : ''}</div></div>
       <div class="stack">
         <div class="card"><b>${icon('store', 16)} Bizneslarda</b>
-          ${A.tenants.length ? `<div class="table-wrap"><table><tr><th>Biznes</th><th class="right">O'qiyapti</th><th class="right">Darslar</th><th class="right">Testlar</th><th class="right">Sertifikat</th></tr>
-            ${A.tenants.map((t) => `<tr><td><b>${esc(t.name)}</b><br><span class="small muted">${esc(t.code)}</span></td><td class="right">${t.learners || 0}</td><td class="right">${t.lessons || 0}</td><td class="right">${t.tests || 0}</td><td class="right">${t.certified || 0}</td></tr>`).join('')}</table></div>`
-            : '<p class="small muted">Hali hech bir biznesda xodimlar o\'qishni boshlamagan.</p>'}</div>
+          <p class="small muted" style="margin:4px 0 8px">Holat va qo'shimcha to'lovni o'zgartirish uchun biznesni bosing.</p>
+          ${A.tenants.length ? `<div class="table-wrap"><table><tr><th>Biznes</th><th>Akademiya</th><th class="right">O'qiyapti</th><th class="right">Sertifikat</th></tr>
+            ${A.tenants.map((t) => `<tr class="clickable" data-patenant="${t.id}"><td><b>${esc(t.name)}</b><br><span class="small muted">${esc(t.code)} · ${esc(t.plan)}</span></td>
+              <td>${paModeChip(t)}${t.price && t.mode !== 'off' ? `<br><span class="small"><b>+${money(t.price)}</b>/oy</span>` : ''}</td>
+              <td class="right">${t.learners || 0}</td><td class="right">${t.certified || 0}</td></tr>`).join('')}</table></div>`
+            : '<p class="small muted">Hali restoran yoki choyxona yo\'q.</p>'}</div>
         <div class="card"><b>${icon('graduation-cap', 16)} Saytdagi oxirgi testlar</b>
           ${pub.last.length ? `<div class="table-wrap"><table><tr><th>Ism</th><th>Joy</th><th class="right">Natija</th><th>Sana</th></tr>
             ${pub.last.map((r) => `<tr><td><b>${esc(r.name)}</b></td><td class="small">${esc(r.place || '—')}</td><td class="right"><span class="chip ${r.passed ? 'green' : 'red'}">${r.total ? Math.round((r.score / r.total) * 100) : 0}%</span></td><td class="small muted">${fmtDateTime(r.finished_at)}</td></tr>`).join('')}</table></div>`
             : '<p class="small muted">Hali hech kim topshirmagan.</p>'}</div>
       </div></div>`;
+}
+
+// What a business gets: by its plan (and what the plan gives), fully open, only the free modules, or hidden.
+function paModeChip(t) {
+  if (t.mode === 'full') return '<span class="chip blue">To\'liq ochiq</span>';
+  if (t.mode === 'free') return '<span class="chip orange">Faqat bepul</span>';
+  if (t.mode === 'off') return '<span class="chip">Yashirin</span>';
+  return `<span class="chip ${t.plan_full ? 'green' : ''}">Tarif: ${t.plan_full ? "to'liq" : 'bepul qismi'}</span>`;
+}
+// One business's Akademiya: the same fields as in its edit window.
+function paTenantDialog(id) {
+  const t = P.tenants.find((x) => x.id === id);
+  if (!t) return;
+  openModal({ title: `${icon('graduation-cap')} ${esc(t.name)}`, body: academyFields(t),
+    actions: [{ label: 'Bekor', onClick: () => {} }, { label: 'Saqlash', cls: 'primary', onClick: async (f) => {
+      const d = formData(f);
+      await PUT(`/api/platform/tenants/${t.id}`, { academy_mode: d.academy_mode, academy_price: Number(d.academy_price) || 0 });
+      toast('Saqlandi', 'ok'); await load(); await loadAcademy(); render();
+    } }] });
 }
 
 async function saveAcademy(content) {
@@ -49,6 +72,11 @@ async function saveAcademy(content) {
 const paClone = () => JSON.parse(JSON.stringify(PA.data.content));
 
 function bindAcademy(root) {
+  const site = root.querySelector('#pa-site');
+  if (site) site.onchange = async () => {
+    try { const r = await PUT('/api/platform/academy/site', { on: site.checked }); PA.data.site = r.site; toast(r.site ? 'Saytdagi test yoqildi' : "Saytdagi test o'chirildi", 'ok'); render(); } catch (e) { site.checked = !site.checked; toastError(e); }
+  };
+  root.querySelectorAll('[data-patenant]').forEach((r) => r.onclick = () => paTenantDialog(Number(r.dataset.patenant)));
   root.querySelectorAll('[data-pamod]').forEach((b) => b.onclick = () => moduleDialog(Number(b.dataset.pamod)));
   root.querySelectorAll('[data-pales]').forEach((b) => b.onclick = () => { const [mi, li] = b.dataset.pales.split(':').map(Number); lessonDialog(mi, li); });
   root.querySelectorAll('[data-paadd]').forEach((b) => b.onclick = () => {

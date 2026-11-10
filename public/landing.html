@@ -319,7 +319,7 @@
       <a href="#imkoniyatlar" data-t="nav_feat">Imkoniyatlar</a>
       <a href="#narxlar" data-t="nav_price">Narxlar</a>
       <a href="#savollar" data-t="nav_faq">Savollar</a>
-      <a href="/test" data-t="nav_test">Ofitsantlik testi</a>
+      <a href="/test" data-t="nav_test" data-academy>Ofitsantlik testi</a>
     </nav>
     <span class="grow"></span>
     <div class="lang"><a href="/" hreflang="uz" lang="uz" data-lang="uz">UZ</a><a href="/ru" hreflang="ru" lang="ru" data-lang="ru">RU</a></div>
@@ -329,7 +329,7 @@
 
 <section class="hero">
   <div class="wrap">
-    <a class="new-badge" href="/test"><b data-t="new_b">Yangi</b><span data-t="new_t">Ofitsantlar uchun Akademiya — bepul testni topshiring</span> →</a><br>
+    <a class="new-badge" href="/test" data-academy><b data-t="new_b">Yangi</b><span data-t="new_t">Ofitsantlar uchun Akademiya — bepul testni topshiring</span> →</a><br>
     <span class="eyebrow" style="color:#7aa2ff" data-t="hero_eyebrow">Choyxona · Restoran · Fast food · Do'kon · Eshik do'koni</span>
     <h1 data-t="hero_title" data-html>Buyurtmadan foydagacha — <em>hammasi bitta dasturda</em></h1>
     <p class="lead" data-t="hero_lead">Ofitsant buyurtmani telefondan yuboradi, oshxona uni darhol ko'radi, kassa chekni bir bosishda yopadi. Siz esa savdo, xarajat va foydani istalgan joydan ko'rib turasiz. Dastur har kuni nima qilish kerakligini eslatadi va sof foydani o'zi hisoblaydi.</p>
@@ -961,7 +961,7 @@
   bindForm();
   document.getElementById('year').textContent = new Date().getFullYear();
   apply();
-  fetch('/api/public/info').then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { if (j && j.plans) { info = j; apply(); } }).catch(function () {});
+  fetch('/api/public/info').then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { if (j && j.academy_site === false) Array.prototype.forEach.call(document.querySelectorAll('[data-academy]'), function (el) { el.style.display = 'none'; }); if (j && j.plans) { info = j; apply(); } }).catch(function () {});
 }());
 </script>
 </body>

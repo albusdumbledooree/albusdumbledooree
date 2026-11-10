@@ -457,8 +457,22 @@ function discountFields(t = {}) {
 // The monthly price with its discount, as one short line.
 function feeHtml(t) {
   const pi = t.plan_info; const d = pi.discount;
-  if (!d) return `<b>${money(pi.fee)}</b>/oy${t.monthly_fee ? ' <span class="small muted">(maxsus narx)</span>' : ''}`;
-  return `<s class="muted">${money(pi.base_fee)}</s> <b>${money(pi.fee)}</b>/oy <span class="chip green" title="${esc(d.note)}">−${d.type === 'percent' ? `${d.value}%` : money(d.off)}${d.until ? ` · ${fmtDate(d.until)} gacha` : ''}</span>${d.note ? ` <span class="small muted">${esc(d.note)}</span>` : ''}`;
+  const ac = pi.academy_fee ? ` <span class="chip" title="Akademiya uchun qo'shimcha to'lov">${icon('graduation-cap', 12)} +${money(pi.academy_fee)}</span>` : '';
+  if (!d) return `<b>${money(pi.fee)}</b>/oy${t.monthly_fee ? ' <span class="small muted">(maxsus narx)</span>' : ''}${ac}`;
+  return `<s class="muted">${money(pi.base_fee + (pi.academy_fee || 0))}</s> <b>${money(pi.fee)}</b>/oy <span class="chip green" title="${esc(d.note)}">−${d.type === 'percent' ? `${d.value}%` : money(d.off)}${d.until ? ` · ${fmtDate(d.until)} gacha` : ''}</span>${ac}${d.note ? ` <span class="small muted">${esc(d.note)}</span>` : ''}`;
+}
+const SHOP_TYPES_P = ['market', 'clothing', 'doors', 'idish'];
+// Akademiya for one business: by its plan, fully open, only the free modules, or hidden; and an extra monthly fee.
+const ACADEMY_MODES = [['plan', "Tarif bo'yicha", 'Biznes/Pro — to\'liq, Start — faqat bepul modullar'], ['full', "To'liq ochiq", "Tarifidan qat'i nazar hamma darslar, test va sertifikat"],
+  ['free', 'Faqat bepul modullar', ''], ['off', 'Yashirin', "Bu biznesda Akademiya umuman ko'rinmaydi"]];
+const ACADEMY_MODE_NAMES = { plan: "Tarif bo'yicha", full: "To'liq ochiq", free: 'Faqat bepul', off: 'Yashirin' };
+function academyFields(t) {
+  if (SHOP_TYPES_P.includes(t.business_type)) return '';
+  const mode = t.academy_mode || 'plan';
+  return `<fieldset class="pa-field"><legend>${icon('graduation-cap', 16)} Akademiya bu biznesda</legend>
+    <div class="pa-modes">${ACADEMY_MODES.map(([k, n, h]) => `<label class="pa-mode"><input type="radio" name="academy_mode" value="${k}" ${mode === k ? 'checked' : ''}><span><b>${n}</b>${h ? `<small>${h}</small>` : ''}</span></label>`).join('')}</div>
+    <label class="field" style="margin-top:10px">Akademiya uchun qo'shimcha oylik to'lov (so'm, ixtiyoriy)<input name="academy_price" type="number" min="0" step="1000" value="${t.academy_price || ''}" placeholder="0 — qo'shimcha to'lov yo'q"></label>
+    <p class="small muted" style="margin:4px 0 0">Oylik to'lovga qo'shiladi (to'lov botida ham). "Yashirin" bo'lsa olinmaydi.</p></fieldset>`;
 }
 // A branch points at its main business; the main owner then sees all branches side by side (Pro).
 function parentField(t) {
@@ -516,6 +530,7 @@ function readForm(d, form) {
     for (const k of ['discount_type', 'discount_value', 'discount_until', 'discount_note']) delete d[k];
   }
   d.is_branch = !!d.is_branch;
+  if ('academy_price' in d) d.academy_price = Number(d.academy_price) || 0;
   if ('parent_id' in d) d.parent_id = Number(d.parent_id) || null;
   return d;
 }
@@ -852,6 +867,7 @@ function editTenant(t) {
     </div>
     <div style="margin-top:12px">${kitchenModeHtml(t.kitchen_mode)}</div>
     ${modulesHtml(t.disabled_modules)}
+    ${academyFields(t)}
     ${supportHtml(t.support)}
     <label class="field" style="margin-top:12px">Izoh<textarea name="notes" rows="3">${esc(t.notes || '')}</textarea></label>
     <p class="small muted" style="margin-top:10px">Kod: <b>${esc(t.code)}</b> (o'zgartirilmaydi) · Yaratilgan: ${fmtDate(t.created_at)}<br>

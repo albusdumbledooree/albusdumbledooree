@@ -171,8 +171,12 @@ function verify(code) {
   });
 }
 
+function closed() {
+  app.innerHTML = '<div class="card hero"><div class="big">🔒</div><h1>Test vaqtincha yopiq</h1><p class="muted">Keyinroq qayta kiring. Sertifikatni tekshirish uchun havoladagi raqamdan foydalaning.</p><a class="btn p" href="/">Bosh sahifa</a></div>' + cta();
+}
 var code = new URLSearchParams(location.search).get('c');
-if (code) verify(code); else intro();
+if (code) verify(code);
+else api('GET', '/api/public/info').then(function (j) { if (j && j.academy_site === false) closed(); else intro(); }).catch(function () { intro(); });
 </script>
 </body>
 </html>

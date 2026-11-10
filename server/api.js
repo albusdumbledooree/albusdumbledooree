@@ -106,7 +106,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   // Work hours, GPS and the cash desk's attendance QR code (all optional, switched on in the settings).
   const work = createWork(db, { settings: () => settings(), audit, events: hub, now });
   // FLOWI Akademiya: lessons from the platform (the same for every business); the whole course comes with the plan's section.
-  const acad = createAcademy(db, academy ? { content: academy, full: () => moduleOn('academy') } : { full: () => moduleOn('academy') });
+  // The platform may open it fully for this business, leave only the free modules, or hide it; else the plan decides.
+  const academyMode = () => { const m = (tenant() || {}).academy_mode; return ['full', 'free', 'off'].includes(m) ? m : 'plan'; };
+  const acad = createAcademy(db, { ...(academy ? { content: academy } : {}), hidden: () => academyMode() === 'off',
+    full: () => { const m = academyMode(); return m === 'full' || (m === 'plan' && moduleOn('academy')); } });
 
   function tx(fn) {
     db.exec('BEGIN');
@@ -488,7 +491,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const t = tenant();
     const s = settings();
     const session = q('SELECT via FROM sessions WHERE token = ?').get(token);
-    return { user: publicUser(user), settings: s, modules: MODULES, disabled: disabledModules(), kitchen_mode: kitchenMode(),
+    return { user: publicUser(user), settings: s, modules: MODULES, disabled: disabledModules(), academy_off: academyMode() === 'off', kitchen_mode: kitchenMode(),
       business_type: businessType(), money: moneyAccess(user, s), platform_session: !!(session && session.via === 'platform'),
       tenant: t && { code: t.code, name: t.name, paid_until: t.paid_until }, plan: planInfo(),
       branches: user.role === 'owner' ? branches().length : 0, work: user.session ? work.state(user) : null };

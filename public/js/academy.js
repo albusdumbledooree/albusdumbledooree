@@ -47,7 +47,7 @@ const AcVoice = {
 
 Views.academy = {
   title: () => t('Akademiya'), icon: () => 'graduation-cap', roles: ['owner', 'admin', 'cashier', 'waiter', 'chef'],
-  on: () => !isShop(),
+  on: () => !isShop() && !App.academyOff,
   async load() {
     // The boss opens on who has learned what; workers on their lessons.
     if (!AC.tab) AC.tab = can('owner', 'admin') ? 'team' : 'learn';

@@ -1419,3 +1419,14 @@ details.ver summary .grow { flex: 1 1 200px; min-width: 0; }
 .pa-ans { display: flex; align-items: center; gap: 8px; } .pa-ans input[type=radio] { width: 20px; height: 20px; flex: none; }
 @media (max-width: 900px) { .pa-grid { grid-template-columns: minmax(0, 1fr); } .pa-lesson { padding-left: 8px; flex-wrap: wrap; } .pa-mod .btn.ghost { margin-left: 0; } }
 .ptabs { max-width: 100%; overflow-x: auto; scrollbar-width: none; } .ptabs button { flex: none; }
+.switch { position: relative; display: inline-block; width: 50px; height: 28px; flex: none; cursor: pointer; }
+.switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.switch span { position: absolute; inset: 0; background: var(--line); border-radius: 20px; transition: .2s; }
+.switch span:before { content: ''; position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: .2s; box-shadow: 0 1px 3px #0003; }
+.switch input:checked + span { background: var(--green); } .switch input:checked + span:before { transform: translateX(22px); }
+.pa-field { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 12px; margin-top: 12px; }
+.pa-field legend { font-weight: 700; padding: 0 6px; display: inline-flex; align-items: center; gap: 6px; }
+.pa-modes { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.pa-mode { display: flex; gap: 10px; align-items: flex-start; border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; cursor: pointer; }
+.pa-mode:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+.pa-mode input { margin-top: 3px; flex: none; } .pa-mode b { display: block; font-size: 14.5px; } .pa-mode small { display: block; color: var(--muted); font-size: 12.5px; }

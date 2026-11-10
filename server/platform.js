@@ -104,6 +104,8 @@ function createPlatform(dataDir) {
   // A branch points to its main business; the main business's owner sees all of them in one report.
   if (!tcols.includes('parent_id')) pdb.exec('ALTER TABLE tenants ADD COLUMN parent_id INTEGER');
   // A discount on what the business pays: a percent or a sum off, for a while or for good, with a reason.
+  // Akademiya for this business: by its plan, fully open, only the free modules, or hidden; and an extra monthly fee for it.
+  if (!tcols.includes('academy_mode')) pdb.exec("ALTER TABLE tenants ADD COLUMN academy_mode TEXT NOT NULL DEFAULT 'plan'; ALTER TABLE tenants ADD COLUMN academy_price INTEGER NOT NULL DEFAULT 0");
   if (!tcols.includes('discount_type')) {
     pdb.exec(`ALTER TABLE tenants ADD COLUMN discount_type TEXT NOT NULL DEFAULT '';
       ALTER TABLE tenants ADD COLUMN discount_value INTEGER NOT NULL DEFAULT 0;
@@ -473,9 +475,10 @@ function createPlatform(dataDir) {
     const p = plans[key];
     const base = row.monthly_fee > 0 ? row.monthly_fee : row.is_branch ? terms.branch_price : p.price;
     const discount = discountFor(row, base);
-    const fee = base - (discount ? discount.off : 0);
+    const academyFee = row.academy_mode !== 'off' && row.academy_price > 0 ? row.academy_price : 0;
+    const fee = base - (discount ? discount.off : 0) + academyFee;
     const graceUntil = row.paid_until ? row.paid_until + terms.grace_days * DAY : null;
-    return { key, name: p.name, price: p.price, base_fee: base, fee, discount, max_staff: p.max_staff, devices_per_staff: p.devices_per_staff, modules: p.modules, is_branch: !!row.is_branch,
+    return { key, name: p.name, price: p.price, base_fee: base, fee, academy_fee: academyFee, discount, max_staff: p.max_staff, devices_per_staff: p.devices_per_staff, modules: p.modules, is_branch: !!row.is_branch,
       paid_until: row.paid_until, grace_until: graceUntil, read_only: !!(graceUntil && now() > graceUntil) };
   }
 
@@ -550,6 +553,7 @@ function createPlatform(dataDir) {
         devices_per_staff: plans[k].devices_per_staff, modules: plans[k].modules.map((m) => MODULES[m]).filter(Boolean) })),
       terms: getTerms(),
       support: supportFor(null),
+      academy_site: academy.siteOn(),
     };
   }
 
@@ -711,6 +715,8 @@ function createPlatform(dataDir) {
     return tenantRow(id);
   }
 
+  const ACADEMY_MODES = ['plan', 'full', 'free', 'off'];
+  function academyModeInput(v) { if (!ACADEMY_MODES.includes(v)) throw new HttpError(400, "Akademiya holati noto'g'ri"); return v; }
   function updateTenant({ params, body }) {
     const t = tenantRow(params.id);
     if (!t) throw new HttpError(404, 'Choyxona topilmadi');
@@ -718,7 +724,7 @@ function createPlatform(dataDir) {
     const parentId = body.parent_id === undefined ? undefined : parentInput(t, body.parent_id);
     if (!['active', 'blocked'].includes(status)) throw new HttpError(400, "Holat noto'g'ri");
     q(`UPDATE tenants SET name = ?, contact_name = ?, phone = ?, status = ?, paid_until = ?, monthly_fee = ?, notes = ?, disabled_modules = ?, kitchen_mode = ?,
-      business_type = ?, support = ?, plan = ?, is_branch = ?, parent_id = ? WHERE id = ?`).run(
+      business_type = ?, support = ?, plan = ?, is_branch = ?, parent_id = ?, academy_mode = ?, academy_price = ? WHERE id = ?`).run(
       body.name !== undefined ? str(body.name, 'Nomi', { required: true, max: 80 }) : t.name,
       body.contact_name !== undefined ? str(body.contact_name, 'Boshliq', { max: 80 }) : t.contact_name,
       body.phone !== undefined ? str(body.phone, 'Telefon', { max: 30 }) : t.phone,
@@ -733,6 +739,8 @@ function createPlatform(dataDir) {
       body.plan !== undefined ? planKeyInput(body.plan) : t.plan,
       parentId !== undefined ? (parentId ? 1 : body.is_branch ? 1 : 0) : body.is_branch !== undefined ? (body.is_branch ? 1 : 0) : t.is_branch,
       parentId !== undefined ? parentId : t.parent_id,
+      body.academy_mode !== undefined ? academyModeInput(body.academy_mode) : t.academy_mode,
+      body.academy_price !== undefined ? int(body.academy_price || 0, "Akademiya to'lovi", { min: 0, max: 1e9 }) : t.academy_price,
       t.id
     );
     if (body.discount !== undefined) saveDiscount(t.id, body.discount);
@@ -912,6 +920,7 @@ function createPlatform(dataDir) {
     ['GET', '/api/platform/academy', true, academyOverview],
     ['PUT', '/api/platform/academy', true, ({ body }) => academy.save(body)],
     ['POST', '/api/platform/academy/reset', true, () => academy.reset()],
+    ['PUT', '/api/platform/academy/site', true, ({ body }) => academy.setSite(!!body.on)],
     ['GET', '/api/platform/helpbot', true, () => helpbot.status()],
     ['PUT', '/api/platform/helpbot', true, helpbot.setToken],
     ['POST', '/api/platform/helpbot/relink', true, helpbot.relink],
@@ -927,11 +936,13 @@ function createPlatform(dataDir) {
 
   // Akademiya for the platform owner: the lessons, the open test's numbers, and who learns in each business.
   function academyOverview() {
-    const tenants = q("SELECT id, name, code, business_type FROM tenants WHERE status = 'active' ORDER BY name").all()
+    const tenants = q("SELECT * FROM tenants WHERE status = 'active' ORDER BY name").all()
       .filter((t) => !SHOP_TYPES.includes(t.business_type))
-      .map((t) => { try { const c = context(t.id); return { id: t.id, name: t.name, code: t.code, ...c.api.academyBrief() }; } catch { return { id: t.id, name: t.name, code: t.code, error: true }; } })
-      .filter((t) => t.error || t.learners || t.tests);
-    return { content: academy.content(), custom: academy.custom(), public: academy.stats(), tenants };
+      .map((t) => {
+        const base = { id: t.id, name: t.name, code: t.code, mode: t.academy_mode, price: t.academy_price, plan: planFor(t).name, plan_full: planFor(t).modules.includes('academy') };
+        try { return { ...base, ...context(t.id).api.academyBrief() }; } catch { return { ...base, error: true }; }
+      });
+    return { content: academy.content(), custom: academy.custom(), site: academy.siteOn(), public: academy.stats(), tenants };
   }
 
   function handle(method, pathname, args) {
