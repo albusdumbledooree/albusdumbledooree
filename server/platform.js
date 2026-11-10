@@ -13,6 +13,7 @@ const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 const { open } = require('./db');
 const { createApi, MODULES, BUSINESS_TYPES, SHOP_TYPES } = require('./api');
+const { createPublicAcademy } = require('./academy');
 const { createHub } = require('./events');
 const { snapshot, listTenantBackups, stampNow } = require('./backup');
 const { createLeads } = require('./leads');
@@ -63,7 +64,7 @@ const CODE_RE = /^[a-z0-9][a-z0-9-]{1,30}$/;
  * the three keys stay. max_staff 0 = no limit. A lower plan never deletes anything: it only stops adding more.
  */
 const PLAN_KEYS = ['start', 'biznes', 'pro'];
-const BIZ_MODULES = ['stoplist', 'reports', 'finance', 'payroll', 'reservations', 'history', 'audit', 'export', 'qrmenu', 'qrorder', 'debts', 'pnl'];
+const BIZ_MODULES = ['stoplist', 'reports', 'finance', 'payroll', 'reservations', 'history', 'audit', 'export', 'qrmenu', 'qrorder', 'debts', 'pnl', 'academy'];
 const PRO_MODULES = [...BIZ_MODULES, 'customers', 'inventory', 'branches'];
 // A section moved into a plan after the plans were saved; each is applied once (the owner may take it out again).
 const PLAN_ADDITIONS = [['biznes', 'debts'], ['start', 'finance']];
@@ -143,7 +144,7 @@ function createPlatform(dataDir) {
     const db = open(file);
     const hub = createHub();
     ctx = { id, db, hub, row, file };
-    ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row, plan: () => planFor(ctx.row), branches: () => branchesOf(id), file, telegram: telegramFor(id), helpbot: helpbot.forTenant(id), secret });
+    ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row, plan: () => planFor(ctx.row), branches: () => branchesOf(id), file, telegram: telegramFor(id), helpbot: helpbot.forTenant(id), secret, academy: () => academy.content() });
     contexts.set(id, ctx);
     return ctx;
   }
@@ -191,6 +192,8 @@ function createPlatform(dataDir) {
 
   // Applications from the front page and the owner's Telegram bot.
   const leads = createLeads({ pdb, pget, pset, now });
+  // FLOWI Akademiya: the lessons every business gets (editable here) and the open test on the site.
+  const academy = createPublicAcademy(pdb, { pget, pset, now });
   // The second bot: payments and questions of the businesses (Telegram → admin chat; "+1 oy" moves the term).
   const helpbot = createHelpBot({ pdb, pget, pset, now, tenant: (id) => q('SELECT * FROM tenants WHERE id = ?').get(id), planFor: (row) => planFor(row),
     setPaidUntil: (id, ms) => {
@@ -906,6 +909,9 @@ function createPlatform(dataDir) {
     ['POST', '/api/platform/telegram/test', true, leads.test],
     ['DELETE', '/api/platform/telegram', true, leads.unlink],
     // "To'lov va yordam" bot: the token, the admin chat, the card; payments of one business; a payment taken by hand.
+    ['GET', '/api/platform/academy', true, academyOverview],
+    ['PUT', '/api/platform/academy', true, ({ body }) => academy.save(body)],
+    ['POST', '/api/platform/academy/reset', true, () => academy.reset()],
     ['GET', '/api/platform/helpbot', true, () => helpbot.status()],
     ['PUT', '/api/platform/helpbot', true, helpbot.setToken],
     ['POST', '/api/platform/helpbot/relink', true, helpbot.relink],
@@ -918,6 +924,15 @@ function createPlatform(dataDir) {
   ].map(([method, pattern, auth, handler]) => ({
     method, auth, handler, re: new RegExp('^' + pattern.replace(':id', '(\\d+)') + '$'),
   }));
+
+  // Akademiya for the platform owner: the lessons, the open test's numbers, and who learns in each business.
+  function academyOverview() {
+    const tenants = q("SELECT id, name, code, business_type FROM tenants WHERE status = 'active' ORDER BY name").all()
+      .filter((t) => !SHOP_TYPES.includes(t.business_type))
+      .map((t) => { try { const c = context(t.id); return { id: t.id, name: t.name, code: t.code, ...c.api.academyBrief() }; } catch { return { id: t.id, name: t.name, code: t.code, error: true }; } })
+      .filter((t) => t.error || t.learners || t.tests);
+    return { content: academy.content(), custom: academy.custom(), public: academy.stats(), tenants };
+  }
 
   function handle(method, pathname, args) {
     const r = routes.find((x) => x.method === method && x.re.test(pathname));
@@ -942,7 +957,7 @@ function createPlatform(dataDir) {
     pdb.close();
   }
 
-  return { handle, byCode, byToken, byGuestKey, remindTick, tgBackupTick, sendBackups, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, seoVerify, desktopTick, submitLead: leads.submit, helpRemindTick: (o) => helpbot.remindTick(o) };
+  return { handle, byCode, byToken, byGuestKey, remindTick, tgBackupTick, sendBackups, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, seoVerify, desktopTick, submitLead: leads.submit, academyStart: academy.start, academyFinish: academy.finish, academyCert: academy.cert, helpRemindTick: (o) => helpbot.remindTick(o) };
 }
 
 module.exports = { createPlatform };

@@ -2,6 +2,17 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.39.0 — FLOWI Akademiya: xodimlar uchun darslar va ofitsantlik testi
+
+- **Akademiya** bo'limi: 8 modul, 32 dars, 96 savol (kutib olish, muloqot, dasturxon va choy odobi, menyu va tavsiya, FLOWI'da ishlash, qiyin mijoz, gigiena, hisob-kitob odobi).
+- Dars — qisqa kartochkalar (rasm, matn, "✅ shunday qiling / ❌ bunday qilmang") va oxirida 3 ta savol, darhol izoh bilan. "🔊 Eshitish" — darsni ovoz chiqarib o'qib beradi.
+- Ofitsant telefonida pastki menyuda "Akademiya". Boshliq va admin: Xodimlar → Akademiya.
+- **Yakuniy test**: 20 ta tasodifiy savol, javoblar serverda tekshiriladi, 70% bilan o'tiladi. O'tolmasa 12 soatdan keyin qayta topshiradi. O'tganga chop etiladigan **sertifikat**.
+- **Boshliq ekrani**: kim nechta dars o'qigan, test natijasi, kim boshlamagan, eng ko'p xato qilinadigan mavzu.
+- **Tarif**: "Kutib olish" va "Muloqot madaniyati" modullari hamma tariflarda bepul. Hamma darslar, yakuniy test va sertifikat — Biznes va Pro tariflarida (platformada Tariflar bo'limidan o'zgartirsa bo'ladi).
+- **Saytda ochiq test** — `flowi.uz/test`: istalgan odam ism yozib 20 ta savolga javob beradi, darhol natija va sertifikat oladi. Sertifikatni raqami bilan tekshirish: `flowi.uz/test?c=KOD`. Bosh sahifada "Ofitsantlik testi" havolasi.
+- **Platformada "Akademiya"**: saytdagi testlar soni va natijalari, bizneslarda kim o'qiyapti, darslarni tahrirlash (kartalar, savollar, to'g'ri javob, bepul modul), asl darslarga qaytarish.
+
 ## 1.38.1 — Chekda bir xil taomlar bitta qatorda
 
 - Bir xil taom qayta yuborilsa, chekda alohida qator emas — yuqoridagi qatorga soni qo'shiladi (taom, qo'shimcha tanlovi, izohi va narxi bir xil bo'lsa).

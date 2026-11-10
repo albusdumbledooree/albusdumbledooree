@@ -59,6 +59,8 @@ function serveStatic(req, res, pathname) {
   else if (/^\/c\/[a-z0-9-]+\/?$/i.test(pathname) || pathname === '/app') file = path.join(PUBLIC, 'index.html');
   // A room's QR code: the guest menu (no login).
   else if (/^\/q\/\d+-[A-Za-z0-9]{12}\/?$/.test(pathname)) file = path.join(PUBLIC, 'guest.html');
+  // The open waiter test (and a certificate link: /test?c=CODE).
+  else if (pathname === '/test' || pathname === '/test/') file = path.join(PUBLIC, 'test.html');
   else if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
     res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
     return res.end(NOT_FOUND);
@@ -188,6 +190,10 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       if (pathname === '/api/public/info' && req.method === 'GET') return reply(platform.publicInfo());
       // Front page: "leave an application" — saved, then sent to the owner's Telegram bot.
       if (pathname === '/api/public/lead' && req.method === 'POST') return reply(platform.submitLead({ body, ip }));
+      // The open waiter test on the site (flowi.uz/test): start, answers, and checking a certificate by its code.
+      if (pathname === '/api/public/test' && req.method === 'POST') return reply(platform.academyStart({ body, ip }));
+      if (pathname === '/api/public/test/finish' && req.method === 'POST') return reply(platform.academyFinish({ body }));
+      if (pathname === '/api/public/cert' && req.method === 'GET') return reply(platform.academyCert(String(query.c || '')));
 
       // Login screen: which choyxona does this code belong to?
       if (pathname === '/api/info' && req.method === 'GET') {

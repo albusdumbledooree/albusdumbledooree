@@ -2951,3 +2951,76 @@ test('platform: activity of a business (online, errors, peak) and takings only o
   // Only the platform owner sees it.
   assert.equal((await call('GET', `/api/platform/tenants/${t.id}/sales`, boss)).status, 401);
 });
+
+test('akademiya: lessons, free modules on Start, final test graded on the server, team view, open test on the site', async () => {
+  const { bank, cleanContent, DEFAULT } = require('../server/academy');
+  const B = bank(cleanContent(DEFAULT));
+  const right = (qs, nWrong = 0) => Object.fromEntries(qs.map((q, i) => { const b = B.find((x) => x.id === q.id); return [q.id, i < nWrong ? (b.c + 1) % b.a.length : b.c]; }));
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  const made = await call('POST', '/api/platform/tenants', admin, { name: 'Akad', code: 'akad', owner_name: 'E', owner_username: 'akad', owner_password: 'akad12345', plan: 'start', sample: true });
+  assert.equal(made.status, 200, JSON.stringify(made.data));
+  const boss = await login('akad', 'akad12345', 'akad');
+  await call('POST', '/api/users', boss, { name: 'Ofitsant Vali', username: 'vali', password: 'vali123', role: 'waiter' });
+  const vali = await login('vali', 'vali123', 'akad');
+  // Start: only the free modules are open, their text is sent, the others only their titles.
+  let h = (await call('GET', '/api/academy', vali)).data;
+  assert.equal(h.full, false);
+  const free = h.modules.filter((m) => m.open);
+  assert.ok(free.length >= 1 && free.every((m) => m.free));
+  const shut = h.modules.find((m) => !m.open);
+  assert.equal(shut.lessons[0].cards.length, 0, 'a closed lesson has no text');
+  assert.equal((await call('POST', '/api/academy/lesson', vali, { lesson: shut.lessons[0].id, ok: 3 })).status, 403);
+  assert.equal((await call('POST', '/api/academy/lesson', vali, { lesson: free[0].lessons[0].id, ok: 2 })).status, 200);
+  assert.equal((await call('POST', '/api/academy/test', vali)).status, 403, 'no final test on Start');
+  // Biznes: everything opens; the test needs every lesson read.
+  const tl = (await call('GET', '/api/platform/tenants', admin)).data;
+  const t = (tl.tenants || tl).find((x) => x.code === 'akad');
+  assert.equal((await call('PUT', `/api/platform/tenants/${t.id}`, admin, { plan: 'biznes' })).status, 200);
+  h = (await call('GET', '/api/academy', vali)).data;
+  assert.equal(h.full, true);
+  assert.equal((await call('POST', '/api/academy/test', vali)).status, 400, 'lessons left');
+  for (const m of h.modules) for (const l of m.lessons) await call('POST', '/api/academy/lesson', vali, { lesson: l.id, ok: 3 });
+  // A failed test: graded on the server, a retake waits.
+  let s = (await call('POST', '/api/academy/test', vali)).data;
+  assert.equal(s.questions.length, 20);
+  assert.ok(s.questions.every((q) => q.a.every((o) => !('c' in o))), 'the right answer is not sent');
+  let r = (await call('POST', `/api/academy/test/${s.id}`, vali, { answers: right(s.questions, 10) })).data;
+  assert.equal(r.score, 10); assert.equal(r.passed, false); assert.ok(r.retry_at > Date.now());
+  assert.equal((await call('POST', '/api/academy/test', vali)).status, 400, 'retake waits');
+  assert.equal((await call('POST', `/api/academy/test/${s.id}`, vali, { answers: {} })).status, 404, 'a finished test cannot be sent again');
+  // The boss sees it; a waiter does not see the team.
+  let team = (await call('GET', '/api/academy/team', boss)).data;
+  const row = team.rows.find((x) => x.name === 'Ofitsant Vali');
+  assert.equal(row.done, row.lessons); assert.equal(row.best, null); assert.equal(row.last.pct, 50);
+  assert.equal((await call('GET', '/api/academy/team', vali)).status, 403);
+  // The wait over: passed, a certificate.
+  const db = require('node:sqlite');
+  const file = path.join(server.dataDir, 'tenants', 'akad.db');
+  const raw = new db.DatabaseSync(file); raw.prepare('UPDATE academy_tests SET finished_at = finished_at - 13 * 3600000').run(); raw.close();
+  s = (await call('POST', '/api/academy/test', vali)).data;
+  r = (await call('POST', `/api/academy/test/${s.id}`, vali, { answers: right(s.questions, 3) })).data;
+  assert.equal(r.pct, 85); assert.equal(r.passed, true);
+  assert.equal((await call('GET', `/api/academy/cert/${r.id}`, boss)).data.name, 'Ofitsant Vali');
+  team = (await call('GET', '/api/academy/team', boss)).data;
+  assert.equal(team.rows.find((x) => x.name === 'Ofitsant Vali').best.pct, 85);
+  // The platform: numbers per business, the lessons can be edited and put back.
+  let ov = (await call('GET', '/api/platform/academy', admin)).data;
+  assert.equal(ov.tenants.find((x) => x.code === 'akad').certified, 1);
+  const c = ov.content; c.modules[0].title = 'Kutib olish (yangi)';
+  assert.equal((await call('PUT', '/api/platform/academy', admin, { content: c })).status, 200);
+  assert.equal((await call('GET', '/api/academy', vali)).data.modules[0].title, 'Kutib olish (yangi)');
+  assert.equal((await call('POST', '/api/platform/academy/reset', admin)).data.content.modules[0].title, 'Kutib olish va kuzatish');
+  assert.equal((await call('GET', '/api/platform/academy', boss)).status, 401);
+  // The open test on the site: no login, a certificate anyone can check by its code.
+  const p = (await call('POST', '/api/public/test', null, { name: 'Sardor', place: 'Samarqand' })).data;
+  assert.equal(p.questions.length, 20);
+  const pr = (await call('POST', '/api/public/test/finish', null, { key: p.key, answers: right(p.questions) })).data;
+  assert.equal(pr.pct, 100); assert.ok(pr.code);
+  assert.equal((await call('GET', `/api/public/cert?c=${pr.code}`)).data.name, 'Sardor');
+  assert.equal((await call('GET', '/api/public/cert?c=NOPE1234')).status, 404);
+  assert.equal((await call('POST', '/api/public/test', null, { name: '' })).status, 400);
+  ov = (await call('GET', '/api/platform/academy', admin)).data;
+  assert.ok(ov.public.all.passed >= 1 && ov.public.last[0].name === 'Sardor');
+  const page = await fetch(`${base}/test`);
+  assert.equal(page.status, 200); assert.match(await page.text(), /Ofitsantlik/);
+});

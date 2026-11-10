@@ -1,0 +1,134 @@
+'use strict';
+/* Platform: FLOWI Akademiya — the open test's numbers, who learns in each business, and the lessons editor. */
+const PA = { data: null, edit: null };
+
+async function loadAcademy() { PA.data = await GET('/api/platform/academy'); PA.edit = null; }
+
+function academyHtml() {
+  const A = PA.data;
+  if (!A) return `<div class="card">${emptyState('graduation-cap', 'Yuklanmoqda…')}</div>`;
+  const pub = A.public;
+  const C = A.content;
+  const lessons = C.modules.reduce((s, m) => s + m.lessons.length, 0);
+  const questions = C.modules.reduce((s, m) => s + m.lessons.reduce((x, l) => x + l.quiz.length, 0), 0);
+  const learners = A.tenants.reduce((s, t) => s + (t.learners || 0), 0);
+  const certified = A.tenants.reduce((s, t) => s + (t.certified || 0), 0);
+  return `<div class="kpis">
+      ${kpiP('Saytdagi test', pub.month.started, `30 kunda · jami ${pub.all.started}`, 'graduation-cap')}
+      ${kpiP("Testdan o'tdi (sayt)", pub.month.passed, `30 kunda · jami ${pub.all.passed}`, 'award', 'good')}
+      ${kpiP("Bizneslarda o'qiyapti", learners, `${A.tenants.length} ta biznesda`, 'users')}
+      ${kpiP('Sertifikat olgan xodim', certified, '', 'circle-check', 'good')}
+    </div>
+    <div class="card" style="margin-bottom:14px"><b>${icon('link', 16)} Ochiq test havolasi</b>
+      <p class="small muted" style="margin:6px 0 0">Hamma uchun: <a href="/test" target="_blank" rel="noopener"><b>${esc(location.origin)}/test</b></a> — bosh sahifada ham tugma bor. Sertifikatni tekshirish: <b>/test?c=KOD</b></p></div>
+    <div class="pa-grid">
+      <div class="card"><div class="row" style="margin-bottom:8px"><b class="grow">${icon('book-open', 16)} Darslar</b>
+          <span class="small muted">${C.modules.length} modul · ${lessons} dars · ${questions} savol${A.custom ? ' · <span class="chip">tahrirlangan</span>' : ''}</span></div>
+        ${C.modules.map((m, mi) => `<div class="pa-mod"><div class="row"><span class="pa-ic" style="background:${esc(m.color)}">${esc(m.icon)}</span>
+            <b class="grow">${esc(m.title)}</b>${m.free ? '<span class="chip green">bepul</span>' : ''}
+            <button class="icon-btn ghost" data-pamod="${mi}" title="Modulni tahrirlash">${icon('pencil', 16)}</button></div>
+          ${m.lessons.map((l, li) => `<button class="pa-lesson" data-pales="${mi}:${li}"><span class="grow">${li + 1}. ${esc(l.title)}</span><span class="small muted">${l.cards.length} karta · ${l.quiz.length} savol</span>${icon('chevron-right', 15)}</button>`).join('')}
+          <button class="btn sm ghost" data-paadd="${mi}">${icon('plus', 15)} Dars qo'shish</button></div>`).join('')}
+        <div class="row" style="margin-top:12px;gap:8px"><button class="btn sm" id="pa-addmod">${icon('plus', 15)} Modul qo'shish</button>
+          ${A.custom ? `<button class="btn sm red-text" id="pa-reset">${icon('rotate-ccw', 15)} Asl darslarga qaytarish</button>` : ''}</div></div>
+      <div class="stack">
+        <div class="card"><b>${icon('store', 16)} Bizneslarda</b>
+          ${A.tenants.length ? `<div class="table-wrap"><table><tr><th>Biznes</th><th class="right">O'qiyapti</th><th class="right">Darslar</th><th class="right">Testlar</th><th class="right">Sertifikat</th></tr>
+            ${A.tenants.map((t) => `<tr><td><b>${esc(t.name)}</b><br><span class="small muted">${esc(t.code)}</span></td><td class="right">${t.learners || 0}</td><td class="right">${t.lessons || 0}</td><td class="right">${t.tests || 0}</td><td class="right">${t.certified || 0}</td></tr>`).join('')}</table></div>`
+            : '<p class="small muted">Hali hech bir biznesda xodimlar o\'qishni boshlamagan.</p>'}</div>
+        <div class="card"><b>${icon('graduation-cap', 16)} Saytdagi oxirgi testlar</b>
+          ${pub.last.length ? `<div class="table-wrap"><table><tr><th>Ism</th><th>Joy</th><th class="right">Natija</th><th>Sana</th></tr>
+            ${pub.last.map((r) => `<tr><td><b>${esc(r.name)}</b></td><td class="small">${esc(r.place || '—')}</td><td class="right"><span class="chip ${r.passed ? 'green' : 'red'}">${r.total ? Math.round((r.score / r.total) * 100) : 0}%</span></td><td class="small muted">${fmtDateTime(r.finished_at)}</td></tr>`).join('')}</table></div>`
+            : '<p class="small muted">Hali hech kim topshirmagan.</p>'}</div>
+      </div></div>`;
+}
+
+async function saveAcademy(content) {
+  try { const r = await PUT('/api/platform/academy', { content }); PA.data.content = r.content; PA.data.custom = true; toast('Saqlandi', 'ok'); render(); return true; } catch (e) { toastError(e); return false; }
+}
+const paClone = () => JSON.parse(JSON.stringify(PA.data.content));
+
+function bindAcademy(root) {
+  root.querySelectorAll('[data-pamod]').forEach((b) => b.onclick = () => moduleDialog(Number(b.dataset.pamod)));
+  root.querySelectorAll('[data-pales]').forEach((b) => b.onclick = () => { const [mi, li] = b.dataset.pales.split(':').map(Number); lessonDialog(mi, li); });
+  root.querySelectorAll('[data-paadd]').forEach((b) => b.onclick = () => {
+    const c = paClone(); const m = c.modules[Number(b.dataset.paadd)];
+    m.lessons.push({ id: `${m.id}-${Date.now().toString(36)}`, title: 'Yangi dars', cards: [{ e: '📘', h: 'Sarlavha', t: 'Matn', ok: '', no: '' }], quiz: [] });
+    PA.data.content = c; lessonDialog(Number(b.dataset.paadd), m.lessons.length - 1, true);
+  });
+  root.querySelector('#pa-addmod').onclick = () => {
+    const c = paClone();
+    c.modules.push({ id: `m${Date.now().toString(36)}`, icon: '📘', color: '#eef2f7', title: 'Yangi modul', free: false, lessons: [] });
+    PA.data.content = c; moduleDialog(c.modules.length - 1, true);
+  };
+  const rs = root.querySelector('#pa-reset');
+  if (rs) rs.onclick = async () => {
+    if (!(await confirmModal('Asl darslarga qaytarilsinmi?', "Siz qilgan o'zgarishlar o'chadi. Xodimlarning o'qigan darslari saqlanib qoladi."))) return;
+    try { const r = await POST('/api/platform/academy/reset'); PA.data.content = r.content; PA.data.custom = false; render(); } catch (e) { toastError(e); }
+  };
+}
+
+function moduleDialog(mi, isNew) {
+  const c = paClone(); const m = c.modules[mi];
+  openModal({ title: isNew ? 'Yangi modul' : 'Modul',
+    body: `<label class="field">Nomi<input name="title" value="${esc(m.title)}" maxlength="80"></label>
+      <div class="row" style="gap:10px"><label class="field" style="flex:1">Belgi (emoji)<input name="icon" value="${esc(m.icon)}" maxlength="8"></label>
+      <label class="field" style="flex:1">Rang<input name="color" type="color" value="${esc(m.color)}"></label></div>
+      <label class="check"><input type="checkbox" name="free" ${m.free ? 'checked' : ''}> Bepul — Start tarifida ham ochiq</label>
+      <label class="check"><input type="checkbox" name="site" ${m.site !== false ? 'checked' : ''}> Savollari saytdagi ochiq testda ham bo'lsin</label>`,
+    onClose: () => { if (isNew) loadAcademy().then(render); },
+    actions: [
+      ...(isNew ? [] : [{ label: "O'chirish", cls: 'red-text', icon: 'trash-2', onClick: async () => {
+        if (!(await confirmModal(`"${esc(m.title)}" o'chirilsinmi?`, `Ichidagi ${m.lessons.length} ta dars ham o'chadi.`))) return false;
+        c.modules.splice(mi, 1); return saveAcademy(c);
+      } }]),
+      { label: 'Saqlash', cls: 'primary', onClick: (f) => {
+        const d = formData(f);
+        Object.assign(m, { title: d.title, icon: d.icon, color: d.color, free: !!f.free.checked, site: !!f.site.checked });
+        return saveAcademy(c);
+      } }] });
+}
+
+// A lesson: its cards (picture, heading, text, do / don't) and its questions (answers, the right one, why).
+function lessonDialog(mi, li, isNew) {
+  const c = paClone(); const m = c.modules[mi]; const l = m.lessons[li];
+  const cardRow = (k, i) => `<div class="pa-block" data-card>
+      <div class="row"><b class="grow">Karta ${i + 1}</b><button type="button" class="icon-btn ghost" data-rm title="O'chirish">${icon('trash-2', 15)}</button></div>
+      <div class="row" style="gap:8px"><input name="e" value="${esc(k.e)}" placeholder="🙂" style="width:70px" maxlength="8"><input name="h" value="${esc(k.h)}" placeholder="Sarlavha" style="flex:1"></div>
+      <textarea name="t" rows="3" placeholder="Matn (2–3 gap)">${esc(k.t)}</textarea>
+      <input name="ok" value="${esc(k.ok)}" placeholder="✅ Shunday qiling"><input name="no" value="${esc(k.no)}" placeholder="❌ Bunday qilmang"></div>`;
+  const quizRow = (x, i, key = i) => `<div class="pa-block" data-q>
+      <div class="row"><b class="grow">Savol ${i + 1}</b><button type="button" class="icon-btn ghost" data-rm title="O'chirish">${icon('trash-2', 15)}</button></div>
+      <textarea name="q" rows="2" placeholder="Savol">${esc(x.q)}</textarea>
+      ${[0, 1, 2, 3].map((k) => `<label class="pa-ans"><input type="radio" name="c${key}" value="${k}" ${x.c === k ? 'checked' : ''} title="To'g'ri javob"><input name="a${k}" value="${esc(x.a[k] || '')}" placeholder="Javob ${'ABCD'[k]}"></label>`).join('')}
+      <input name="why" value="${esc(x.why)}" placeholder="💡 Nega to'g'ri (javobdan keyin ko'rinadi)"></div>`;
+  const form = openModal({ title: `${esc(m.title)} — dars`, size: 'wide',
+    body: `<label class="field">Dars nomi<input name="title" value="${esc(l.title)}" maxlength="80"></label>
+      <h3 style="margin:14px 0 6px">Kartalar</h3><div id="pa-cards">${l.cards.map(cardRow).join('')}</div>
+      <button type="button" class="btn sm" id="pa-addcard">${icon('plus', 15)} Karta</button>
+      <h3 style="margin:16px 0 6px">Savollar <span class="small muted">(doirachani bosib to'g'ri javobni belgilang)</span></h3><div id="pa-quiz">${l.quiz.map(quizRow).join('')}</div>
+      <button type="button" class="btn sm" id="pa-addq">${icon('plus', 15)} Savol</button>`,
+    onClose: () => { if (isNew) loadAcademy().then(render); },
+    actions: [
+      ...(isNew ? [] : [{ label: "Darsni o'chirish", cls: 'red-text', icon: 'trash-2', onClick: async () => {
+        if (!(await confirmModal(`"${esc(l.title)}" o'chirilsinmi?`, ''))) return false;
+        m.lessons.splice(li, 1); return saveAcademy(c);
+      } }]),
+      { label: 'Saqlash', cls: 'primary', onClick: (f) => {
+        l.title = f.title.value;
+        l.cards = [...f.querySelectorAll('[data-card]')].map((b) => ({ e: b.querySelector('[name=e]').value, h: b.querySelector('[name=h]').value, t: b.querySelector('[name=t]').value, ok: b.querySelector('[name=ok]').value, no: b.querySelector('[name=no]').value }));
+        l.quiz = [...f.querySelectorAll('[data-q]')].map((b) => {
+          const raw = [0, 1, 2, 3].map((k) => b.querySelector(`[name=a${k}]`).value.trim());
+          const checked = b.querySelector('input[type=radio]:checked');
+          const right = checked ? Number(checked.value) : 0;
+          const a = raw.filter(Boolean);
+          return { q: b.querySelector('[name=q]').value, a, c: Math.max(0, a.indexOf(raw[right])), why: b.querySelector('[name=why]').value };
+        });
+        if (l.quiz.some((x) => x.q.trim() && x.a.length < 2)) { toast('Har bir savolda kamida 2 ta javob bo\'lsin', 'warn'); return false; }
+        return saveAcademy(c);
+      } }] });
+  const wire = () => form.querySelectorAll('[data-rm]').forEach((b) => b.onclick = () => b.closest('.pa-block').remove());
+  form.querySelector('#pa-addcard').onclick = () => { form.querySelector('#pa-cards').insertAdjacentHTML('beforeend', cardRow({ e: '', h: '', t: '', ok: '', no: '' }, form.querySelectorAll('[data-card]').length)); wire(); };
+  form.querySelector('#pa-addq').onclick = () => { const n = form.querySelectorAll('[data-q]').length; form.querySelector('#pa-quiz').insertAdjacentHTML('beforeend', quizRow({ q: '', a: [], c: 0, why: '' }, n, `n${Date.now()}`)); wire(); };
+  wire();
+}

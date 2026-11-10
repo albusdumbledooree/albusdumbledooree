@@ -29,12 +29,12 @@ function navOrder(role) {
     owner: [...home, 'panel', 'kitchen', 'history', 'reservations', 'menuadmin', 'staff', 'settings', 'money'],
     admin: [...home, 'panel', 'kitchen', 'history', 'reservations', 'menuadmin', 'staff', 'settings', 'money'],
     cashier: [...home, 'history', 'reservations', 'stoplist', 'settings', 'money'],
-    waiter: [...home, ...(isShop() ? [] : ['ready']), 'settings'],
+    waiter: [...home, ...(isShop() ? [] : ['ready', 'academy']), 'settings'],
     chef: ['kitchen', 'stoplist', 'inventory', 'settings'],
   }[role];
 }
 const CHILD_OF = { staffday: 'money', fixed: 'money', pnl: 'money', room: 'rooms', order: 'rooms', soboy: 'rooms', dostavka: 'rooms', reports: 'money', finance: 'money', payroll: 'money', attendance: 'staff', customers: 'money', inventory: 'money', branches: 'money',
-  profit: 'money', purchases: 'money', debts: 'money', masters: 'money' };
+  profit: 'money', purchases: 'money', debts: 'money', masters: 'money', academy: 'staff' };
 let currentView = null;
 let currentParams = [];
 let currentData = null;

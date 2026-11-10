@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ofitsantlik testi — FLOWI Akademiya</title>
+<meta name="description" content="Ofitsantlik va xizmat madaniyati bo'yicha bepul onlayn test: 20 ta savol, darhol natija va sertifikat. FLOWI Akademiya.">
+<meta property="og:title" content="Ofitsantlik testi — FLOWI Akademiya">
+<meta property="og:description" content="20 ta savol, darhol natija va sertifikat. Bilimingizni sinab ko'ring!">
+<meta property="og:image" content="/landing/og.png">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<style>
+  :root { --p: #2156e8; --d: #0f2130; --t: #0f172a; --m: #5b6472; --l: #dfe3ea; --bg: #f4f6f9; --g: #16a34a; --gs: #e6f6ec; --r: #dc2626; --rs: #fdecec; --o: #fff4e2; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: var(--t); background: var(--bg); }
+  a { color: var(--p); }
+  header { background: var(--d); color: #fff; }
+  .top { max-width: 720px; margin: 0 auto; padding: 14px 16px; display: flex; align-items: center; gap: 10px; }
+  .logo { font-weight: 900; letter-spacing: 2px; font-size: 20px; color: #fff; text-decoration: none; } .logo span { color: #6f9bff; }
+  .top small { opacity: .75; }
+  main { max-width: 720px; margin: 0 auto; padding: 18px 16px 40px; }
+  .card { background: #fff; border: 1px solid var(--l); border-radius: 18px; padding: 20px; }
+  h1 { font-size: 26px; line-height: 1.25; margin: 0 0 8px; } h2 { font-size: 20px; margin: 0 0 8px; }
+  .muted { color: var(--m); } .small { font-size: 14px; }
+  .hero { text-align: center; } .hero .big { font-size: 64px; line-height: 1.1; }
+  .facts { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 14px 0; }
+  .facts span { background: var(--bg); border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 600; }
+  label { display: block; text-align: left; font-weight: 600; font-size: 14px; margin-top: 12px; }
+  input { width: 100%; font: inherit; padding: 13px 14px; border: 1.5px solid var(--l); border-radius: 12px; margin-top: 5px; background: #fff; color: var(--t); }
+  input:focus { outline: none; border-color: var(--p); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font: inherit; font-weight: 700; padding: 14px 18px; border-radius: 12px; border: 1.5px solid var(--l); background: #fff; color: var(--t); cursor: pointer; text-decoration: none; min-height: 52px; }
+  .btn.p { background: var(--p); border-color: var(--p); color: #fff; } .btn.g { background: var(--g); border-color: var(--g); color: #fff; }
+  .btn:disabled { opacity: .5; cursor: default; } .block { width: 100%; }
+  .row { display: flex; gap: 10px; margin-top: 14px; } .row .btn { flex: 1; }
+  .bar { height: 8px; background: #e6e9ed; border-radius: 9px; overflow: hidden; margin: 8px 0 16px; } .bar i { display: block; height: 100%; background: var(--p); transition: width .25s; }
+  .qn { color: var(--m); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+  .q { font-size: 19px; font-weight: 750; line-height: 1.4; margin: 4px 0 14px; }
+  .opt { display: block; width: 100%; text-align: left; font: inherit; background: #fff; border: 2px solid var(--l); border-radius: 12px; padding: 13px 14px; margin-bottom: 8px; cursor: pointer; color: var(--t); line-height: 1.4; }
+  .opt b { color: var(--m); margin-right: 4px; } .opt.sel { border-color: var(--p); background: #e6edfd; }
+  .score { font-size: 54px; font-weight: 850; } .ok { color: var(--g); } .bad { color: var(--r); }
+  .rev { border: 1px solid var(--l); border-radius: 14px; padding: 12px 14px; margin-top: 10px; background: #fff; }
+  .do, .dont { border-radius: 10px; padding: 8px 10px; margin-top: 6px; font-size: 15px; } .do { background: var(--gs); } .dont { background: var(--rs); }
+  .why { font-size: 14px; color: var(--m); margin-top: 6px; }
+  .cta { margin-top: 16px; background: var(--d); color: #fff; border-radius: 18px; padding: 18px 20px; }
+  .cta b { font-size: 18px; } .cta p { margin: 6px 0 12px; opacity: .85; } .cta .btn { background: #fff; color: var(--d); border-color: #fff; }
+  .err { background: var(--rs); color: var(--r); border-radius: 10px; padding: 10px 12px; margin-top: 12px; font-size: 14px; display: none; }
+  .hp { position: absolute; left: -9999px; }
+  footer { text-align: center; color: var(--m); font-size: 13px; padding: 10px 16px 30px; }
+  @media (max-width: 480px) { h1 { font-size: 22px; } .card { padding: 16px; } .q { font-size: 17px; } }
+</style>
+</head>
+<body>
+<header><div class="top"><a class="logo" href="/">FLOW<span>I</span></a><small>Akademiya</small></div></header>
+<main id="app"></main>
+<footer>© FLOWI · <a href="/">flowi.uz</a> — choyxona, restoran va do'konlar uchun dastur</footer>
+<script>
+'use strict';
+var S = { key: '', questions: [], i: 0, answers: {}, result: null, name: '', place: '' };
+var app = document.getElementById('app');
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function pad(n) { return (n < 10 ? '0' : '') + n; }
+function fmtDate(ts) { var d = new Date(ts); return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear(); }
+function api(method, path, body) {
+  return fetch(path, { method: method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+    .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error((j && j.error) || 'Xatolik'); return j; }); });
+}
+function showErr(msg) { var e = document.getElementById('err'); if (e) { e.textContent = msg; e.style.display = 'block'; } else alert(msg); }
+
+function intro() {
+  app.innerHTML = '<div class="card hero"><div class="big">🎓</div><h1>Ofitsantlik va xizmat madaniyati testi</h1>' +
+    '<p class="muted">Mehmonni kutib olish, dasturxon va choy odobi, muloqot, shikoyat bilan ishlash, gigiena va hisob-kitob bo\'yicha bilimingizni sinab ko\'ring.</p>' +
+    '<div class="facts"><span>📝 20 ta savol</span><span>⏱ ~10 daqiqa</span><span>✅ 70% — o\'tdi</span><span>🏅 Sertifikat</span></div>' +
+    '<form id="f" autocomplete="on"><label>Ismingiz va familiyangiz<input name="name" required maxlength="60" placeholder="Masalan: Jasur Aliyev" value="' + esc(S.name) + '"></label>' +
+    '<label>Qayerda ishlaysiz yoki shahar <span class="muted">(ixtiyoriy)</span><input name="place" maxlength="80" placeholder="Masalan: Toshkent" value="' + esc(S.place) + '"></label>' +
+    '<input class="hp" name="website" tabindex="-1" autocomplete="off">' +
+    '<div class="err" id="err"></div><button class="btn p block" style="margin-top:16px" id="go">Testni boshlash →</button></form></div>' + cta();
+  document.getElementById('f').onsubmit = function (e) {
+    e.preventDefault();
+    var f = e.target; var b = document.getElementById('go');
+    S.name = f.name.value.trim(); S.place = f.place.value.trim();
+    if (S.name.length < 2) return showErr('Ismingizni yozing');
+    b.disabled = true;
+    api('POST', '/api/public/test', { name: S.name, place: S.place, website: f.website.value }).then(function (r) {
+      S.key = r.key; S.questions = r.questions; S.i = 0; S.answers = {}; question();
+    }).catch(function (err) { b.disabled = false; showErr(err.message); });
+  };
+}
+
+function question() {
+  var x = S.questions[S.i];
+  var chosen = S.answers[x.id];
+  var n = Object.keys(S.answers).length;
+  var last = S.i + 1 === S.questions.length;
+  app.innerHTML = '<div class="card"><div class="qn">Savol ' + (S.i + 1) + ' / ' + S.questions.length + '</div>' +
+    '<div class="bar"><i style="width:' + (n / S.questions.length * 100) + '%"></i></div>' +
+    '<div class="q">' + esc(x.q) + '</div>' +
+    x.a.map(function (o, k) { return '<button class="opt' + (chosen === o.i ? ' sel' : '') + '" data-o="' + o.i + '"><b>' + 'ABCDEF'[k] + ')</b> ' + esc(o.text) + '</button>'; }).join('') +
+    '<div class="err" id="err"></div><div class="row">' + (S.i > 0 ? '<button class="btn" id="prev" style="flex:0 0 64px">←</button>' : '') +
+    (last ? '<button class="btn g" id="fin"' + (n < S.questions.length ? ' disabled' : '') + '>✓ Yakunlash</button>'
+      : '<button class="btn p" id="next"' + (chosen === undefined ? ' disabled' : '') + '>Keyingi savol →</button>') + '</div></div>';
+  Array.prototype.forEach.call(app.querySelectorAll('[data-o]'), function (b) {
+    b.onclick = function () { S.answers[x.id] = Number(b.getAttribute('data-o')); question(); };
+  });
+  var nx = document.getElementById('next'); if (nx) nx.onclick = function () { S.i++; question(); window.scrollTo(0, 0); };
+  var pv = document.getElementById('prev'); if (pv) pv.onclick = function () { S.i--; question(); };
+  var fin = document.getElementById('fin');
+  if (fin) fin.onclick = function () {
+    fin.disabled = true;
+    api('POST', '/api/public/test/finish', { key: S.key, answers: S.answers }).then(function (r) { S.result = r; result(); window.scrollTo(0, 0); })
+      .catch(function (err) { fin.disabled = false; showErr(err.message); });
+  };
+}
+
+function result() {
+  var R = S.result;
+  var wrong = R.results.filter(function (x) { return !x.ok; });
+  app.innerHTML = '<div class="card hero"><div class="big">' + (R.passed ? '🎓' : '📚') + '</div>' +
+    '<h2>' + (R.passed ? 'Tabriklaymiz, ' + esc(R.name) + '! Testdan o\'tdingiz' : 'Bu safar o\'tmadi, ' + esc(R.name)) + '</h2>' +
+    '<div class="score ' + (R.passed ? 'ok' : 'bad') + '">' + R.pct + '%</div><p>To\'g\'ri javoblar: <b>' + R.score + ' / ' + R.total + '</b></p>' +
+    (R.weak.length ? '<p class="small muted">Ko\'proq takrorlang: <b>' + R.weak.map(esc).join(', ') + '</b></p>' : '') +
+    '<div class="row">' + (R.passed ? '<button class="btn p" id="cert">🏅 Sertifikat</button>' : '') + '<button class="btn" id="again">↻ Qayta topshirish</button></div>' +
+    (R.passed ? '<p class="small muted" style="margin-top:10px">Sertifikat raqami: <b>' + esc(R.code) + '</b> · tekshirish: <a href="/test?c=' + esc(R.code) + '">' + esc(location.host) + '/test?c=' + esc(R.code) + '</a></p>' : '') +
+    '</div>' +
+    (wrong.length ? '<h2 style="margin:20px 0 4px">Xato javoblar</h2>' + wrong.map(function (x) {
+      return '<div class="rev"><b>' + esc(x.q) + '</b>' + (x.chosen ? '<div class="dont">❌ ' + esc(x.chosen) + '</div>' : '') + '<div class="do">✅ ' + esc(x.right) + '</div>' + (x.why ? '<div class="why">💡 ' + esc(x.why) + '</div>' : '') + '</div>';
+    }).join('') : '') + cta();
+  var c = document.getElementById('cert');
+  if (c) c.onclick = function () { openCert({ name: R.name, place: R.place, pct: R.pct, score: R.score, total: R.total, at: R.at, code: R.code }); };
+  document.getElementById('again').onclick = function () { S.result = null; intro(); window.scrollTo(0, 0); };
+}
+
+function cta() {
+  return '<div class="cta"><b>Choyxona yoki restoraningiz bormi?</b><p>FLOWI dasturida xodimlaringiz uchun to\'liq kurs bor: 8 modul, 32 dars, har bir xodimning natijasi boshliqqa ko\'rinadi.</p>' +
+    '<a class="btn" href="/#boglanish">FLOWI bilan tanishish →</a></div>';
+}
+
+function certHtml(c) {
+  return '<!doctype html><html><head><meta charset="utf-8"><title>Sertifikat — ' + esc(c.name) + '</title><style>' +
+    '@page{size:A4 landscape;margin:0}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#0f172a}' +
+    '.c{width:297mm;height:209mm;padding:16mm;display:flex}.in{flex:1;border:3px solid #0f2130;border-radius:14px;padding:14mm 18mm;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative}' +
+    '.in:before{content:"";position:absolute;inset:5px;border:1px solid #c9a227;border-radius:10px;pointer-events:none}.brand{font-weight:900;letter-spacing:3px;font-size:18pt}.brand span{color:#2156e8}' +
+    '.kind{margin-top:8mm;font-size:30pt;font-weight:800;letter-spacing:1px}.sub{color:#555;margin-top:2mm;font-size:12pt}.name{margin-top:12mm;font-size:30pt;font-weight:800;border-bottom:2px solid #c9a227;padding:0 12mm 3mm}' +
+    '.txt{margin-top:8mm;font-size:13pt;line-height:1.6;max-width:200mm}.row{margin-top:auto;width:100%;display:flex;justify-content:space-between;align-items:flex-end;font-size:11pt;color:#333}' +
+    '.score{font-size:24pt;font-weight:800;color:#16a34a}.medal{font-size:46pt;line-height:1}' +
+    '@media screen{body{background:#e9ebef;padding:20px}.c{background:#fff;margin:auto;box-shadow:0 6px 30px #0002}.p{text-align:center;margin:14px}.p button{font-size:16px;padding:10px 22px;border-radius:10px;border:0;background:#2156e8;color:#fff;cursor:pointer}}@media print{.p{display:none}}' +
+    '</style></head><body><div class="p"><button onclick="print()">🖨 Chop etish / PDF</button></div><div class="c"><div class="in">' +
+    '<div class="brand">FLOW<span>I</span> AKADEMIYA</div><div class="kind">SERTIFIKAT</div><div class="sub">Ofitsantlik va xizmat madaniyati testi</div>' +
+    '<div class="name">' + esc(c.name) + '</div>' +
+    '<div class="txt">' + (c.place ? '<b>' + esc(c.place) + '</b> · ' : '') + 'xizmat madaniyati, dasturxon odobi, mehmon bilan muloqot, gigiena va hisob-kitob bo\'yicha testdan muvaffaqiyatli o\'tdi.</div>' +
+    '<div class="row"><div style="text-align:left">Sana: <b>' + fmtDate(c.at) + '</b><br>Raqam: <b>' + esc(c.code) + '</b><br>Tekshirish: ' + esc(location.host) + '/test?c=' + esc(c.code) + '</div>' +
+    '<div class="medal">🏅</div><div style="text-align:right">Natija<div class="score">' + c.pct + '%</div>' + c.score + '/' + c.total + ' to\'g\'ri javob</div></div>' +
+    '</div></div></body></html>';
+}
+function openCert(c) {
+  var w = window.open('', '_blank');
+  if (!w) return alert('Brauzer yangi oynani to\'sib qo\'ydi — ruxsat bering');
+  w.document.write(certHtml(c)); w.document.close();
+}
+
+// /test?c=CODE — someone checks a certificate.
+function verify(code) {
+  app.innerHTML = '<div class="card hero"><p class="muted">Tekshirilmoqda…</p></div>';
+  api('GET', '/api/public/cert?c=' + encodeURIComponent(code)).then(function (c) {
+    app.innerHTML = '<div class="card hero"><div class="big">✅</div><h1>Sertifikat haqiqiy</h1>' +
+      '<p><b style="font-size:22px">' + esc(c.name) + '</b>' + (c.place ? '<br><span class="muted">' + esc(c.place) + '</span>' : '') + '</p>' +
+      '<div class="facts"><span>Natija: ' + c.pct + '%</span><span>' + c.score + '/' + c.total + ' to\'g\'ri</span><span>Sana: ' + fmtDate(c.at) + '</span><span>Raqam: ' + esc(c.code) + '</span></div>' +
+      '<div class="row"><button class="btn" id="cert">🏅 Sertifikatni ochish</button><a class="btn p" href="/test">Testni o\'zim topshiraman</a></div></div>' + cta();
+    document.getElementById('cert').onclick = function () { openCert(c); };
+  }).catch(function () {
+    app.innerHTML = '<div class="card hero"><div class="big">❌</div><h1>Sertifikat topilmadi</h1><p class="muted">Raqamni tekshiring: <b>' + esc(code) + '</b></p><a class="btn p" href="/test">Testni topshirish</a></div>';
+  });
+}
+
+var code = new URLSearchParams(location.search).get('c');
+if (code) verify(code); else intro();
+</script>
+</body>
+</html>

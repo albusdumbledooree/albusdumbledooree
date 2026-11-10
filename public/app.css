@@ -1363,3 +1363,59 @@ details.ver summary .grow { flex: 1 1 200px; min-width: 0; }
 .grp-part { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
 .grp-part .grow { display: flex; flex-direction: column; min-width: 0; }
 .grp-part small { display: flex; align-items: center; gap: 4px; }
+
+/* ---------- FLOWI Akademiya ---------- */
+.ac-hero { display: flex; align-items: center; gap: 14px; background: #0f2130; color: #fff; border-radius: 16px; padding: 16px 18px; margin-bottom: 12px; }
+.ac-hero b { display: block; font-size: 18px; } .ac-hero span { font-size: 13px; opacity: .8; display: inline-flex; align-items: center; gap: 4px; }
+.ac-pct { font-size: 28px; font-weight: 800; }
+.ac-bar { height: 8px; background: #ffffff33; border-radius: 9px; margin-top: 10px; overflow: hidden; } .ac-bar i { display: block; height: 100%; background: #2ecc71; border-radius: 9px; transition: width .3s; }
+.ac-bar.dark { background: var(--panel-2); }
+.ac-plan { display: flex; align-items: center; gap: 8px; background: var(--orange-soft); color: var(--text); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; font-size: 14px; }
+.ac-mods { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-items: start; }
+.ac-mod { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.ac-mod.locked { opacity: .6; }
+.ac-mod-h { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px; cursor: pointer; }
+.ac-mod-h b { display: block; font-size: 15px; } .ac-mod-h small { color: var(--muted); font-size: 12.5px; }
+.ac-ic { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; flex: none; }
+.ac-mbar { display: block; height: 5px; background: var(--panel-2); border-radius: 5px; margin-top: 6px; overflow: hidden; } .ac-mbar i { display: block; height: 100%; background: var(--green); }
+.ac-mbar.sm { display: inline-block; width: 70px; vertical-align: middle; margin: 0 6px 0 0; }
+.ac-lessons { border-top: 1px solid var(--line); padding: 6px; display: grid; gap: 4px; }
+.ac-lesson { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; cursor: pointer; font-size: 14.5px; }
+.ac-lesson:hover { background: var(--panel-2); }
+.ac-n { width: 26px; height: 26px; border-radius: 50%; background: var(--panel-2); display: grid; place-items: center; font-size: 13px; font-weight: 700; flex: none; }
+.ac-lesson.done .ac-n { background: var(--green); color: #fff; }
+.ac-final { margin-top: 14px; } .ac-final h3 { margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
+.ac-wrap { max-width: 620px; margin: 0 auto; }
+.ac-top { display: flex; align-items: center; gap: 8px; } .ac-top small { display: block; color: var(--muted); font-size: 12.5px; } .ac-top b { font-size: 18px; }
+.ac-dots { display: flex; gap: 5px; margin: 10px 0 14px; } .ac-dots i { flex: 1; height: 5px; border-radius: 5px; background: var(--panel-2); } .ac-dots i.d { background: var(--green); } .ac-dots i.a { background: var(--primary); }
+.ac-card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px; font-size: 16px; line-height: 1.55; }
+.ac-card h2 { font-size: 21px; margin: 0 0 8px; } .ac-card p { margin: 0; }
+.ac-ill { height: 150px; border-radius: 14px; display: grid; place-items: center; font-size: 68px; margin-bottom: 14px; }
+.ac-do, .ac-dont { border-radius: 10px; padding: 9px 12px; margin-top: 8px; font-size: 14.5px; }
+.ac-do { background: var(--green-soft); } .ac-dont { background: var(--red-soft); }
+.ac-btns { display: flex; gap: 10px; margin-top: 14px; } .ac-btns .btn { flex: 1; min-height: 50px; font-size: 16px; }
+.ac-qhead { color: var(--muted); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+.ac-q { font-weight: 750; font-size: 18px; line-height: 1.4; margin: 6px 0 12px; }
+.ac-opt { all: unset; box-sizing: border-box; display: block; width: 100%; background: var(--panel); border: 2px solid var(--line); border-radius: 12px; padding: 13px 14px; font-size: 15.5px; margin-bottom: 8px; cursor: pointer; line-height: 1.4; }
+.ac-opt b { color: var(--muted); margin-right: 4px; }
+.ac-opt.sel { border-color: var(--primary); background: var(--primary-soft); }
+.ac-opt.right { border-color: var(--green); background: var(--green-soft); } .ac-opt.wrong { border-color: var(--red); background: var(--red-soft); } .ac-opt.dim { opacity: .55; }
+.ac-why { background: var(--orange-soft); border-radius: 10px; padding: 10px 12px; font-size: 14.5px; }
+.ac-done { text-align: center; } .ac-big { font-size: 64px; line-height: 1.1; margin-bottom: 6px; }
+.ac-score { font-size: 46px; font-weight: 850; margin: 6px 0; } .ac-score.ok { color: var(--green); } .ac-score.bad { color: var(--red); }
+.ac-rev { margin-bottom: 8px; font-size: 14.5px; }
+@media (max-width: 560px) { .ac-mods { grid-template-columns: 1fr; } .ac-ill { height: 120px; font-size: 56px; } .ac-card { padding: 15px; } }
+
+/* Platform: Akademiya */
+.pa-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.pa-grid .stack { display: grid; gap: 14px; }
+.pa-mod { border-top: 1px solid var(--line); padding: 10px 0; }
+.pa-ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 18px; flex: none; }
+.pa-lesson { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px 7px 44px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+.pa-lesson:hover { background: var(--panel-2); }
+.pa-mod .btn.ghost { margin-left: 36px; }
+.pa-block { border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-bottom: 8px; display: grid; gap: 6px; }
+.pa-block input, .pa-block textarea { width: 100%; }
+.pa-ans { display: flex; align-items: center; gap: 8px; } .pa-ans input[type=radio] { width: 20px; height: 20px; flex: none; }
+@media (max-width: 900px) { .pa-grid { grid-template-columns: minmax(0, 1fr); } .pa-lesson { padding-left: 8px; flex-wrap: wrap; } .pa-mod .btn.ghost { margin-left: 0; } }
+.ptabs { max-width: 100%; overflow-x: auto; scrollbar-width: none; } .ptabs button { flex: none; }

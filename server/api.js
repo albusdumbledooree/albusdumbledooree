@@ -13,6 +13,7 @@ const { createStats } = require('./stats');
 const { createPrint } = require('./print');
 const { createPayroll } = require('./payroll');
 const { createWork, STAFF_ROLES } = require('./work');
+const { createAcademy } = require('./academy');
 const { snapshot } = require('./backup');
 const Units = require('../public/js/units');
 const UNIT_WORDS = { piece: 'dona', pack: 'pachka', box: 'karobka' };
@@ -48,6 +49,7 @@ const MODULES = {
   qrmenu: 'QR-menyu (mijoz telefonida)',
   qrorder: "QR orqali buyurtma va chaqiruv",
   pnl: 'Sof foyda hisoboti (oylik)',
+  academy: "Akademiya: barcha darslar, yakuniy test va sertifikat",
 };
 // On/off switches of the place features: staff only inside, "I came" with GPS / the desk's QR / a selfie, guest orders only inside.
 const GEO_FLAGS = ['geo_staff', 'att_clock', 'att_gps', 'att_qr', 'att_selfie', 'qr_geo', 'qr_busy', 'print_agent'];
@@ -75,7 +77,7 @@ function routeModule(pattern) {
 // opts.hub: live-event hub of this choyxona; opts.tokenPrefix marks which choyxona a session token belongs to;
 // opts.tenant(): the choyxona's platform record (code, name, paid_until); opts.plan(): its plan (sections, staff limit);
 // opts.file: its database file.
-function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () => null, branches = () => [], file = null, telegram = null, helpbot = null, secret = NO_BOX } = {}) {
+function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () => null, branches = () => [], file = null, telegram = null, helpbot = null, secret = NO_BOX, academy = null } = {}) {
   const events = hub;
   // Shared devices (the staff-list screen) get tokens of their own: "d<choyxona>_…".
   const devicePrefix = tokenPrefix.replace(/^t/, 'd');
@@ -103,6 +105,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   const print = createPrint(db, { now, events: hub, audit, settings: () => settings(), newToken, devicePrefix });
   // Work hours, GPS and the cash desk's attendance QR code (all optional, switched on in the settings).
   const work = createWork(db, { settings: () => settings(), audit, events: hub, now });
+  // FLOWI Akademiya: lessons from the platform (the same for every business); the whole course comes with the plan's section.
+  const acad = createAcademy(db, academy ? { content: academy, full: () => moduleOn('academy') } : { full: () => moduleOn('academy') });
 
   function tx(fn) {
     db.exec('BEGIN');
@@ -2552,6 +2556,12 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['GET', '/api/checks', MONEY, listChecks],
     ['GET', '/api/panel', MANAGERS, panel],
     ['GET', '/api/checks/export', MONEY, exportChecks],
+    ['GET', '/api/academy', ALL, acad.home],
+    ['POST', '/api/academy/lesson', ALL, acad.lessonDone],
+    ['POST', '/api/academy/test', ALL, acad.startTest],
+    ['POST', '/api/academy/test/:id', ALL, acad.finishTest],
+    ['GET', '/api/academy/team', MANAGERS, acad.team],
+    ['GET', '/api/academy/cert/:id', ALL, acad.certificate],
   ].map(([method, pattern, roles, handler]) => {
     const keys = [];
     const re = new RegExp('^' + pattern.replace(/:(\w+)/g, (_, k) => { keys.push(k); return '(\\d+)'; }) + '$');
@@ -2663,7 +2673,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return { today: sum(dayStartTs()), d7: sum(d(7)), d30: sum(d(30)) };
   }
 
-  return { logError, noteClient, sampleUsage, activityBrief, activity, salesBrief,
+  return { logError, noteClient, sampleUsage, activityBrief, activity, salesBrief, academyBrief: acad.brief,
     match, guard, workGate: (route, user) => work.gate(route, user), authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, planInfo, wasKicked, summary, ROLES,
     guestInfo: guest.info, guestImage: guest.image, guestRequest: guest.request, morningText, eveningText, soonTexts };
 }

@@ -756,6 +756,29 @@ CREATE INDEX IF NOT EXISTS idx_error_log_at ON error_log(at);
 -- How many people were in the program, every 5 minutes (the busiest time of the day).
 CREATE TABLE IF NOT EXISTS usage_samples (at INTEGER PRIMARY KEY, online INTEGER NOT NULL);
 `);
+  db.exec(`
+-- FLOWI Akademiya: which lessons a worker has read (and how the lesson's questions went), and the final tests.
+CREATE TABLE IF NOT EXISTS academy_lessons (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  lesson_id TEXT NOT NULL,
+  quiz_ok INTEGER NOT NULL DEFAULT 0,
+  quiz_total INTEGER NOT NULL DEFAULT 0,
+  done_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, lesson_id)
+);
+CREATE TABLE IF NOT EXISTS academy_tests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  qids TEXT NOT NULL,
+  started_at INTEGER NOT NULL,
+  finished_at INTEGER,
+  score INTEGER NOT NULL DEFAULT 0,
+  total INTEGER NOT NULL DEFAULT 0,
+  passed INTEGER NOT NULL DEFAULT 0,
+  weak TEXT NOT NULL DEFAULT '[]'
+);
+CREATE INDEX IF NOT EXISTS idx_academy_tests_user ON academy_tests(user_id, started_at);
+`);
   // Workers who never open the program (a tandir baker, a dishwasher, a guard): on the staff list and the payroll only.
   addCol('users', 'app', 'INTEGER NOT NULL DEFAULT 1');
   addCol('users', 'position', "TEXT NOT NULL DEFAULT ''");
