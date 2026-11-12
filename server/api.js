@@ -77,7 +77,7 @@ function routeModule(pattern) {
 // opts.hub: live-event hub of this choyxona; opts.tokenPrefix marks which choyxona a session token belongs to;
 // opts.tenant(): the choyxona's platform record (code, name, paid_until); opts.plan(): its plan (sections, staff limit);
 // opts.file: its database file.
-function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () => null, branches = () => [], file = null, telegram = null, helpbot = null, secret = NO_BOX, academy = null } = {}) {
+function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () => null, branches = () => [], file = null, telegram = null, helpbot = null, secret = NO_BOX, academy = null, academyRegister = null } = {}) {
   const events = hub;
   // Shared devices (the staff-list screen) get tokens of their own: "d<choyxona>_…".
   const devicePrefix = tokenPrefix.replace(/^t/, 'd');
@@ -108,7 +108,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   // FLOWI Akademiya: lessons from the platform (the same for every business); the whole course comes with the plan's section.
   // The platform may open it fully for this business, leave only the free modules, or hide it; else the plan decides.
   const academyMode = () => { const m = (tenant() || {}).academy_mode; return ['full', 'free', 'off'].includes(m) ? m : 'plan'; };
-  const acad = createAcademy(db, { ...(academy ? { content: academy } : {}), hidden: () => academyMode() === 'off',
+  const acad = createAcademy(db, { ...(academy ? { content: academy } : {}), register: academyRegister, hidden: () => academyMode() === 'off',
     full: () => { const m = academyMode(); return m === 'full' || (m === 'plan' && moduleOn('academy')); } });
 
   function tx(fn) {
@@ -2676,7 +2676,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return { today: sum(dayStartTs()), d7: sum(d(7)), d30: sum(d(30)) };
   }
 
-  return { logError, noteClient, sampleUsage, activityBrief, activity, salesBrief, academyBrief: acad.brief,
+  return { logError, noteClient, sampleUsage, activityBrief, activity, salesBrief, academyBrief: acad.brief, academySyncCerts: acad.syncCerts,
     match, guard, workGate: (route, user) => work.gate(route, user), authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, planInfo, wasKicked, summary, ROLES,
     guestInfo: guest.info, guestImage: guest.image, guestRequest: guest.request, morningText, eveningText, soonTexts };
 }

@@ -2,6 +2,14 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.41.0 — Sertifikatda QR kod, urinish raqami, platformada sertifikatlar
+
+- Har bir yakuniy test **nechanchi urinish** ekani yoziladi: natijada, sertifikatda ("2-urinishda o'tdi"), boshliq ro'yxatida (urinishlar va "55% → 90%" tarixi), platformada.
+- **Sertifikatda QR kod** va noyob raqam (dasturda FA-…, saytda FS-…). Telefon kamerasi bilan skanerlansa `flowi.uz/test?c=…` ochiladi: "Sertifikat haqiqiy", ism, ish joyi, lavozim, natija, urinishlar tarixi.
+- Saytdagi testda **telefon raqami majburiy**: urinishlar shu raqam bo'yicha sanaladi. Raqam hech kimga to'liq ko'rsatilmaydi.
+- **Platforma → Akademiya → Sertifikatlar**: hamma sertifikatlar (bizneslar va sayt), ism / raqam / telefon / joy bo'yicha qidiruv, ochish-chop etish, havolani nusxalash.
+- Oldin berilgan sertifikatlar ham avtomatik raqam oladi va QR bilan tekshiriladi.
+
 ## 1.40.0 — Akademiya: har bir biznes uchun alohida boshqaruv va saytdagi testni yoqish/o'chirish
 
 - Biznesni tahrirlash oynasida **"Akademiya bu biznesda"**: Tarif bo'yicha / To'liq ochiq / Faqat bepul modullar / Yashirin.

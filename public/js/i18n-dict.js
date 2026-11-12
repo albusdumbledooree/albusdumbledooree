@@ -1494,6 +1494,7 @@
   "o'rtacha {0}%": ["в среднем {0}%", "average {0}%"],
   "Oxirgi": ["Последнее", "Last"],
   "Xodim darslarni o'z telefonida, \"Akademiya\" bo'limida o'qiydi. Har bir darsdan keyin 3 ta savol, oxirida {0}% bilan o'tiladigan yakuniy test.": ["Сотрудник проходит уроки на своём телефоне в разделе «Академия». После каждого урока — 3 вопроса, в конце — итоговый тест (проходной балл {0}%).", "Staff take the lessons on their own phone in the \"Academy\" section. Three questions after each lesson and a final test at the end ({0}% to pass)."],
+  "{0}-urinish": ["{0}-я попытка", "attempt {0}"],
   "Kamera topilmadi": ["Камера не найдена", "No camera found"],
     "BUTUN CHEK O'CHIRILDI": ["ЧЕК УДАЛЁН ПОЛНОСТЬЮ","WHOLE CHECK DELETED"],
     "Diqqat! {0}. Butun chek o'chirildi.": ["Внимание! {0}. Чек удалён полностью.","Attention! {0}. The whole check was deleted."],

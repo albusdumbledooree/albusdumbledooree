@@ -52,10 +52,11 @@
 <body>
 <header><div class="top"><a class="logo" href="/">FLOW<span>I</span></a><small>Akademiya</small></div></header>
 <main id="app"></main>
+<script src="/js/qrcode.js"></script>
 <footer>© FLOWI · <a href="/">flowi.uz</a> — choyxona, restoran va do'konlar uchun dastur</footer>
 <script>
 'use strict';
-var S = { key: '', questions: [], i: 0, answers: {}, result: null, name: '', place: '' };
+var S = { key: '', questions: [], i: 0, answers: {}, result: null, name: '', place: '', phone: '', attempt: 1 };
 var app = document.getElementById('app');
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -71,17 +72,20 @@ function intro() {
     '<p class="muted">Mehmonni kutib olish, dasturxon va choy odobi, muloqot, shikoyat bilan ishlash, gigiena va hisob-kitob bo\'yicha bilimingizni sinab ko\'ring.</p>' +
     '<div class="facts"><span>📝 20 ta savol</span><span>⏱ ~10 daqiqa</span><span>✅ 70% — o\'tdi</span><span>🏅 Sertifikat</span></div>' +
     '<form id="f" autocomplete="on"><label>Ismingiz va familiyangiz<input name="name" required maxlength="60" placeholder="Masalan: Jasur Aliyev" value="' + esc(S.name) + '"></label>' +
+    '<label>Telefon raqamingiz<input name="phone" type="tel" inputmode="tel" required maxlength="20" placeholder="90 123 45 67" value="' + esc(S.phone) + '"></label>' +
+    '<p class="small muted" style="text-align:left;margin:4px 0 0">Raqam sertifikatni sizga bog\'lash va urinishlarni sanash uchun. Hech kimga ko\'rsatilmaydi.</p>' +
     '<label>Qayerda ishlaysiz yoki shahar <span class="muted">(ixtiyoriy)</span><input name="place" maxlength="80" placeholder="Masalan: Toshkent" value="' + esc(S.place) + '"></label>' +
     '<input class="hp" name="website" tabindex="-1" autocomplete="off">' +
     '<div class="err" id="err"></div><button class="btn p block" style="margin-top:16px" id="go">Testni boshlash →</button></form></div>' + cta();
   document.getElementById('f').onsubmit = function (e) {
     e.preventDefault();
     var f = e.target; var b = document.getElementById('go');
-    S.name = f.name.value.trim(); S.place = f.place.value.trim();
+    S.name = f.name.value.trim(); S.place = f.place.value.trim(); S.phone = f.phone.value.trim();
     if (S.name.length < 2) return showErr('Ismingizni yozing');
+    if (S.phone.replace(/\D/g, '').length < 9) return showErr('Telefon raqamingizni yozing');
     b.disabled = true;
-    api('POST', '/api/public/test', { name: S.name, place: S.place, website: f.website.value }).then(function (r) {
-      S.key = r.key; S.questions = r.questions; S.i = 0; S.answers = {}; question();
+    api('POST', '/api/public/test', { name: S.name, place: S.place, phone: S.phone, website: f.website.value }).then(function (r) {
+      S.key = r.key; S.attempt = r.attempt || 1; S.questions = r.questions; S.i = 0; S.answers = {}; question();
     }).catch(function (err) { b.disabled = false; showErr(err.message); });
   };
 }
@@ -116,7 +120,7 @@ function result() {
   var wrong = R.results.filter(function (x) { return !x.ok; });
   app.innerHTML = '<div class="card hero"><div class="big">' + (R.passed ? '🎓' : '📚') + '</div>' +
     '<h2>' + (R.passed ? 'Tabriklaymiz, ' + esc(R.name) + '! Testdan o\'tdingiz' : 'Bu safar o\'tmadi, ' + esc(R.name)) + '</h2>' +
-    '<div class="score ' + (R.passed ? 'ok' : 'bad') + '">' + R.pct + '%</div><p>To\'g\'ri javoblar: <b>' + R.score + ' / ' + R.total + '</b></p>' +
+    '<div class="score ' + (R.passed ? 'ok' : 'bad') + '">' + R.pct + '%</div><p>To\'g\'ri javoblar: <b>' + R.score + ' / ' + R.total + '</b> · <b>' + R.attempt + '-urinish</b></p>' +
     (R.weak.length ? '<p class="small muted">Ko\'proq takrorlang: <b>' + R.weak.map(esc).join(', ') + '</b></p>' : '') +
     '<div class="row">' + (R.passed ? '<button class="btn p" id="cert">🏅 Sertifikat</button>' : '') + '<button class="btn" id="again">↻ Qayta topshirish</button></div>' +
     (R.passed ? '<p class="small muted" style="margin-top:10px">Sertifikat raqami: <b>' + esc(R.code) + '</b> · tekshirish: <a href="/test?c=' + esc(R.code) + '">' + esc(location.host) + '/test?c=' + esc(R.code) + '</a></p>' : '') +
@@ -125,7 +129,7 @@ function result() {
       return '<div class="rev"><b>' + esc(x.q) + '</b>' + (x.chosen ? '<div class="dont">❌ ' + esc(x.chosen) + '</div>' : '') + '<div class="do">✅ ' + esc(x.right) + '</div>' + (x.why ? '<div class="why">💡 ' + esc(x.why) + '</div>' : '') + '</div>';
     }).join('') : '') + cta();
   var c = document.getElementById('cert');
-  if (c) c.onclick = function () { openCert({ name: R.name, place: R.place, pct: R.pct, score: R.score, total: R.total, at: R.at, code: R.code }); };
+  if (c) c.onclick = function () { openCert({ name: R.name, place: R.place, pct: R.pct, score: R.score, total: R.total, at: R.at, code: R.code, attempt: R.attempt }); };
   document.getElementById('again').onclick = function () { S.result = null; intro(); window.scrollTo(0, 0); };
 }
 
@@ -141,15 +145,19 @@ function certHtml(c) {
     '.in:before{content:"";position:absolute;inset:5px;border:1px solid #c9a227;border-radius:10px;pointer-events:none}.brand{font-weight:900;letter-spacing:3px;font-size:18pt}.brand span{color:#2156e8}' +
     '.kind{margin-top:8mm;font-size:30pt;font-weight:800;letter-spacing:1px}.sub{color:#555;margin-top:2mm;font-size:12pt}.name{margin-top:12mm;font-size:30pt;font-weight:800;border-bottom:2px solid #c9a227;padding:0 12mm 3mm}' +
     '.txt{margin-top:8mm;font-size:13pt;line-height:1.6;max-width:200mm}.row{margin-top:auto;width:100%;display:flex;justify-content:space-between;align-items:flex-end;font-size:11pt;color:#333}' +
-    '.score{font-size:24pt;font-weight:800;color:#16a34a}.medal{font-size:46pt;line-height:1}' +
+    '.score{font-size:24pt;font-weight:800;color:#16a34a}.qr{width:30mm;height:30mm}.qr svg{width:100%;height:100%}.att{display:inline-block;margin-top:4mm;background:#fff4dc;color:#8a5a10;font-weight:800;font-size:11pt;padding:1mm 4mm;border-radius:20px}' +
     '@media screen{body{background:#e9ebef;padding:20px}.c{background:#fff;margin:auto;box-shadow:0 6px 30px #0002}.p{text-align:center;margin:14px}.p button{font-size:16px;padding:10px 22px;border-radius:10px;border:0;background:#2156e8;color:#fff;cursor:pointer}}@media print{.p{display:none}}' +
     '</style></head><body><div class="p"><button onclick="print()">🖨 Chop etish / PDF</button></div><div class="c"><div class="in">' +
-    '<div class="brand">FLOW<span>I</span> AKADEMIYA</div><div class="kind">SERTIFIKAT</div><div class="sub">Ofitsantlik va xizmat madaniyati testi</div>' +
+    '<div class="brand">FLOW<span>I</span> AKADEMIYA</div><div class="kind">SERTIFIKAT</div><div class="sub">' + (c.source === 'app' ? 'Ofitsantlik va xizmat madaniyati kursi' : 'Ofitsantlik va xizmat madaniyati testi') + '</div>' +
     '<div class="name">' + esc(c.name) + '</div>' +
-    '<div class="txt">' + (c.place ? '<b>' + esc(c.place) + '</b> · ' : '') + 'xizmat madaniyati, dasturxon odobi, mehmon bilan muloqot, gigiena va hisob-kitob bo\'yicha testdan muvaffaqiyatli o\'tdi.</div>' +
+    '<div class="txt">' + (c.place ? '<b>' + esc(c.place) + '</b> · ' : '') + (c.source === 'app' ? 'xizmat madaniyati, dasturxon odobi, mehmon bilan muloqot va FLOWI dasturida ishlash bo\'yicha kursni tamomladi va yakuniy testdan o\'tdi.' : 'xizmat madaniyati, dasturxon odobi, mehmon bilan muloqot, gigiena va hisob-kitob bo\'yicha testdan muvaffaqiyatli o\'tdi.') +
+    (c.attempt ? '<br><span class="att">' + c.attempt + '-urinishda o\'tdi</span>' : '') + '</div>' +
     '<div class="row"><div style="text-align:left">Sana: <b>' + fmtDate(c.at) + '</b><br>Raqam: <b>' + esc(c.code) + '</b><br>Tekshirish: ' + esc(location.host) + '/test?c=' + esc(c.code) + '</div>' +
-    '<div class="medal">🏅</div><div style="text-align:right">Natija<div class="score">' + c.pct + '%</div>' + c.score + '/' + c.total + ' to\'g\'ri javob</div></div>' +
+    '<div class="qr">' + qrSvg(location.origin + '/test?c=' + c.code) + '</div><div style="text-align:right">Natija<div class="score">' + c.pct + '%</div>' + c.score + '/' + c.total + ' to\'g\'ri javob</div></div>' +
     '</div></div></body></html>';
+}
+function qrSvg(text) {
+  try { var q = qrcode(0, 'M'); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 4, margin: 0, scalable: true }); } catch (e) { return ''; }
 }
 function openCert(c) {
   var w = window.open('', '_blank');
@@ -162,8 +170,12 @@ function verify(code) {
   app.innerHTML = '<div class="card hero"><p class="muted">Tekshirilmoqda…</p></div>';
   api('GET', '/api/public/cert?c=' + encodeURIComponent(code)).then(function (c) {
     app.innerHTML = '<div class="card hero"><div class="big">✅</div><h1>Sertifikat haqiqiy</h1>' +
-      '<p><b style="font-size:22px">' + esc(c.name) + '</b>' + (c.place ? '<br><span class="muted">' + esc(c.place) + '</span>' : '') + '</p>' +
-      '<div class="facts"><span>Natija: ' + c.pct + '%</span><span>' + c.score + '/' + c.total + ' to\'g\'ri</span><span>Sana: ' + fmtDate(c.at) + '</span><span>Raqam: ' + esc(c.code) + '</span></div>' +
+      '<p><b style="font-size:22px">' + esc(c.name) + '</b>' + (c.place || c.role ? '<br><span class="muted">' + esc([c.place, c.role].filter(Boolean).join(' · ')) + '</span>' : '') + '</p>' +
+      '<div class="facts"><span>Natija: ' + c.pct + '%</span><span>' + c.score + '/' + c.total + ' to\'g\'ri</span><span>' + c.attempt + '-urinish</span><span>Sana: ' + fmtDate(c.at) + '</span><span>Raqam: ' + esc(c.code) + '</span></div>' +
+      (c.history && c.history.length > 1 ? '<div class="rev" style="text-align:left"><b>Urinishlar tarixi</b>' + c.history.map(function (h, i) {
+        return '<div style="display:flex;justify-content:space-between;border-top:1px solid #eef0f3;padding:6px 0;margin-top:6px"><span>' + (h.attempt || i + 1) + '-urinish · ' + fmtDate(h.at) + '</span><b class="' + (h.pct >= 70 ? 'ok' : 'bad') + '">' + h.pct + '%</b></div>';
+      }).join('') + '</div>' : '') +
+      '<p class="small muted" style="margin-top:12px">' + (c.source === 'app' ? 'FLOWI Akademiya kursi — ish joyida o\'qib topshirilgan.' : 'flowi.uz saytidagi ochiq test.') + ' Bu sertifikat FLOWI bazasida ro\'yxatdan o\'tgan.</p>' +
       '<div class="row"><button class="btn" id="cert">🏅 Sertifikatni ochish</button><a class="btn p" href="/test">Testni o\'zim topshiraman</a></div></div>' + cta();
     document.getElementById('cert').onclick = function () { openCert(c); };
   }).catch(function () {

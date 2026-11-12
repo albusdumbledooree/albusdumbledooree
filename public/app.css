@@ -1430,3 +1430,4 @@ details.ver summary .grow { flex: 1 1 200px; min-width: 0; }
 .pa-mode { display: flex; gap: 10px; align-items: flex-start; border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; cursor: pointer; }
 .pa-mode:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
 .pa-mode input { margin-top: 3px; flex: none; } .pa-mode b { display: block; font-size: 14.5px; } .pa-mode small { display: block; color: var(--muted); font-size: 12.5px; }
+.card .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; } .card .seg button { flex: none; }

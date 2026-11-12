@@ -119,7 +119,7 @@ function acFinalHtml(d) {
   else state = `<p class="muted">${t("{0} ta savol. O'tish uchun {1}% to'g'ri javob kerak.", d.test_size, d.pass_pct)}</p>
     <button class="btn primary lg block" id="ac-start">${icon('graduation-cap', 20)} ${last ? t('Testni qayta topshirish') : t('Testni boshlash')}</button>`;
   return `<div class="card ac-final"><h3>${icon('award', 20)} ${t('Yakuniy test')}</h3>${state}
-    ${last ? `<p class="small" style="margin-top:10px">${t('Oxirgi natija')}: <span class="chip ${last.passed ? 'green' : 'red'}">${last.pct}% · ${last.passed ? t("o'tdi") : t("o'tmadi")}</span> <span class="muted">${fmtDateTime(last.finished_at)}</span></p>` : ''}
+    ${last ? `<p class="small" style="margin-top:10px">${t('Oxirgi natija')}: <span class="chip ${last.passed ? 'green' : 'red'}">${last.pct}% · ${last.passed ? t("o'tdi") : t("o'tmadi")}</span>${last.attempt ? ` <span class="chip orange">${t('{0}-urinish', last.attempt)}</span>` : ''} <span class="muted">${fmtDateTime(last.finished_at)}</span></p>` : ''}
     ${certs.length ? `<div class="row" style="margin-top:8px;gap:8px">${certs.slice(0, 3).map((c) => `<button class="btn sm" data-accert="${c.id}">${icon('award', 16)} ${t('Sertifikat')} · ${c.pct}%</button>`).join('')}</div>` : ''}</div>`;
 }
 
@@ -241,7 +241,7 @@ function acResultHtml() {
   const wrong = R.results.filter((x) => !x.ok);
   return `<div class="ac-wrap"><div class="ac-card ac-done"><div class="ac-big">${R.passed ? '🎓' : '📚'}</div>
       <h2>${R.passed ? t('Tabriklaymiz! Testdan o\'tdingiz') : t("Bu safar o'tmadi")}</h2>
-      <div class="ac-score ${R.passed ? 'ok' : 'bad'}">${R.pct}%</div><p>${t("To'g'ri javoblar: {0} / {1}", R.score, R.total)}</p>
+      <div class="ac-score ${R.passed ? 'ok' : 'bad'}">${R.pct}%</div><p>${t("To'g'ri javoblar: {0} / {1}", R.score, R.total)}${R.attempt ? ` · <span class="chip orange">${t('{0}-urinish', R.attempt)}</span>` : ''}</p>
       ${R.weak.length ? `<p class="small muted">${t("Ko'proq takrorlang")}: <b>${R.weak.map(esc).join(', ')}</b></p>` : ''}
       ${!R.passed && R.retry_at ? `<p class="small muted">${t('Qayta topshirish: {0}', fmtDateTime(R.retry_at))}</p>` : ''}</div>
     <div class="ac-btns"><button class="btn" id="ac-rhome">${icon('list', 18)} ${t('Darslar')}</button>
@@ -271,10 +271,11 @@ function acTeamHtml(T) {
     ${T.weak ? `<div class="ac-plan">${icon('triangle-alert', 16)} ${t("Ko'p xato qilinadigan mavzu")}: <b>${esc(T.weak.title)}</b> (${t("o'rtacha {0}%", T.weak.pct)})</div>` : ''}
     ${T.full ? '' : `<div class="ac-plan">${icon('lock', 16)} ${t("Bepul modullar ochiq. Hamma darslar, yakuniy test va sertifikat — Biznes va Pro tariflarida.")}</div>`}
     <div class="card"><div class="table-wrap"><table>
-      <tr><th>${t('Xodim')}</th><th>${t('Darslar')}</th><th>${t('Yakuniy test')}</th><th>${t('Oxirgi')}</th></tr>
+      <tr><th>${t('Xodim')}</th><th>${t('Darslar')}</th><th>${t('Yakuniy test')}</th><th>${t('Urinishlar')}</th><th>${t('Oxirgi')}</th></tr>
       ${rows.map((r) => `<tr><td><b>${esc(r.name)}</b><br><span class="small muted">${esc(r.position || roleName(r.role))}</span></td>
         <td><span class="ac-mbar sm"><i style="width:${r.lessons ? (r.done / r.lessons) * 100 : 0}%"></i></span><span class="small">${r.done}/${r.lessons}</span></td>
         <td>${state(r)}${r.best ? ` <button class="btn sm ghost" data-accert="${r.best.id}" title="${esc(t('Sertifikat'))}">${icon('printer', 15)}</button>` : ''}</td>
+        <td class="small">${r.attempts ? `<b>${r.attempts}</b>${r.history.length > 1 ? ` <span class="muted">(${r.history.map((p) => `${p}%`).join(' → ')})</span>` : ''}` : '—'}</td>
         <td class="small muted">${r.last_at ? fmtDateTime(r.last_at) : '—'}</td></tr>`).join('')}
     </table></div></div>
     <p class="small muted" style="margin-top:10px">${icon('info', 14)} ${t("Xodim darslarni o'z telefonida, \"Akademiya\" bo'limida o'qiydi. Har bir darsdan keyin 3 ta savol, oxirida {0}% bilan o'tiladigan yakuniy test.", T.pass_pct)}</p>`;
@@ -289,7 +290,7 @@ async function acCertificate(id) {
   if (!w) return toast(t("Brauzer yangi oynani to'sib qo'ydi — ruxsat bering"), 'warn');
   let c;
   try { c = await GET(`/api/academy/cert/${id}`); } catch (e) { w.close(); return toastError(e); }
-  w.document.write(certificateHtml({ name: c.name, place: App.settings.name || '', pct: c.pct, score: c.score, total: c.total, at: c.at, code: `${(App.info && App.info.code) || ''}-${c.id}` }));
+  w.document.write(certificateHtml({ name: c.name, place: App.settings.name || '', pct: c.pct, score: c.score, total: c.total, at: c.at, code: c.code, attempt: c.attempt }));
   w.document.close();
 }
 // Shared with the site's open test (test.html has its own copy of the look).
@@ -304,16 +305,17 @@ function certificateHtml(c) {
     .name { margin-top: 12mm; font-size: 30pt; font-weight: 800; border-bottom: 2px solid #c9a227; padding: 0 12mm 3mm; }
     .txt { margin-top: 8mm; font-size: 13pt; line-height: 1.6; max-width: 200mm; }
     .row { margin-top: auto; width: 100%; display: flex; justify-content: space-between; align-items: flex-end; font-size: 11pt; color: #333; }
-    .score { font-size: 24pt; font-weight: 800; color: #16a34a; } .medal { font-size: 46pt; line-height: 1; }
+    .score { font-size: 24pt; font-weight: 800; color: #16a34a; } .qr { width: 30mm; height: 30mm; } .qr svg { width: 100%; height: 100%; }
+    .att { display: inline-block; margin-top: 4mm; background: #fff4dc; color: #8a5a10; font-weight: 800; font-size: 11pt; padding: 1mm 4mm; border-radius: 20px; }
     @media screen { body { background: #e9ebef; padding: 20px; } .c { background: #fff; margin: auto; box-shadow: 0 6px 30px #0002; } .p { text-align: center; margin: 14px; } .p button { font-size: 16px; padding: 10px 22px; border-radius: 10px; border: 0; background: #2156e8; color: #fff; cursor: pointer; } }
     @media print { .p { display: none; } }
   </style></head><body><div class="p"><button onclick="print()">🖨 Chop etish</button></div><div class="c"><div class="in">
     <div class="brand">FLOW<span>I</span> AKADEMIYA</div>
     <div class="kind">SERTIFIKAT</div><div class="sub">Ofitsantlik va xizmat madaniyati kursi</div>
     <div class="name">${esc(c.name)}</div>
-    <div class="txt">${c.place ? `<b>${esc(c.place)}</b> · ` : ''}xizmat madaniyati, dasturxon odobi, mehmon bilan muloqot va FLOWI dasturida ishlash bo'yicha kursni muvaffaqiyatli tamomladi va yakuniy testdan o'tdi.</div>
-    <div class="row"><div style="text-align:left">Sana: <b>${fmtDate(c.at)}</b><br>Raqam: <b>${esc(c.code || '')}</b></div>
-      <div class="medal">🏅</div>
+    <div class="txt">${c.place ? `<b>${esc(c.place)}</b> · ` : ''}xizmat madaniyati, dasturxon odobi, mehmon bilan muloqot va FLOWI dasturida ishlash bo'yicha kursni muvaffaqiyatli tamomladi va yakuniy testdan o'tdi.${c.attempt ? `<br><span class="att">${c.attempt}-urinishda o'tdi</span>` : ''}</div>
+    <div class="row"><div style="text-align:left">Sana: <b>${fmtDate(c.at)}</b><br>Raqam: <b>${esc(c.code || '')}</b>${c.code ? `<br><small>Tekshirish: ${esc(location.host)}/test?c=${esc(c.code)}</small>` : ''}</div>
+      ${c.code ? `<div class="qr">${qrSvg(`${location.origin}/test?c=${c.code}`)}</div>` : '<div class="medal">🏅</div>'}
       <div style="text-align:right">Natija<div class="score">${c.pct}%</div>${c.score}/${c.total} to'g'ri javob</div></div>
   </div></div></body></html>`;
 }

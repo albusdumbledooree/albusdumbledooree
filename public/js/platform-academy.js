@@ -2,7 +2,25 @@
 /* Platform: FLOWI Akademiya — the open test's numbers, who learns in each business, and the lessons editor. */
 const PA = { data: null, edit: null };
 
-async function loadAcademy() { PA.data = await GET('/api/platform/academy'); PA.edit = null; }
+async function loadAcademy() { [PA.data] = await Promise.all([GET('/api/platform/academy'), loadCerts()]); PA.edit = null; }
+// Every certificate (in businesses and on the site): search by name, number, phone or place.
+PA.certQ = ''; PA.certSrc = '';
+async function loadCerts() { PA.certs = await GET(`/api/platform/academy/certs?${new URLSearchParams({ q: PA.certQ, source: PA.certSrc })}`); }
+function certsHtml() {
+  const C = PA.certs;
+  if (!C) return '';
+  return `<div class="card" style="margin-top:14px"><div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:10px"><b class="grow">${icon('award', 16)} Sertifikatlar · ${C.counts.all} ta</b>
+      <input type="search" id="pa-cq" placeholder="Ism, raqam, telefon yoki joy" value="${esc(PA.certQ)}" style="max-width:300px">
+      <div class="seg">${[['', `Hammasi (${C.counts.all})`], ['app', `Bizneslar (${C.counts.app})`], ['site', `Sayt (${C.counts.site})`]].map(([k, n]) => `<button class="${PA.certSrc === k ? 'active' : ''}" data-csrc="${k}">${n}</button>`).join('')}</div></div>
+    ${C.rows.length ? `<div class="table-wrap"><table><tr><th>Ism</th><th>Qayerdan</th><th class="right">Natija</th><th>Urinish</th><th>Sana</th><th></th></tr>
+      ${C.rows.map((c) => `<tr><td><b>${esc(c.name)}</b><br><span class="small muted">${esc(c.code)}${c.phone ? ` · ${esc(c.phone)}` : ''}</span></td>
+        <td>${c.source === 'site' ? '<span class="chip">Sayt</span> ' : ''}${esc(c.place || '—')}${c.role ? `<br><span class="small muted">${esc(c.role)}</span>` : ''}</td>
+        <td class="right"><span class="chip green">${c.pct}%</span></td><td>${c.attempt > 1 ? `<span class="chip orange">${c.attempt}-urinish</span>` : '1-urinish'}</td>
+        <td class="small muted">${fmtDateTime(c.at)}</td><td class="actions"><a class="btn sm" href="/test?c=${encodeURIComponent(c.code)}" target="_blank" rel="noopener" title="Ochish va chop etish">${icon('external-link', 15)}</a>
+        <button class="btn sm" data-ccopy="${esc(c.code)}" title="Havolani nusxalash">${icon('copy', 15)}</button></td></tr>`).join('')}</table></div>
+      ${C.total > C.rows.length ? `<p class="small muted" style="margin-top:8px">Oxirgi ${C.rows.length} tasi ko'rsatildi (jami ${C.total}). Qidiruvdan foydalaning.</p>` : ''}`
+      : `<p class="small muted">${PA.certQ || PA.certSrc ? 'Hech narsa topilmadi.' : "Hali sertifikat berilmagan."}</p>`}</div>`;
+}
 
 function academyHtml() {
   const A = PA.data;
@@ -42,9 +60,10 @@ function academyHtml() {
             : '<p class="small muted">Hali restoran yoki choyxona yo\'q.</p>'}</div>
         <div class="card"><b>${icon('graduation-cap', 16)} Saytdagi oxirgi testlar</b>
           ${pub.last.length ? `<div class="table-wrap"><table><tr><th>Ism</th><th>Joy</th><th class="right">Natija</th><th>Sana</th></tr>
-            ${pub.last.map((r) => `<tr><td><b>${esc(r.name)}</b></td><td class="small">${esc(r.place || '—')}</td><td class="right"><span class="chip ${r.passed ? 'green' : 'red'}">${r.total ? Math.round((r.score / r.total) * 100) : 0}%</span></td><td class="small muted">${fmtDateTime(r.finished_at)}</td></tr>`).join('')}</table></div>`
+            ${pub.last.map((r) => `<tr><td><b>${esc(r.name)}</b>${r.attempt > 1 ? ` <span class="chip orange">${r.attempt}-urinish</span>` : ''}${r.phone ? `<br><span class="small muted">${esc(r.phone)}</span>` : ''}</td><td class="small">${esc(r.place || '—')}</td><td class="right"><span class="chip ${r.passed ? 'green' : 'red'}">${r.total ? Math.round((r.score / r.total) * 100) : 0}%</span></td><td class="small muted">${fmtDateTime(r.finished_at)}</td></tr>`).join('')}</table></div>`
             : '<p class="small muted">Hali hech kim topshirmagan.</p>'}</div>
-      </div></div>`;
+      </div></div>
+    ${certsHtml()}`;
 }
 
 // What a business gets: by its plan (and what the plan gives), fully open, only the free modules, or hidden.
@@ -72,6 +91,13 @@ async function saveAcademy(content) {
 const paClone = () => JSON.parse(JSON.stringify(PA.data.content));
 
 function bindAcademy(root) {
+  const cq = root.querySelector('#pa-cq');
+  if (cq) { let tm = null; cq.oninput = () => { clearTimeout(tm); tm = setTimeout(async () => { PA.certQ = cq.value.trim(); try { await loadCerts(); render(); const el = document.getElementById('pa-cq'); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } } catch (e) { toastError(e); } }, 350); }; }
+  root.querySelectorAll('[data-csrc]').forEach((b) => b.onclick = async () => { PA.certSrc = b.dataset.csrc; try { await loadCerts(); render(); } catch (e) { toastError(e); } });
+  root.querySelectorAll('[data-ccopy]').forEach((b) => b.onclick = async () => {
+    const url = `${location.origin}/test?c=${b.dataset.ccopy}`;
+    try { await navigator.clipboard.writeText(url); toast('Havola nusxalandi', 'ok'); } catch { prompt('Havola:', url); }
+  });
   const site = root.querySelector('#pa-site');
   if (site) site.onchange = async () => {
     try { const r = await PUT('/api/platform/academy/site', { on: site.checked }); PA.data.site = r.site; toast(r.site ? 'Saytdagi test yoqildi' : "Saytdagi test o'chirildi", 'ok'); render(); } catch (e) { site.checked = !site.checked; toastError(e); }

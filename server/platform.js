@@ -146,7 +146,8 @@ function createPlatform(dataDir) {
     const db = open(file);
     const hub = createHub();
     ctx = { id, db, hub, row, file };
-    ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row, plan: () => planFor(ctx.row), branches: () => branchesOf(id), file, telegram: telegramFor(id), helpbot: helpbot.forTenant(id), secret, academy: () => academy.content() });
+    ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row, plan: () => planFor(ctx.row), branches: () => branchesOf(id), file, telegram: telegramFor(id), helpbot: helpbot.forTenant(id), secret, academy: () => academy.content(),
+      academyRegister: (info) => academy.register({ ...info, tenant_id: id, tenant_name: ctx.row.name }) });
     contexts.set(id, ctx);
     return ctx;
   }
@@ -921,6 +922,7 @@ function createPlatform(dataDir) {
     ['PUT', '/api/platform/academy', true, ({ body }) => academy.save(body)],
     ['POST', '/api/platform/academy/reset', true, () => academy.reset()],
     ['PUT', '/api/platform/academy/site', true, ({ body }) => academy.setSite(!!body.on)],
+    ['GET', '/api/platform/academy/certs', true, ({ query }) => { syncAcademyCerts(); return academy.certs({ query }); }],
     ['GET', '/api/platform/helpbot', true, () => helpbot.status()],
     ['PUT', '/api/platform/helpbot', true, helpbot.setToken],
     ['POST', '/api/platform/helpbot/relink', true, helpbot.relink],
@@ -935,6 +937,13 @@ function createPlatform(dataDir) {
   }));
 
   // Akademiya for the platform owner: the lessons, the open test's numbers, and who learns in each business.
+  // Certificates passed in businesses before the register existed get their numbers.
+  function syncAcademyCerts() {
+    for (const t of q('SELECT id, business_type FROM tenants').all()) {
+      if (SHOP_TYPES.includes(t.business_type)) continue;
+      try { context(t.id).api.academySyncCerts(); } catch (e) { console.error('academy certs', t.id, e.message); }
+    }
+  }
   function academyOverview() {
     const tenants = q("SELECT * FROM tenants WHERE status = 'active' ORDER BY name").all()
       .filter((t) => !SHOP_TYPES.includes(t.business_type))

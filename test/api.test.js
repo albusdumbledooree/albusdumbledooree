@@ -3000,9 +3000,12 @@ test('akademiya: lessons, free modules on Start, final test graded on the server
   s = (await call('POST', '/api/academy/test', vali)).data;
   r = (await call('POST', `/api/academy/test/${s.id}`, vali, { answers: right(s.questions, 3) })).data;
   assert.equal(r.pct, 85); assert.equal(r.passed, true);
-  assert.equal((await call('GET', `/api/academy/cert/${r.id}`, boss)).data.name, 'Ofitsant Vali');
+  assert.equal(r.attempt, 2); assert.match(r.code, /^FA-[A-Z0-9]{8}$/);
+  const cv = (await call('GET', `/api/academy/cert/${r.id}`, boss)).data;
+  assert.equal(cv.name, 'Ofitsant Vali'); assert.equal(cv.code, r.code); assert.equal(cv.attempt, 2);
   team = (await call('GET', '/api/academy/team', boss)).data;
   assert.equal(team.rows.find((x) => x.name === 'Ofitsant Vali').best.pct, 85);
+  assert.equal(team.rows.find((x) => x.name === 'Ofitsant Vali').attempts, 2);
   // The platform: numbers per business, the lessons can be edited and put back.
   let ov = (await call('GET', '/api/platform/academy', admin)).data;
   assert.equal(ov.tenants.find((x) => x.code === 'akad').certified, 1);
@@ -3012,15 +3015,33 @@ test('akademiya: lessons, free modules on Start, final test graded on the server
   assert.equal((await call('POST', '/api/platform/academy/reset', admin)).data.content.modules[0].title, 'Kutib olish va kuzatish');
   assert.equal((await call('GET', '/api/platform/academy', boss)).status, 401);
   // The open test on the site: no login, a certificate anyone can check by its code.
-  const p = (await call('POST', '/api/public/test', null, { name: 'Sardor', place: 'Samarqand' })).data;
+  assert.equal((await call('POST', '/api/public/test', null, { name: 'Sardor', place: 'Samarqand' })).status, 400, 'the phone is required');
+  const p0 = (await call('POST', '/api/public/test', null, { name: 'Sardor', place: 'Samarqand', phone: '90 111 22 33' })).data;
+  assert.equal(p0.attempt, 1);
+  const f0 = (await call('POST', '/api/public/test/finish', null, { key: p0.key, answers: right(p0.questions, 15) })).data;
+  assert.equal(f0.passed, false); assert.equal(f0.code, null);
+  const p = (await call('POST', '/api/public/test', null, { name: 'Sardor', place: 'Samarqand', phone: '+998 90 111-22-33' })).data;
+  assert.equal(p.attempt, 2, 'the same phone: second try');
   assert.equal(p.questions.length, 20);
   const pr = (await call('POST', '/api/public/test/finish', null, { key: p.key, answers: right(p.questions) })).data;
-  assert.equal(pr.pct, 100); assert.ok(pr.code);
-  assert.equal((await call('GET', `/api/public/cert?c=${pr.code}`)).data.name, 'Sardor');
+  assert.equal(pr.pct, 100); assert.match(pr.code, /^FS-[A-Z0-9]{8}$/); assert.equal(pr.attempt, 2);
+  const pc = (await call('GET', `/api/public/cert?c=${pr.code}`)).data;
+  assert.equal(pc.name, 'Sardor'); assert.equal(pc.attempt, 2); assert.deepEqual(pc.history.map((h) => h.pct), [25, 100]);
+  // The platform sees every certificate: the business one (with its tries) and the site one; the phone half hidden.
+  const cl = (await call('GET', '/api/platform/academy/certs', admin)).data;
+  assert.ok(cl.counts.app >= 1 && cl.counts.site >= 1);
+  const appCert = cl.rows.find((c) => c.name === 'Ofitsant Vali');
+  assert.equal(appCert.attempt, 2); assert.equal(appCert.place, 'Akad'); assert.match(appCert.code, /^FA-/);
+  assert.ok(!cl.rows.find((c) => c.name === 'Sardor').phone.includes('11122'), 'phone not shown in full');
+  assert.equal((await call('GET', `/api/platform/academy/certs?q=${encodeURIComponent('901112233')}`, admin)).data.rows[0].name, 'Sardor');
+  assert.equal((await call('GET', '/api/platform/academy/certs?source=site', admin)).data.rows.every((c) => c.source === 'site'), true);
+  const vc = (await call('GET', `/api/public/cert?c=${appCert.code}`)).data;
+  assert.equal(vc.place, 'Akad'); assert.equal(vc.role, 'Ofitsant'); assert.deepEqual(vc.history.map((h) => h.pct), [50, 85]);
+  assert.equal((await call('GET', '/api/platform/academy/certs', boss)).status, 401);
   assert.equal((await call('GET', '/api/public/cert?c=NOPE1234')).status, 404);
-  assert.equal((await call('POST', '/api/public/test', null, { name: '' })).status, 400);
+  assert.equal((await call('POST', '/api/public/test', null, { name: '', phone: '901112233' })).status, 400);
   ov = (await call('GET', '/api/platform/academy', admin)).data;
-  assert.ok(ov.public.all.passed >= 1 && ov.public.last[0].name === 'Sardor');
+  assert.ok(ov.public.all.passed >= 1 && ov.public.last[0].name === 'Sardor' && ov.public.last[0].attempt === 2);
   const page = await fetch(`${base}/test`);
   assert.equal(page.status, 200); assert.match(await page.text(), /Ofitsantlik/);
 });
@@ -3052,12 +3073,12 @@ test('akademiya per business (plan / full / free / hidden, extra fee) and the si
   const ov = (await call('GET', '/api/platform/academy', admin)).data;
   assert.equal(ov.tenants.find((x) => x.code === 'akad2').mode, 'off');
   // The site test switched off: no new tests, the front page hides the link; certificates can still be checked.
-  const p = (await call('POST', '/api/public/test', null, { name: 'Oldin' })).data;
+  const p = (await call('POST', '/api/public/test', null, { name: 'Oldin', phone: '901234567' })).data;
   assert.equal((await call('PUT', '/api/platform/academy/site', admin, { on: false })).data.site, false);
   assert.equal((await call('GET', '/api/public/info')).data.academy_site, false);
-  assert.equal((await call('POST', '/api/public/test', null, { name: 'Ali' })).status, 403);
+  assert.equal((await call('POST', '/api/public/test', null, { name: 'Ali', phone: '901234567' })).status, 403);
   assert.equal((await call('POST', '/api/public/test/finish', null, { key: p.key, answers: {} })).status, 200, 'a test already started can be finished');
   assert.equal((await call('PUT', '/api/platform/academy/site', boss, { on: true })).status, 401);
   await call('PUT', '/api/platform/academy/site', admin, { on: true });
-  assert.equal((await call('POST', '/api/public/test', null, { name: 'Ali' })).status, 200);
+  assert.equal((await call('POST', '/api/public/test', null, { name: 'Ali', phone: '901234567' })).status, 200);
 });

@@ -13,6 +13,18 @@ const TEST_SIZE = 20;
 const PASS_PCT = 70;
 const RETRY_MS = 12 * 3600 * 1000; // a failed test can be taken again after 12 hours
 const TEST_TTL = 2 * 3600 * 1000; // an unfinished test is forgotten after 2 hours
+const ROLE_UZ = { owner: 'Boshliq', admin: 'Admin', cashier: 'Kassir', waiter: 'Ofitsant', chef: 'Oshpaz' };
+const pctOf = (r) => (r.total ? Math.round((r.score / r.total) * 100) : 0);
+// Certificate numbers: FA- (in a business) or FS- (on the site) and 8 letters/digits easy to read aloud.
+const ALPHA = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+const newCode = (prefix) => prefix + Array.from(crypto.randomBytes(8), (b) => ALPHA[b % ALPHA.length]).join('');
+// +998 90 123 45 67 → +998901234567 (also 901234567, 998901234567); '' when it is not an Uzbek number.
+function phoneUz(v) {
+  const d = String(v || '').replace(/\D/g, '');
+  if (d.length === 9) return `+998${d}`;
+  if (d.length === 12 && d.startsWith('998')) return `+${d}`;
+  return '';
+}
 
 // ---------- The lessons (checked and trimmed when the platform owner saves them) ----------
 const s = (v, max) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max);
@@ -92,7 +104,8 @@ function grade(content, qids, answers) {
 }
 
 // ---------- One business: its workers' lessons and tests ----------
-function createAcademy(db, { content = () => DEFAULT, full = () => true, hidden = () => false } = {}) {
+// register(info) → the certificate's number in the platform's register (null when there is none, e.g. in tests of this file alone).
+function createAcademy(db, { content = () => DEFAULT, full = () => true, hidden = () => false, register = null } = {}) {
   const q = (sql) => db.prepare(sql);
   // Hidden for this business by the platform: every Akademiya address answers "not here" (the progress is kept).
   const open = (fn) => (args) => { if (hidden()) throw new HttpError(404, "Akademiya bu biznesda yoqilmagan"); return fn(args); };
@@ -105,9 +118,21 @@ function createAcademy(db, { content = () => DEFAULT, full = () => true, hidden 
       .map((r) => [r.lesson_id, { ok: r.quiz_ok, total: r.quiz_total, at: r.done_at }]));
   }
   function testsOf(userId) {
-    return q('SELECT id, started_at, finished_at, score, total, passed, weak FROM academy_tests WHERE user_id = ? AND finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 20').all(userId)
-      .map((r) => ({ ...r, passed: !!r.passed, pct: r.total ? Math.round((r.score / r.total) * 100) : 0, weak: JSON.parse(r.weak || '[]') }));
+    return q('SELECT id, started_at, finished_at, score, total, passed, weak, attempt, cert_code FROM academy_tests WHERE user_id = ? AND finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 50').all(userId)
+      .map((r) => ({ ...r, passed: !!r.passed, pct: pctOf(r), weak: JSON.parse(r.weak || '[]') }));
   }
+  // Puts a passed test in the platform's register once and keeps its number here.
+  function ensureCode(t) {
+    if (t.cert_code || !register || !t.passed) return t.cert_code || '';
+    const u = q('SELECT name, role, position FROM users WHERE id = ?').get(t.user_id) || {};
+    const history = q('SELECT score, total, finished_at, attempt FROM academy_tests WHERE user_id = ? AND finished_at IS NOT NULL AND finished_at <= ? ORDER BY finished_at')
+      .all(t.user_id, t.finished_at).map((x) => ({ pct: pctOf(x), at: x.finished_at, attempt: x.attempt }));
+    const code = register({ ref_id: t.id, user_id: t.user_id, name: u.name || '', role: u.position || ROLE_UZ[u.role] || '', score: t.score, total: t.total, attempt: t.attempt, history, at: t.finished_at });
+    if (code) q('UPDATE academy_tests SET cert_code = ? WHERE id = ?').run(code, t.id);
+    return code || '';
+  }
+  // Older certificates (before the register) get their numbers when the platform looks.
+  function syncCerts() { for (const t of q("SELECT * FROM academy_tests WHERE passed = 1 AND cert_code = ''").all()) ensureCode(t); }
   // Can this person start the final test now? (every lesson read, the section in the plan, not right after a failed one)
   function testState(userId, c, progress) {
     const all = lessonIds(c, false);
@@ -164,8 +189,10 @@ function createAcademy(db, { content = () => DEFAULT, full = () => true, hidden 
     if (!t || t.finished_at) throw new HttpError(404, 'Test topilmadi');
     if (now() - t.started_at > TEST_TTL) throw new HttpError(400, "Test vaqti o'tib ketdi — qaytadan boshlang");
     const g = grade(content(), JSON.parse(t.qids), body.answers || {});
-    q('UPDATE academy_tests SET finished_at = ?, score = ?, total = ?, passed = ?, weak = ? WHERE id = ?').run(now(), g.score, g.total, g.passed ? 1 : 0, JSON.stringify(g.weak), t.id);
-    return { id: t.id, ...g, retry_at: g.passed ? 0 : now() + RETRY_MS };
+    const attempt = q('SELECT COUNT(*) c FROM academy_tests WHERE user_id = ? AND finished_at IS NOT NULL').get(user.id).c + 1;
+    q('UPDATE academy_tests SET finished_at = ?, score = ?, total = ?, passed = ?, weak = ?, attempt = ? WHERE id = ?').run(now(), g.score, g.total, g.passed ? 1 : 0, JSON.stringify(g.weak), attempt, t.id);
+    const code = g.passed ? ensureCode(q('SELECT * FROM academy_tests WHERE id = ?').get(t.id)) : '';
+    return { id: t.id, ...g, attempt, code, retry_at: g.passed ? 0 : now() + RETRY_MS };
   }
 
   // The boss's view: every worker who uses the program, how far they got, their best test, the hardest topics.
@@ -187,7 +214,7 @@ function createAcademy(db, { content = () => DEFAULT, full = () => true, hidden 
       }
       const lastAt = Math.max(0, ...Object.values(p).map((v) => v.at), ...tests.map((x) => x.finished_at));
       return { id: u.id, name: u.name, role: u.role, position: u.position, done: all.filter((id) => p[id]).length, lessons: all.length,
-        best, last: tests[0] || null, last_at: lastAt || null };
+        best, last: tests[0] || null, last_at: lastAt || null, attempts: tests.length, history: tests.slice(0, 5).reverse().map((x) => x.pct) };
     });
     const weak = Object.entries(quizMiss).filter(([, v]) => v.total >= 3).map(([title, v]) => ({ title, pct: Math.round((v.ok / v.total) * 100) }))
       .sort((a, b) => a.pct - b.pct)[0] || null;
@@ -198,7 +225,7 @@ function createAcademy(db, { content = () => DEFAULT, full = () => true, hidden 
   function certificate({ user, params }) {
     const t = q('SELECT t.*, u.name FROM academy_tests t JOIN users u ON u.id = t.user_id WHERE t.id = ? AND t.passed = 1').get(params.id);
     if (!t || (t.user_id !== user.id && !['owner', 'admin'].includes(user.role))) throw new HttpError(404, 'Sertifikat topilmadi');
-    return { id: t.id, name: t.name, score: t.score, total: t.total, pct: t.total ? Math.round((t.score / t.total) * 100) : 0, at: t.finished_at };
+    return { id: t.id, name: t.name, score: t.score, total: t.total, pct: pctOf(t), at: t.finished_at, attempt: t.attempt, code: ensureCode(t) };
   }
 
   // For the platform: how many people learn here and how the tests went.
@@ -208,7 +235,7 @@ function createAcademy(db, { content = () => DEFAULT, full = () => true, hidden 
     return { learners: r.learners, lessons: r.lessons, tests: r.tests, certified: r.certified };
   }
 
-  return { home: open(home), lessonDone: open(lessonDone), startTest: open(startTest), finishTest: open(finishTest), team: open(team), certificate: open(certificate), brief, hidden };
+  return { home: open(home), lessonDone: open(lessonDone), startTest: open(startTest), finishTest: open(finishTest), team: open(team), certificate: open(certificate), brief, hidden, syncCerts };
 }
 
 // ---------- The open test on the site (no login) ----------
@@ -227,12 +254,36 @@ CREATE TABLE IF NOT EXISTS academy_public (
   passed INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_academy_public_started ON academy_public(started_at);
+-- Every certificate given (in a business or on the site), found by its number or its QR code.
+CREATE TABLE IF NOT EXISTS academy_certs (
+  code TEXT PRIMARY KEY,
+  source TEXT NOT NULL,
+  tenant_id INTEGER,
+  tenant_name TEXT NOT NULL DEFAULT '',
+  ref_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT '',
+  place TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  score INTEGER NOT NULL,
+  total INTEGER NOT NULL,
+  attempt INTEGER NOT NULL DEFAULT 1,
+  history TEXT NOT NULL DEFAULT '[]',
+  issued_at INTEGER NOT NULL,
+  UNIQUE (source, tenant_id, ref_id)
+);
+CREATE INDEX IF NOT EXISTS idx_academy_certs_issued ON academy_certs(issued_at);
 `;
 const PUBLIC_PER_HOUR = 10;
 
 function createPublicAcademy(pdb, { pget, pset, now = Date.now }) {
   pdb.exec(PUBLIC_SCHEMA);
   const q = (sql) => pdb.prepare(sql);
+  const pcols = q('PRAGMA table_info(academy_public)').all().map((c) => c.name);
+  if (!pcols.includes('phone')) pdb.exec("ALTER TABLE academy_public ADD COLUMN phone TEXT NOT NULL DEFAULT ''; ALTER TABLE academy_public ADD COLUMN attempt INTEGER NOT NULL DEFAULT 1");
+  // Site certificates from before the register keep their old numbers.
+  q(`INSERT OR IGNORE INTO academy_certs (code, source, tenant_id, ref_id, name, place, phone, score, total, attempt, issued_at)
+     SELECT code, 'site', 0, id, name, place, phone, score, total, attempt, finished_at FROM academy_public WHERE passed = 1`).run();
   let cached = null;
   function content() {
     if (cached) return cached;
@@ -253,44 +304,94 @@ function createPublicAcademy(pdb, { pget, pset, now = Date.now }) {
   const siteOn = () => pget('academy_site', '1') !== '0';
   function setSite(on) { pset('academy_site', on ? '1' : '0'); return { ok: true, site: siteOn() }; }
 
+  // A certificate passed in a business: put in the register once, its number given back.
+  function register(info) {
+    const have = q("SELECT code FROM academy_certs WHERE source = 'app' AND tenant_id = ? AND ref_id = ?").get(info.tenant_id, info.ref_id);
+    if (have) return have.code;
+    let code;
+    do code = newCode('FA-'); while (q('SELECT 1 FROM academy_certs WHERE code = ?').get(code));
+    q(`INSERT INTO academy_certs (code, source, tenant_id, tenant_name, ref_id, name, role, score, total, attempt, history, issued_at)
+       VALUES (?, 'app', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(code, info.tenant_id, s(info.tenant_name, 80), info.ref_id, s(info.name, 80), s(info.role, 40),
+      info.score, info.total, info.attempt || 1, JSON.stringify(info.history || []), info.at || now());
+    return code;
+  }
+
   function start({ body, ip }) {
     if (!siteOn()) throw new HttpError(403, 'Test vaqtincha yopiq');
     if (body.website) throw new HttpError(400, "So'rov noto'g'ri"); // a hidden field only robots fill in
     const name = s(body.name, 60);
     if (name.length < 2) throw new HttpError(400, 'Ismingizni yozing');
+    const phone = phoneUz(body.phone);
+    if (!phone) throw new HttpError(400, "Telefon raqamingizni yozing (masalan 90 123 45 67)");
     const t = now();
     const recent = q('SELECT COUNT(*) c FROM academy_public WHERE ip = ? AND started_at > ?').get(String(ip || ''), t - 3600 * 1000).c;
     if (recent >= PUBLIC_PER_HOUR) throw new HttpError(429, "Juda ko'p urinish. Bir soatdan keyin qayta urinib ko'ring");
     const picked = draw(content(), TEST_SIZE, true);
-    const code = crypto.randomBytes(5).toString('hex').toUpperCase().slice(0, 8);
-    q('INSERT INTO academy_public (code, name, place, qids, ip, started_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(code, name, s(body.place, 80), JSON.stringify(picked.map((x) => x.id)), String(ip || ''), t);
-    return { key: code, questions: picked.map(asked), pass_pct: PASS_PCT };
+    const key = crypto.randomBytes(5).toString('hex').toUpperCase().slice(0, 8);
+    const before = q('SELECT COUNT(*) c FROM academy_public WHERE phone = ? AND finished_at IS NOT NULL').get(phone).c;
+    q('INSERT INTO academy_public (code, name, place, phone, qids, ip, started_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(key, name, s(body.place, 80), phone, JSON.stringify(picked.map((x) => x.id)), String(ip || ''), t);
+    return { key, questions: picked.map(asked), pass_pct: PASS_PCT, attempt: before + 1 };
   }
   function finish({ body }) {
     const r = q('SELECT * FROM academy_public WHERE code = ?').get(s(body.key, 12).toUpperCase());
     if (!r || r.finished_at) throw new HttpError(404, 'Test topilmadi');
     if (now() - r.started_at > TEST_TTL) throw new HttpError(400, "Test vaqti o'tib ketdi — qaytadan boshlang");
     const g = grade(content(), JSON.parse(r.qids), body.answers || {});
-    q('UPDATE academy_public SET finished_at = ?, score = ?, total = ?, passed = ? WHERE id = ?').run(now(), g.score, g.total, g.passed ? 1 : 0, r.id);
-    return { ...g, code: g.passed ? r.code : null, name: r.name, place: r.place, at: now() };
+    const at = now();
+    const attempt = r.phone ? q('SELECT COUNT(*) c FROM academy_public WHERE phone = ? AND finished_at IS NOT NULL').get(r.phone).c + 1 : 1;
+    q('UPDATE academy_public SET finished_at = ?, score = ?, total = ?, passed = ?, attempt = ? WHERE id = ?').run(at, g.score, g.total, g.passed ? 1 : 0, attempt, r.id);
+    let code = null;
+    if (g.passed) {
+      do code = newCode('FS-'); while (q('SELECT 1 FROM academy_certs WHERE code = ?').get(code));
+      q(`INSERT INTO academy_certs (code, source, tenant_id, ref_id, name, place, phone, score, total, attempt, issued_at) VALUES (?, 'site', 0, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(code, r.id, r.name, r.place, r.phone, g.score, g.total, attempt, at);
+    }
+    return { ...g, code, attempt, name: r.name, place: r.place, at };
   }
-  // Anyone can check a certificate by its code.
+  // The tries before (and including) a certificate: from the business, or by the same phone on the site.
+  function historyOf(c) {
+    if (c.source === 'app') { try { return JSON.parse(c.history || '[]'); } catch { return []; } }
+    if (!c.phone) return [{ pct: pctOf(c), at: c.issued_at, attempt: c.attempt }];
+    return q('SELECT score, total, finished_at, attempt FROM academy_public WHERE phone = ? AND finished_at IS NOT NULL AND finished_at <= ? ORDER BY finished_at').all(c.phone, c.issued_at)
+      .map((x) => ({ pct: pctOf(x), at: x.finished_at, attempt: x.attempt }));
+  }
+  const hidePhone = (p) => (p ? `${p.slice(0, 6)} ** *** ${p.slice(-2)}` : '');
+  // Anyone can check a certificate by its number (the QR code on it opens this).
   function cert(code) {
-    const r = q('SELECT code, name, place, score, total, finished_at FROM academy_public WHERE code = ? AND passed = 1').get(s(code, 12).toUpperCase());
-    if (!r) throw new HttpError(404, 'Sertifikat topilmadi');
-    return { code: r.code, name: r.name, place: r.place, score: r.score, total: r.total, pct: r.total ? Math.round((r.score / r.total) * 100) : 0, at: r.finished_at };
+    const c = q('SELECT * FROM academy_certs WHERE code = ?').get(s(code, 16).toUpperCase());
+    if (!c) throw new HttpError(404, 'Sertifikat topilmadi');
+    return { code: c.code, source: c.source, name: c.name, role: c.role, place: c.source === 'app' ? c.tenant_name : c.place, score: c.score, total: c.total,
+      pct: pctOf(c), attempt: c.attempt, at: c.issued_at, history: historyOf(c) };
+  }
+  // The platform's list of every certificate, newest first, with a search.
+  function certs({ query = {} }) {
+    const where = []; const args = [];
+    if (query.source === 'app' || query.source === 'site') { where.push('source = ?'); args.push(query.source); }
+    const term = s(query.q, 60);
+    if (term) {
+      where.push('(name LIKE ? OR code LIKE ? OR phone LIKE ? OR tenant_name LIKE ? OR place LIKE ?)');
+      const like = `%${term.replace(/[%_]/g, '')}%`;
+      const digits = term.replace(/\D/g, '');
+      args.push(like, like, digits.length >= 4 ? `%${digits}%` : like, like, like);
+    }
+    const sql = `FROM academy_certs ${where.length ? `WHERE ${where.join(' AND ')}` : ''}`;
+    const total = q(`SELECT COUNT(*) c ${sql}`).get(...args).c;
+    const rows = q(`SELECT * ${sql} ORDER BY issued_at DESC LIMIT 200`).all(...args).map((c) => ({ code: c.code, source: c.source, name: c.name, role: c.role,
+      place: c.source === 'app' ? c.tenant_name : c.place, phone: hidePhone(c.phone), pct: pctOf(c), score: c.score, total: c.total, attempt: c.attempt, at: c.issued_at }));
+    const counts = q("SELECT COUNT(*) all_, SUM(source = 'app') app, SUM(source = 'site') site FROM academy_certs").get();
+    return { total, rows, counts: { all: counts.all_ || 0, app: counts.app || 0, site: counts.site || 0 } };
   }
   function stats() {
     const since = now() - 30 * 86400 * 1000;
     const all = q('SELECT COUNT(*) started, SUM(finished_at IS NOT NULL) finished, SUM(passed) passed FROM academy_public').get();
     const month = q('SELECT COUNT(*) started, SUM(finished_at IS NOT NULL) finished, SUM(passed) passed FROM academy_public WHERE started_at > ?').get(since);
-    const last = q('SELECT name, place, score, total, passed, finished_at FROM academy_public WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 30').all()
-      .map((r) => ({ ...r, passed: !!r.passed }));
+    const last = q('SELECT name, place, phone, score, total, passed, attempt, finished_at FROM academy_public WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 30').all()
+      .map((r) => ({ ...r, phone: hidePhone(r.phone), passed: !!r.passed }));
     const n = (v) => Number(v) || 0;
     return { all: { started: n(all.started), finished: n(all.finished), passed: n(all.passed) }, month: { started: n(month.started), finished: n(month.finished), passed: n(month.passed) }, last };
   }
-  return { content, save, reset, custom, siteOn, setSite, start, finish, cert, stats };
+  return { content, save, reset, custom, siteOn, setSite, register, start, finish, cert, certs, stats };
 }
 
 module.exports = { createAcademy, createPublicAcademy, cleanContent, bank, draw, grade, PASS_PCT, TEST_SIZE, DEFAULT };

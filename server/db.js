@@ -779,6 +779,11 @@ CREATE TABLE IF NOT EXISTS academy_tests (
 );
 CREATE INDEX IF NOT EXISTS idx_academy_tests_user ON academy_tests(user_id, started_at);
 `);
+  // Which try this was (1st, 2nd…) and the certificate's number in the platform's register (checked by its QR code).
+  addCol('academy_tests', 'attempt', 'INTEGER NOT NULL DEFAULT 0');
+  addCol('academy_tests', 'cert_code', "TEXT NOT NULL DEFAULT ''");
+  db.exec(`UPDATE academy_tests SET attempt = (SELECT COUNT(*) FROM academy_tests t2 WHERE t2.user_id = academy_tests.user_id AND t2.finished_at IS NOT NULL
+    AND t2.finished_at <= academy_tests.finished_at) WHERE attempt = 0 AND finished_at IS NOT NULL`);
   // Workers who never open the program (a tandir baker, a dishwasher, a guard): on the staff list and the payroll only.
   addCol('users', 'app', 'INTEGER NOT NULL DEFAULT 1');
   addCol('users', 'position', "TEXT NOT NULL DEFAULT ''");
