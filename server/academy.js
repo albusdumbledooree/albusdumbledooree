@@ -394,4 +394,239 @@ function createPublicAcademy(pdb, { pget, pset, now = Date.now }) {
   return { content, save, reset, custom, siteOn, setSite, register, start, finish, cert, certs, stats };
 }
 
-module.exports = { createAcademy, createPublicAcademy, cleanContent, bank, draw, grade, PASS_PCT, TEST_SIZE, DEFAULT };
+
+// ---------- Bellashuv (a duel): two people, the same 10 questions, the better score wins (then the faster) ----------
+// One store on the platform for every kind: two workers of one business ("team"), any two workers of FLOWI ("global"),
+// two people on the site ("site"), and a link sent to a friend ("link"). A player is a worker (tenant + user) or
+// a site visitor (phone). Nobody has to wait for the other: each plays when they can, the result comes when both did.
+const DUEL_SIZE = 10;
+const DUEL_SECONDS = 20;
+const DUEL_TTL = 24 * 3600 * 1000; // an unanswered duel is closed after a day
+const DUEL_SCHEMA = `
+CREATE TABLE IF NOT EXISTS academy_duels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL UNIQUE,
+  mode TEXT NOT NULL,
+  qids TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at INTEGER NOT NULL,
+  closed_at INTEGER,
+  winner TEXT NOT NULL DEFAULT '',
+  a_kind TEXT NOT NULL, a_tenant INTEGER, a_user INTEGER, a_phone TEXT NOT NULL DEFAULT '', a_name TEXT NOT NULL, a_place TEXT NOT NULL DEFAULT '', a_key TEXT NOT NULL,
+  a_start INTEGER, a_done INTEGER, a_score INTEGER, a_ms INTEGER, a_answers TEXT,
+  b_kind TEXT, b_tenant INTEGER, b_user INTEGER, b_phone TEXT NOT NULL DEFAULT '', b_name TEXT NOT NULL DEFAULT '', b_place TEXT NOT NULL DEFAULT '', b_key TEXT,
+  b_start INTEGER, b_done INTEGER, b_score INTEGER, b_ms INTEGER, b_answers TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_duels_open ON academy_duels(mode, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_duels_a ON academy_duels(a_tenant, a_user);
+CREATE INDEX IF NOT EXISTS idx_duels_b ON academy_duels(b_tenant, b_user);
+CREATE INDEX IF NOT EXISTS idx_duels_closed ON academy_duels(closed_at);
+`;
+const POINTS = { win: 3, draw: 1, loss: 0 };
+const firstName = (n) => String(n || '').trim().split(/\s+/)[0] || '';
+
+function createDuels(pdb, { content, notify = () => {}, now = Date.now, globalOn = () => true, siteOn = () => true }) {
+  pdb.exec(DUEL_SCHEMA);
+  const q = (sql) => pdb.prepare(sql);
+  const key = () => crypto.randomBytes(12).toString('hex');
+  const newDuelCode = () => { let c; do c = Array.from(crypto.randomBytes(7), (b) => ALPHA[b % ALPHA.length]).join(''); while (q('SELECT 1 FROM academy_duels WHERE code = ?').get(c)); return c; };
+  const sideOf = (d, p) => {
+    if (p.kind === 'app') return d.a_kind === 'app' && d.a_tenant === p.tenant && d.a_user === p.user ? 'a' : d.b_kind === 'app' && d.b_tenant === p.tenant && d.b_user === p.user ? 'b' : null;
+    return p.key && d.a_key === p.key ? 'a' : p.key && d.b_key === p.key ? 'b' : null;
+  };
+  const playerKey = (d, s) => (d[`${s}_kind`] === 'app' ? `t${d[`${s}_tenant`]}:u${d[`${s}_user`]}` : `p${d[`${s}_phone`]}`);
+  const other = (s) => (s === 'a' ? 'b' : 'a');
+
+  // Closes what nobody answered for a day (a side that played alone gets nothing either way).
+  function expire() {
+    q("UPDATE academy_duels SET status = 'expired', closed_at = ? WHERE status IN ('open', 'invited', 'playing') AND created_at < ?").run(now(), now() - DUEL_TTL);
+  }
+  function questionsFor(d) { const byId = new Map(bank(content()).map((x) => [x.id, x])); return JSON.parse(d.qids).map((id) => byId.get(id)).filter(Boolean).map(asked); }
+  function publicView(d, s) {
+    const me = s; const op = s ? other(s) : 'b';
+    const side = (x) => ({ name: d[`${x}_name`] || '', place: d[`${x}_place`] || '', kind: d[`${x}_kind`] || '', played: !!d[`${x}_done`], score: d.status === 'done' ? d[`${x}_score`] : null, ms: d.status === 'done' ? d[`${x}_ms`] : null });
+    return { id: d.id, code: d.code, mode: d.mode, status: d.status, created_at: d.created_at, closed_at: d.closed_at, size: JSON.parse(d.qids).length, seconds: DUEL_SECONDS,
+      me: me ? { ...side(me), side: me, done: !!d[`${me}_done`], started: !!d[`${me}_start`] } : null, opponent: d[`${op}_name`] ? side(op) : null,
+      from: { name: d.a_name, place: d.a_place, played: !!d.a_done }, joinable: d.mode === 'link' && !d.b_kind && d.status !== 'expired',
+      result: d.status === 'done' ? (d.winner === 'draw' ? 'draw' : me ? (d.winner === me ? 'win' : 'loss') : d.winner) : null };
+  }
+  function create(mode, a, b) {
+    const qids = draw(content(), DUEL_SIZE, mode !== 'team' && mode !== 'global').map((x) => x.id);
+    const d = { code: newDuelCode(), a_key: key(), b_key: b ? key() : null };
+    const r = q(`INSERT INTO academy_duels (code, mode, qids, status, created_at, a_kind, a_tenant, a_user, a_phone, a_name, a_place, a_key,
+      b_kind, b_tenant, b_user, b_phone, b_name, b_place, b_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      d.code, mode, JSON.stringify(qids), b ? 'invited' : 'open', now(), a.kind, a.tenant || null, a.user || null, a.phone || '', s(a.name, 60), s(a.place, 80), d.a_key,
+      b ? b.kind : null, b ? b.tenant || null : null, b ? b.user || null : null, b ? b.phone || '' : '', b ? s(b.name, 60) : '', b ? s(b.place, 80) : '', d.b_key);
+    return q('SELECT * FROM academy_duels WHERE id = ?').get(Number(r.lastInsertRowid));
+  }
+  // The questions for one side; the clock starts now (the server keeps the time).
+  function startSide(d, s) {
+    if (d[`${s}_done`]) throw new HttpError(400, 'Siz bu bellashuvda allaqachon javob bergansiz');
+    if (!d[`${s}_start`]) q(`UPDATE academy_duels SET ${s}_start = ? WHERE id = ?`).run(now(), d.id);
+    return { duel: publicView(q('SELECT * FROM academy_duels WHERE id = ?').get(d.id), s), questions: questionsFor(d), key: d[`${s}_key`] };
+  }
+  function answer(d, s, answers) {
+    if (!d[`${s}_start`] || d[`${s}_done`]) throw new HttpError(400, "Bellashuv topilmadi yoki javob berilgan");
+    if (d.status === 'expired' || d.status === 'declined') throw new HttpError(400, 'Bellashuv vaqti tugagan');
+    const g = grade(content(), JSON.parse(d.qids), answers || {});
+    // The server's clock; a question left past its time still counts as answered (a slow phone), but the time shows it.
+    const ms = Math.max(0, Math.min(now() - d[`${s}_start`], DUEL_SIZE * DUEL_SECONDS * 1000 * 3));
+    q(`UPDATE academy_duels SET ${s}_done = ?, ${s}_score = ?, ${s}_ms = ?, ${s}_answers = ? WHERE id = ?`)
+      .run(now(), g.score, ms, JSON.stringify(answers || {}), d.id);
+    let x = q('SELECT * FROM academy_duels WHERE id = ?').get(d.id);
+    if (x.a_done && x.b_done) {
+      const winner = x.a_score !== x.b_score ? (x.a_score > x.b_score ? 'a' : 'b') : x.a_ms !== x.b_ms ? (x.a_ms < x.b_ms ? 'a' : 'b') : 'draw';
+      q("UPDATE academy_duels SET status = 'done', winner = ?, closed_at = ? WHERE id = ?").run(winner, now(), d.id);
+      x = q('SELECT * FROM academy_duels WHERE id = ?').get(d.id);
+      // The one who played first learns the result where they are.
+      const o = other(s);
+      if (x[`${o}_kind`] === 'app') notify(x[`${o}_tenant`], { to: x[`${o}_user`], kind: 'result', id: x.id, result: winner === 'draw' ? 'draw' : winner === o ? 'win' : 'loss', opponent: x[`${s}_name`] });
+    }
+    return { duel: publicView(x, s), score: g.score, total: g.total, results: g.results.filter((r) => !r.ok) };
+  }
+
+  // ---------- A worker in a business ----------
+  function forWorker(me) {
+    const p = { kind: 'app', tenant: me.tenant, user: me.user };
+    const find = (id) => { expire(); const d = q('SELECT * FROM academy_duels WHERE id = ?').get(Number(id)); const s = d && sideOf(d, p); if (!s) throw new HttpError(404, 'Bellashuv topilmadi'); return { d, s }; };
+    return {
+      // A colleague by name ("team"), anyone on FLOWI ("global": joins one waiting, or opens one), or a link for a friend.
+      create(body, colleague) {
+        expire();
+        const meP = { ...p, name: me.name, place: me.place };
+        if (body.mode === 'team') {
+          if (!colleague) throw new HttpError(400, 'Hamkasbni tanlang');
+          const busy = q("SELECT 1 FROM academy_duels WHERE mode = 'team' AND status = 'invited' AND a_tenant = ? AND a_user = ? AND b_user = ?").get(me.tenant, me.user, colleague.id);
+          if (busy) throw new HttpError(400, `${colleague.name} hali oldingi chaqiruvga javob bermadi`);
+          const d = create('team', meP, { kind: 'app', tenant: me.tenant, user: colleague.id, name: colleague.name, place: me.place });
+          notify(me.tenant, { to: colleague.id, kind: 'invite', id: d.id, from: me.name });
+          return startSide(d, 'a');
+        }
+        if (body.mode === 'global') {
+          if (!globalOn()) throw new HttpError(403, "Boshqa choyxonalar bilan bellashuv hozircha yopiq");
+          const wait = q(`SELECT * FROM academy_duels WHERE mode = 'global' AND status = 'open' AND b_kind IS NULL AND a_done IS NOT NULL AND NOT (a_tenant = ? AND a_user = ?)
+            ORDER BY created_at LIMIT 1`).get(me.tenant, me.user);
+          if (wait) {
+            q("UPDATE academy_duels SET status = 'playing', b_kind = 'app', b_tenant = ?, b_user = ?, b_name = ?, b_place = ?, b_key = ? WHERE id = ? AND b_kind IS NULL")
+              .run(me.tenant, me.user, s(me.name, 60), s(me.place, 80), key(), wait.id);
+            return startSide(q('SELECT * FROM academy_duels WHERE id = ?').get(wait.id), 'b');
+          }
+          return startSide(create('global', meP, null), 'a');
+        }
+        if (body.mode === 'link') return startSide(create('link', meP, null), 'a');
+        throw new HttpError(400, "Bellashuv turi noto'g'ri");
+      },
+      accept(id) {
+        const { d, s } = find(id);
+        if (d.status === 'expired' || d.status === 'declined') throw new HttpError(400, 'Bellashuv vaqti tugagan');
+        if (d.status === 'invited' && s === 'b') q("UPDATE academy_duels SET status = 'playing' WHERE id = ?").run(d.id);
+        return startSide(q('SELECT * FROM academy_duels WHERE id = ?').get(d.id), s);
+      },
+      decline(id) {
+        const { d, s } = find(id);
+        if (s !== 'b' || d.b_done) throw new HttpError(400, "Bu chaqiruvni rad etib bo'lmaydi");
+        q("UPDATE academy_duels SET status = 'declined', closed_at = ? WHERE id = ?").run(now(), d.id);
+        if (d.a_kind === 'app') notify(d.a_tenant, { to: d.a_user, kind: 'declined', id: d.id, opponent: d.b_name });
+        return { ok: true };
+      },
+      answer(id, body) { const { d, s } = find(id); return answer(d, s, body.answers); },
+      get(id) {
+        const { d, s } = find(id);
+        const out = publicView(d, s);
+        if (d.status === 'done' && d[`${s}_answers`]) out.wrong = grade(content(), JSON.parse(d.qids), JSON.parse(d[`${s}_answers`])).results.filter((r) => !r.ok);
+        return out;
+      },
+      // What waits for me (invitations), what I wait for, and my last results.
+      list() {
+        expire();
+        const rows = q(`SELECT * FROM academy_duels WHERE ((a_tenant = ? AND a_user = ? AND a_kind = 'app') OR (b_tenant = ? AND b_user = ? AND b_kind = 'app'))
+          AND created_at > ? ORDER BY created_at DESC LIMIT 40`).all(me.tenant, me.user, me.tenant, me.user, now() - 30 * 86400 * 1000);
+        return rows.map((d) => publicView(d, sideOf(d, p)));
+      },
+    };
+  }
+
+  // ---------- A visitor on the site (by phone) ----------
+  function siteCreate(body) {
+    if (!siteOn()) throw new HttpError(403, 'Saytda bellashuv hozircha yopiq');
+    expire();
+    const name = s(body.name, 60); const phone = phoneUz(body.phone);
+    if (name.length < 2) throw new HttpError(400, 'Ismingizni yozing');
+    if (!phone) throw new HttpError(400, "Telefon raqamingizni yozing (masalan 90 123 45 67)");
+    const me = { kind: 'site', phone, name, place: s(body.place, 80) };
+    if (body.mode === 'random') {
+      const wait = q(`SELECT * FROM academy_duels WHERE mode = 'site' AND status = 'open' AND b_kind IS NULL AND a_done IS NOT NULL AND a_phone != ? ORDER BY created_at LIMIT 1`).get(phone);
+      if (wait) {
+        q("UPDATE academy_duels SET status = 'playing', b_kind = 'site', b_phone = ?, b_name = ?, b_place = ?, b_key = ? WHERE id = ? AND b_kind IS NULL").run(phone, name, me.place, key(), wait.id);
+        return startSide(q('SELECT * FROM academy_duels WHERE id = ?').get(wait.id), 'b');
+      }
+      return startSide(create('site', me, null), 'a');
+    }
+    return startSide(create('link', me, null), 'a');
+  }
+  // A link: who called, and joining it (as a site visitor).
+  function byCode(code) { expire(); const d = q('SELECT * FROM academy_duels WHERE code = ?').get(s(code, 12).toUpperCase()); if (!d) throw new HttpError(404, 'Bellashuv topilmadi'); return d; }
+  function linkInfo(code, k) { const d = byCode(code); return publicView(d, sideOf(d, { key: k })); }
+  function siteJoin(body) {
+    const d = byCode(body.code);
+    if (d.mode !== 'link') throw new HttpError(400, "Bu bellashuvga havola orqali qo'shilib bo'lmaydi");
+    if (d.b_kind) throw new HttpError(400, "Bu bellashuvga allaqachon boshqa odam qo'shilgan");
+    if (d.status === 'expired') throw new HttpError(400, 'Bellashuv vaqti tugagan');
+    const name = s(body.name, 60); const phone = phoneUz(body.phone);
+    if (name.length < 2) throw new HttpError(400, 'Ismingizni yozing');
+    if (!phone) throw new HttpError(400, "Telefon raqamingizni yozing (masalan 90 123 45 67)");
+    if (d.a_kind === 'site' && d.a_phone === phone) throw new HttpError(400, "O'zingiz bilan bellashib bo'lmaydi");
+    q("UPDATE academy_duels SET status = 'playing', b_kind = 'site', b_phone = ?, b_name = ?, b_place = ?, b_key = ? WHERE id = ? AND b_kind IS NULL").run(phone, name, s(body.place, 80), key(), d.id);
+    if (d.a_kind === 'app') notify(d.a_tenant, { to: d.a_user, kind: 'joined', id: d.id, opponent: name });
+    return startSide(q('SELECT * FROM academy_duels WHERE id = ?').get(d.id), 'b');
+  }
+  function siteAnswer(body) {
+    const d = byCode(body.code); const sd = sideOf(d, { key: s(body.key, 40) });
+    if (!sd) throw new HttpError(404, 'Bellashuv topilmadi');
+    return answer(d, sd, body.answers);
+  }
+
+  // ---------- Ratings (this month): 3 points a win, 1 a draw ----------
+  function rating({ scope, tenant = null, me = null, month = null }) {
+    const d0 = new Date(now()); const from = month || new Date(d0.getFullYear(), d0.getMonth(), 1).getTime();
+    const rows = q("SELECT * FROM academy_duels WHERE status = 'done' AND closed_at >= ?").all(from);
+    const table = new Map(); const biz = new Map();
+    const add = (d, sd) => {
+      const kind = d[`${sd}_kind`];
+      if (scope === 'site' ? kind !== 'site' : kind !== 'app') return;
+      if (scope === 'team' && d[`${sd}_tenant`] !== tenant) return;
+      const k = playerKey(d, sd);
+      const res = d.winner === 'draw' ? 'draw' : d.winner === sd ? 'win' : 'loss';
+      const r = table.get(k) || { key: k, name: kind === 'site' ? firstName(d[`${sd}_name`]) : d[`${sd}_name`], place: d[`${sd}_place`], win: 0, draw: 0, loss: 0, points: 0, tenant: d[`${sd}_tenant`] };
+      r[res]++; r.points += POINTS[res]; table.set(k, r);
+      if (kind === 'app') { const b = biz.get(r.tenant) || { name: r.place, points: 0, players: new Set() }; b.points += POINTS[res]; b.players.add(k); biz.set(r.tenant, b); }
+    };
+    for (const d of rows) { add(d, 'a'); add(d, 'b'); }
+    const list = [...table.values()].sort((a, b) => b.points - a.points || b.win - a.win || a.loss - b.loss).map((r, i) => ({ ...r, place_no: i + 1 }));
+    const meKey = me ? (me.kind === 'app' ? `t${me.tenant}:u${me.user}` : `p${me.phone}`) : null;
+    const mine = meKey ? list.find((r) => r.key === meKey) || null : null;
+    const clean = (r) => ({ no: r.place_no, name: r.name, place: r.place, win: r.win, draw: r.draw, loss: r.loss, points: r.points, me: r.key === meKey });
+    return { scope, from, top: list.slice(0, 20).map(clean), mine: mine ? clean(mine) : null, players: list.length,
+      businesses: scope === 'site' ? [] : [...biz.values()].sort((a, b) => b.points - a.points).slice(0, 10).map((b, i) => ({ no: i + 1, name: b.name, points: b.points, players: b.players.size })) };
+  }
+  // A worker's own tally (for the boss's list and the invite list).
+  function tally(tenant) {
+    const out = {};
+    for (const d of q("SELECT * FROM academy_duels WHERE status = 'done' AND (a_tenant = ? OR b_tenant = ?)").all(tenant, tenant)) {
+      for (const sd of ['a', 'b']) {
+        if (d[`${sd}_kind`] !== 'app' || d[`${sd}_tenant`] !== tenant) continue;
+        const u = d[`${sd}_user`]; const r = out[u] || { win: 0, draw: 0, loss: 0 };
+        r[d.winner === 'draw' ? 'draw' : d.winner === sd ? 'win' : 'loss']++; out[u] = r;
+      }
+    }
+    return out;
+  }
+  function stats() {
+    const since = now() - 30 * 86400 * 1000;
+    const r = q(`SELECT COUNT(*) all_, SUM(status = 'done') done, SUM(mode = 'team') team, SUM(mode = 'global') global_, SUM(mode = 'site') site, SUM(mode = 'link') link FROM academy_duels WHERE created_at > ?`).get(since);
+    return { all: r.all_ || 0, done: r.done || 0, team: r.team || 0, global: r.global_ || 0, site: r.site || 0, link: r.link || 0 };
+  }
+  return { forWorker, siteCreate, siteJoin, siteAnswer, linkInfo, rating, tally, stats, DUEL_SIZE, DUEL_SECONDS };
+}
+
+module.exports = { createAcademy, createPublicAcademy, createDuels, cleanContent, bank, draw, grade, PASS_PCT, TEST_SIZE, DEFAULT };

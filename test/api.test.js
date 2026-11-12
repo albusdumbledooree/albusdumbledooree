@@ -3082,3 +3082,83 @@ test('akademiya per business (plan / full / free / hidden, extra fee) and the si
   await call('PUT', '/api/platform/academy/site', admin, { on: true });
   assert.equal((await call('POST', '/api/public/test', null, { name: 'Ali', phone: '901234567' })).status, 200);
 });
+
+test('bellashuv: team invite, FLOWI-wide opponent, link to the site, site random, ratings, boss and platform switches', async () => {
+  const { bank, cleanContent, DEFAULT } = require('../server/academy');
+  const B = bank(cleanContent(DEFAULT));
+  const ans = (qs, wrong = 0) => Object.fromEntries(qs.map((q, i) => { const b = B.find((x) => x.id === q.id); return [q.id, i < wrong ? (b.c + 1) % b.a.length : b.c]; }));
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  const mk = async (code) => {
+    assert.equal((await call('POST', '/api/platform/tenants', admin, { name: code.toUpperCase(), code, owner_name: 'E', owner_username: `${code}b`, owner_password: 'parol12345', plan: 'biznes', sample: true })).status, 200);
+    const boss = await login(`${code}b`, 'parol12345', code);
+    for (const u of ['w1', 'w2']) await call('POST', '/api/users', boss, { name: `${code}-${u}`, username: `${code}${u}`, password: 'parol1', role: 'waiter' });
+    return { boss, w1: await login(`${code}w1`, 'parol1', code), w2: await login(`${code}w2`, 'parol1', code) };
+  };
+  const A = await mk('duela'); const Bz = await mk('duelb');
+  // Team: w1 calls w2; w2 sees the invitation, plays; the better score wins.
+  const home = (await call('GET', '/api/academy/duels', A.w1)).data;
+  const w2 = home.colleagues.find((c) => c.name === 'duela-w2');
+  const d = (await call('POST', '/api/academy/duels', A.w1, { mode: 'team', user_id: w2.id })).data;
+  assert.equal(d.questions.length, 10); assert.ok(d.questions.every((q) => q.a.every((o) => !('c' in o))));
+  assert.equal((await call('POST', `/api/academy/duels/${d.duel.id}/answer`, A.w1, { answers: ans(d.questions, 1) })).data.duel.status, 'invited');
+  const inv = (await call('GET', '/api/academy/duels', A.w2)).data.list.find((x) => x.id === d.duel.id);
+  assert.equal(inv.opponent.name, 'duela-w1'); assert.equal(inv.me.side, 'b');
+  assert.equal((await call('GET', `/api/academy/duels/${d.duel.id}`, Bz.w1)).status, 404, 'another business cannot see it');
+  const acc = (await call('POST', `/api/academy/duels/${d.duel.id}/accept`, A.w2)).data;
+  const fin = (await call('POST', `/api/academy/duels/${d.duel.id}/answer`, A.w2, { answers: ans(acc.questions, 3) })).data;
+  assert.equal(fin.duel.status, 'done'); assert.equal(fin.duel.result, 'loss'); assert.equal(fin.results.length, 3, 'own wrong answers shown');
+  assert.equal((await call('GET', `/api/academy/duels/${d.duel.id}`, A.w1)).data.result, 'win');
+  assert.equal((await call('POST', `/api/academy/duels/${d.duel.id}/answer`, A.w2, { answers: {} })).status, 400, 'no second answer');
+  // FLOWI-wide: the second one meets the first one who waits.
+  const g1 = (await call('POST', '/api/academy/duels', A.w1, { mode: 'global' })).data;
+  await call('POST', `/api/academy/duels/${g1.duel.id}/answer`, A.w1, { answers: ans(g1.questions, 5) });
+  const g2 = (await call('POST', '/api/academy/duels', Bz.w1, { mode: 'global' })).data;
+  assert.equal(g2.duel.id, g1.duel.id); assert.equal(g2.duel.opponent.place, 'DUELA');
+  assert.equal((await call('POST', `/api/academy/duels/${g2.duel.id}/answer`, Bz.w1, { answers: ans(g2.questions, 0) })).data.duel.result, 'win');
+  // A link from the program, played by a friend on the site.
+  const l = (await call('POST', '/api/academy/duels', A.w2, { mode: 'link' })).data;
+  await call('POST', `/api/academy/duels/${l.duel.id}/answer`, A.w2, { answers: ans(l.questions, 2) });
+  const info = (await call('GET', `/api/public/duel?c=${l.duel.code}`)).data;
+  assert.equal(info.from.name, 'duela-w2'); assert.equal(info.joinable, true); assert.equal(info.me, null);
+  assert.equal((await call('POST', '/api/public/duel/join', null, { code: l.duel.code, name: 'Do\'st', phone: '' })).status, 400, 'phone required');
+  const j = (await call('POST', '/api/public/duel/join', null, { code: l.duel.code, name: 'Dilshod Karimov', phone: '90 765 43 21' })).data;
+  assert.equal((await call('POST', '/api/public/duel/join', null, { code: l.duel.code, name: 'Boshqa', phone: '901111111' })).status, 400, 'only one friend joins');
+  const jr = (await call('POST', '/api/public/duel/answer', null, { code: l.duel.code, key: j.key, answers: ans(j.questions, 2) })).data;
+  assert.equal(jr.duel.status, 'done');
+  assert.equal((await call('GET', `/api/public/duel?c=${l.duel.code}&k=${j.key}`)).data.me.score, 8);
+  // On the site: two visitors meet at random.
+  const s1 = (await call('POST', '/api/public/duel', null, { mode: 'random', name: 'Malika', phone: '935556677' })).data;
+  await call('POST', '/api/public/duel/answer', null, { code: s1.duel.code, key: s1.key, answers: ans(s1.questions, 4) });
+  const s2 = (await call('POST', '/api/public/duel', null, { mode: 'random', name: 'Nodir Aliyev', phone: '977778899' })).data;
+  assert.equal(s2.duel.code, s1.duel.code);
+  assert.equal((await call('POST', '/api/public/duel/answer', null, { code: s2.duel.code, key: s2.key, answers: ans(s2.questions, 1) })).data.duel.result, 'win');
+  const sr = (await call('GET', '/api/public/rating')).data;
+  assert.equal(sr.top[0].name, 'Nodir', 'site rating: first name only');
+  // Ratings: the team, and all of FLOWI with businesses.
+  const tr = (await call('GET', '/api/academy/rating?scope=team', A.w1)).data;
+  assert.equal(tr.top[0].name, 'duela-w1'); assert.equal(tr.top[0].points, 3); assert.equal(tr.mine.me, true);
+  const fr = (await call('GET', '/api/academy/rating?scope=flowi', Bz.w1)).data;
+  assert.ok(fr.top.some((r) => r.name === 'duelb-w1' && r.points === 3)); assert.ok(fr.businesses.length >= 2);
+  // The boss's list shows the tally; the boss can switch duels off.
+  const team = (await call('GET', '/api/academy/team', A.boss)).data;
+  assert.equal(team.rows.find((r) => r.name === 'duela-w1').duel.win, 1);
+  await call('PUT', '/api/settings', A.boss, { duel_global: false });
+  assert.equal((await call('POST', '/api/academy/duels', A.w1, { mode: 'global' })).status, 403);
+  await call('PUT', '/api/settings', A.boss, { duel_on: false });
+  assert.equal((await call('GET', '/api/academy/duels', A.w1)).data.blocked.length > 0, true);
+  assert.equal((await call('POST', '/api/academy/duels', A.w1, { mode: 'link' })).status, 403);
+  await call('PUT', '/api/settings', A.boss, { duel_on: true, duel_global: true });
+  // Not during work: a waiter with an open check cannot start one (unless the boss allows).
+  const room = (await call('GET', '/api/rooms', Bz.w2)).data.find((r) => !r.order);
+  assert.equal((await call('POST', '/api/orders', Bz.w2, { room_id: room.id })).status, 200);
+  assert.equal((await call('POST', '/api/academy/duels', Bz.w2, { mode: 'link' })).status, 403);
+  await call('PUT', '/api/settings', Bz.boss, { duel_work: true });
+  assert.equal((await call('POST', '/api/academy/duels', Bz.w2, { mode: 'link' })).status, 200);
+  // The platform switches the FLOWI-wide and the site duels.
+  assert.equal((await call('PUT', '/api/platform/academy/duel', admin, { global: false, site: false })).data.site, false);
+  assert.equal((await call('POST', '/api/academy/duels', Bz.w1, { mode: 'global' })).status, 403);
+  assert.equal((await call('POST', '/api/public/duel', null, { mode: 'random', name: 'Ali', phone: '901112233' })).status, 403);
+  assert.equal((await call('GET', '/api/public/info')).data.duel_site, false);
+  await call('PUT', '/api/platform/academy/duel', admin, { global: true, site: true });
+  assert.ok((await call('GET', '/api/platform/academy', admin)).data.duel.stats.done >= 4);
+});

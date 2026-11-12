@@ -45,6 +45,10 @@
   .cta b { font-size: 18px; } .cta p { margin: 6px 0 12px; opacity: .85; } .cta .btn { background: #fff; color: var(--d); border-color: #fff; }
   .err { background: var(--rs); color: var(--r); border-radius: 10px; padding: 10px 12px; margin-top: 12px; font-size: 14px; display: none; }
   .hp { position: absolute; left: -9999px; }
+  .lrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 4px; border-top: 1px solid var(--l); text-decoration: none; color: var(--t); font-size: 15px; text-align: left; }
+  .vs { display: flex; justify-content: space-around; align-items: flex-start; gap: 8px; } .vs > div { flex: 1; display: grid; justify-items: center; font-size: 26px; }
+  .vs b { font-size: 16px; } .vs .big { font-size: 44px; font-weight: 900; line-height: 1.1; } .vs .w .big { color: var(--g); } .vs small { font-size: 13px; color: var(--m); }
+  .vs > i { font-style: normal; font-weight: 900; color: #c9a227; font-size: 22px; align-self: center; }
   footer { text-align: center; color: var(--m); font-size: 13px; padding: 10px 16px 30px; }
   @media (max-width: 480px) { h1 { font-size: 22px; } .card { padding: 16px; } .q { font-size: 17px; } }
 </style>
@@ -76,7 +80,8 @@ function intro() {
     '<p class="small muted" style="text-align:left;margin:4px 0 0">Raqam sertifikatni sizga bog\'lash va urinishlarni sanash uchun. Hech kimga ko\'rsatilmaydi.</p>' +
     '<label>Qayerda ishlaysiz yoki shahar <span class="muted">(ixtiyoriy)</span><input name="place" maxlength="80" placeholder="Masalan: Toshkent" value="' + esc(S.place) + '"></label>' +
     '<input class="hp" name="website" tabindex="-1" autocomplete="off">' +
-    '<div class="err" id="err"></div><button class="btn p block" style="margin-top:16px" id="go">Testni boshlash →</button></form></div>' + cta();
+    '<div class="err" id="err"></div><button class="btn p block" style="margin-top:16px" id="go">Testni boshlash →</button></form></div>' + duelCard() + cta();
+  bindDuelCard();
   document.getElementById('f').onsubmit = function (e) {
     e.preventDefault();
     var f = e.target; var b = document.getElementById('go');
@@ -123,6 +128,7 @@ function result() {
     '<div class="score ' + (R.passed ? 'ok' : 'bad') + '">' + R.pct + '%</div><p>To\'g\'ri javoblar: <b>' + R.score + ' / ' + R.total + '</b> · <b>' + R.attempt + '-urinish</b></p>' +
     (R.weak.length ? '<p class="small muted">Ko\'proq takrorlang: <b>' + R.weak.map(esc).join(', ') + '</b></p>' : '') +
     '<div class="row">' + (R.passed ? '<button class="btn p" id="cert">🏅 Sertifikat</button>' : '') + '<button class="btn" id="again">↻ Qayta topshirish</button></div>' +
+    (INFO.duel_site !== false ? '<button class="btn block" id="rduel" style="margin-top:10px">⚔️ Do\'stingizni bellashuvga chaqiring</button>' : '') +
     (R.passed ? '<p class="small muted" style="margin-top:10px">Sertifikat raqami: <b>' + esc(R.code) + '</b> · tekshirish: <a href="/test?c=' + esc(R.code) + '">' + esc(location.host) + '/test?c=' + esc(R.code) + '</a></p>' : '') +
     '</div>' +
     (wrong.length ? '<h2 style="margin:20px 0 4px">Xato javoblar</h2>' + wrong.map(function (x) {
@@ -131,6 +137,7 @@ function result() {
   var c = document.getElementById('cert');
   if (c) c.onclick = function () { openCert({ name: R.name, place: R.place, pct: R.pct, score: R.score, total: R.total, at: R.at, code: R.code, attempt: R.attempt }); };
   document.getElementById('again').onclick = function () { S.result = null; intro(); window.scrollTo(0, 0); };
+  var dl = document.getElementById('rduel'); if (dl) dl.onclick = function () { duelForm('link'); };
 }
 
 function cta() {
@@ -183,12 +190,132 @@ function verify(code) {
   });
 }
 
+
+// ---------- Bellashuv on the site: a random opponent, or a link for a friend ----------
+var INFO = {};
+var DUEL = null;
+function myDuels() { try { return JSON.parse(localStorage.getItem('flowi_duels') || '[]'); } catch (e) { return []; } }
+function saveDuel(code, key) { try { var l = myDuels().filter(function (x) { return x.c !== code; }); l.unshift({ c: code, k: key, t: Date.now() }); localStorage.setItem('flowi_duels', JSON.stringify(l.slice(0, 20))); } catch (e) { /* private mode */ } }
+function keyOf(code) { var l = myDuels(); for (var i = 0; i < l.length; i++) if (l[i].c === code) return l[i].k; return ''; }
+function duelCard() {
+  if (INFO.duel_site === false) return '';
+  return '<div class="card" style="margin-top:16px"><h2>⚔️ Bellashuv</h2><p class="muted small">10 ta savol, har biriga 20 soniya. Ikkalangizga bir xil savollar — ko\'p to\'g\'ri javob bergan yutadi, teng bo\'lsa tezrog\'i.</p>' +
+    '<div class="row"><button class="btn p" id="drand">🎲 Tasodifiy raqib</button><button class="btn" id="dlink">🔗 Do\'stni chaqirish</button></div>' +
+    '<div id="dmine"></div><div id="drating"></div></div>';
+}
+function bindDuelCard() {
+  var r = document.getElementById('drand'); if (!r) return;
+  r.onclick = function () { duelForm('random'); };
+  document.getElementById('dlink').onclick = function () { duelForm('link'); };
+  var mine = myDuels().slice(0, 5);
+  if (mine.length) Promise.all(mine.map(function (m) { return api('GET', '/api/public/duel?c=' + m.c + '&k=' + m.k).catch(function () { return null; }); })).then(function (list) {
+    var el = document.getElementById('dmine'); if (!el) return;
+    var rows = list.filter(Boolean).map(function (x) {
+      var st = x.status === 'done' ? (x.result === 'win' ? '<b class="ok">Yutdingiz ' + x.me.score + ':' + x.opponent.score + '</b>' : x.result === 'loss' ? '<b class="bad">Yutqazdingiz ' + x.me.score + ':' + x.opponent.score + '</b>' : '<b>Durang</b>')
+        : x.status === 'expired' ? '<span class="muted">Vaqti tugadi</span>' : '<span class="muted">Raqib kutilmoqda</span>';
+      return '<a class="lrow" href="/test?d=' + x.code + '"><span>' + (x.opponent ? esc(x.opponent.name) : (x.mode === 'link' ? 'Havola yuborildi' : 'Raqib qidirilmoqda')) + '</span>' + st + '</a>';
+    }).join('');
+    if (rows) el.innerHTML = '<h3 style="margin:16px 0 6px;text-align:left">Bellashuvlarim</h3>' + rows;
+  });
+  api('GET', '/api/public/rating').then(function (R) {
+    var el = document.getElementById('drating'); if (!el || !R.top.length) return;
+    el.innerHTML = '<h3 style="margin:16px 0 6px;text-align:left">🏆 Oyning reytingi</h3>' + R.top.slice(0, 10).map(function (x) {
+      return '<div class="lrow"><span>' + (['🥇', '🥈', '🥉'][x.no - 1] || x.no + '.') + ' ' + esc(x.name) + (x.place ? ' <span class="muted small">· ' + esc(x.place) + '</span>' : '') + '</span><b>' + x.points + ' ball</b></div>';
+    }).join('') + '<p class="small muted" style="margin-top:6px">G\'alaba — 3 ball, durang — 1 ball.</p>';
+  }).catch(function () {});
+}
+function duelForm(mode, code, from) {
+  app.innerHTML = '<div class="card hero"><div class="big">⚔️</div><h1>' + (code ? esc(from) + ' sizni bellashuvga chaqirdi!' : mode === 'random' ? 'Tasodifiy raqib bilan bellashuv' : 'Do\'stingizni chaqiring') + '</h1>' +
+    '<p class="muted">' + (code ? 'Xuddi shu 10 ta savolga javob bering — kim ko\'proq bilarkan?' : mode === 'random' ? 'Raqib kutib turgan bo\'lsa — darhol, bo\'lmasa siz hozir yechasiz, raqib keyin. Natija shu sahifada chiqadi.' : 'Avval o\'zingiz yechasiz, keyin havolani do\'stingizga yuborasiz.') + '</p>' +
+    '<form id="df"><label>Ismingiz<input name="name" required maxlength="60" placeholder="Masalan: Jasur" value="' + esc(S.name) + '"></label>' +
+    '<label>Telefon raqamingiz<input name="phone" type="tel" inputmode="tel" required maxlength="20" placeholder="90 123 45 67" value="' + esc(S.phone) + '"></label>' +
+    '<label>Shahar yoki ish joyi <span class="muted">(ixtiyoriy)</span><input name="place" maxlength="80" placeholder="Masalan: Toshkent" value="' + esc(S.place) + '"></label>' +
+    '<p class="small muted" style="text-align:left;margin:6px 0 0">Raqibingizga faqat ismingiz va shahringiz ko\'rinadi.</p>' +
+    '<div class="err" id="err"></div><button class="btn p block" style="margin-top:14px" id="dgo">Boshlash →</button></form></div>';
+  document.getElementById('df').onsubmit = function (e) {
+    e.preventDefault(); var f = e.target; var b = document.getElementById('dgo');
+    S.name = f.name.value.trim(); S.phone = f.phone.value.trim(); S.place = f.place.value.trim();
+    if (S.name.length < 2) return showErr('Ismingizni yozing');
+    if (S.phone.replace(/\D/g, '').length < 9) return showErr('Telefon raqamingizni yozing');
+    b.disabled = true;
+    var req = code ? api('POST', '/api/public/duel/join', { code: code, name: S.name, phone: S.phone, place: S.place }) : api('POST', '/api/public/duel', { mode: mode, name: S.name, phone: S.phone, place: S.place });
+    req.then(function (r) { saveDuel(r.duel.code, r.key); duelPlay(r); }).catch(function (err) { b.disabled = false; showErr(err.message); });
+  };
+}
+function duelPlay(r) {
+  DUEL = { code: r.duel.code, key: r.key, mode: r.duel.mode, opponent: r.duel.opponent, q: r.questions, i: 0, answers: {}, sec: r.duel.seconds || 20, until: 0 };
+  duelQ();
+}
+function duelQ() {
+  var D = DUEL; clearInterval(D.tm); D.until = Date.now() + D.sec * 1000;
+  var draw = function () {
+    var x = D.q[D.i]; var ch = D.answers[x.id]; var left = Math.max(0, Math.ceil((D.until - Date.now()) / 1000)); var last = D.i + 1 === D.q.length;
+    app.innerHTML = '<div class="card"><div class="qn" style="display:flex;justify-content:space-between;gap:8px"><span>⚔️ ' + (D.opponent ? esc(S.name) + ' ✕ ' + esc(D.opponent.name) + ' · ' : '') + 'Savol ' + (D.i + 1) + ' / ' + D.q.length + '</span>' +
+      '<span id="dt" style="flex:none" class="' + (left <= 5 ? 'bad' : '') + '">⏱ ' + left + '</span></div>' +
+      '<div class="bar"><i id="dbar" style="width:' + (left / D.sec * 100) + '%"></i></div><div class="q">' + esc(x.q) + '</div>' +
+      x.a.map(function (o, k) { return '<button class="opt' + (ch === o.i ? ' sel' : '') + '" data-o="' + o.i + '"><b>' + 'ABCDEF'[k] + ')</b> ' + esc(o.text) + '</button>'; }).join('') +
+      '<div class="row"><button class="btn p" id="dn"' + (ch === undefined ? ' disabled' : '') + '>' + (last ? '✓ Yakunlash' : 'Keyingi savol →') + '</button></div></div>';
+    Array.prototype.forEach.call(app.querySelectorAll('[data-o]'), function (b) { b.onclick = function () { D.answers[x.id] = Number(b.getAttribute('data-o')); draw(); }; });
+    document.getElementById('dn').onclick = next;
+  };
+  var next = function () { if (D.i + 1 < D.q.length) { D.i++; duelQ(); window.scrollTo(0, 0); } else finish(); };
+  var finish = function () {
+    clearInterval(D.tm);
+    app.innerHTML = '<div class="card hero"><p class="muted">Natija hisoblanmoqda…</p></div>';
+    api('POST', '/api/public/duel/answer', { code: D.code, key: D.key, answers: D.answers }).then(function (r) { DUEL = null; duelView(r.duel, r.results); })
+      .catch(function (err) { app.innerHTML = '<div class="card hero"><p class="bad">' + esc(err.message) + '</p><a class="btn p" href="/test">Bosh sahifa</a></div>'; });
+  };
+  D.tm = setInterval(function () {
+    var left = Math.max(0, Math.ceil((D.until - Date.now()) / 1000));
+    var el = document.getElementById('dt'); if (el) { el.textContent = '⏱ ' + left; el.className = left <= 5 ? 'bad' : ''; }
+    var bar = document.getElementById('dbar'); if (bar) bar.style.width = (left / D.sec * 100) + '%';
+    if (left <= 0) next();
+  }, 250);
+  draw();
+}
+function duelView(x, wrong) {
+  var sec = function (ms) { return ms == null ? '' : Math.floor(ms / 60000) + ':' + ('0' + Math.round((ms % 60000) / 1000)).slice(-2); };
+  var me = x.me || {}; var op = x.opponent; var link = location.origin + '/test?d=' + x.code;
+  var body;
+  if (x.status === 'done') {
+    body = '<div class="vs"><div class="' + (x.result === 'win' ? 'w' : '') + '">' + (x.result === 'win' ? '👑' : '&nbsp;') + '<b>Siz</b><div class="big">' + me.score + '</div><small>' + sec(me.ms) + '</small></div><i>VS</i>' +
+      '<div class="' + (x.result === 'loss' ? 'w' : '') + '">' + (x.result === 'loss' ? '👑' : '&nbsp;') + '<b>' + esc(op.name) + '</b><div class="big">' + op.score + '</div><small>' + sec(op.ms) + '</small></div></div>' +
+      '<h2 class="' + (x.result === 'win' ? 'ok' : x.result === 'loss' ? 'bad' : '') + '" style="margin-top:10px">' + (x.result === 'win' ? 'Siz yutdingiz! +3 ball' : x.result === 'loss' ? 'Bu safar raqib yutdi' : 'Durang! +1 ball') + '</h2>';
+  } else {
+    body = '<div class="big">⏳</div><h2>Javoblaringiz qabul qilindi</h2><p class="muted">' + (x.status === 'expired' ? 'Raqib vaqtida o\'ynamadi — bellashuv yopildi.' : op ? esc(op.name) + ' hali o\'ynamadi.' : x.mode === 'link' ? 'Endi havolani do\'stingizga yuboring. U o\'ynagach natija shu sahifada chiqadi.' : 'Raqib topilishi bilan u ham shu savollarga javob beradi. Natijani shu sahifada ko\'rasiz.') + '</p>' +
+      (x.mode === 'link' && x.joinable ? '<div class="row"><a class="btn p" target="_blank" rel="noopener" href="https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent('Keling, bellashamiz! Ofitsantlik bo\'yicha 10 ta savol — kim ko\'proq biladi?') + '">✈️ Telegramda yuborish</a><button class="btn" id="dcopy">📋 Nusxalash</button></div>' : '') +
+      '<button class="btn block" id="drefresh" style="margin-top:10px">↻ Natijani tekshirish</button>';
+  }
+  app.innerHTML = '<div class="card hero">' + body + '<div class="row"><a class="btn" href="/test">Bosh sahifa</a><button class="btn p" id="dnew">⚔️ Yangi bellashuv</button></div></div>' +
+    ((wrong || []).length ? '<h2 style="margin:20px 0 4px">Xato javoblar</h2>' + wrong.map(function (w) { return '<div class="rev"><b>' + esc(w.q) + '</b>' + (w.chosen ? '<div class="dont">❌ ' + esc(w.chosen) + '</div>' : '') + '<div class="do">✅ ' + esc(w.right) + '</div>' + (w.why ? '<div class="why">💡 ' + esc(w.why) + '</div>' : '') + '</div>'; }).join('') : '') + cta();
+  document.getElementById('dnew').onclick = function () { duelForm('random'); };
+  var cp = document.getElementById('dcopy'); if (cp) cp.onclick = function () { (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(function () { cp.textContent = '✓ Nusxalandi'; }).catch(function () { prompt('Havola:', link); }); };
+  var rf = document.getElementById('drefresh'); if (rf) rf.onclick = function () { openDuel(x.code); };
+}
+// /test?d=CODE — a link: my own duel (its result), or a friend's call to join.
+function openDuel(code) {
+  var k = keyOf(code);
+  app.innerHTML = '<div class="card hero"><p class="muted">Yuklanmoqda…</p></div>';
+  api('GET', '/api/public/duel?c=' + encodeURIComponent(code) + '&k=' + k).then(function (x) {
+    if (x.me) return duelView(x);
+    if (x.joinable) return duelForm('join', x.code, x.from.name);
+    app.innerHTML = '<div class="card hero"><div class="big">⚔️</div><h1>Bu bellashuvga qo\'shilib bo\'lmaydi</h1><p class="muted">' + (x.status === 'expired' ? 'Vaqti tugagan.' : 'Unga allaqachon boshqa odam qo\'shilgan.') + '</p><button class="btn p" id="dnew">⚔️ Yangi bellashuv</button></div>' + cta();
+    document.getElementById('dnew').onclick = function () { duelForm('random'); };
+  }).catch(function (err) { app.innerHTML = '<div class="card hero"><div class="big">❌</div><h1>' + esc(err.message) + '</h1><a class="btn p" href="/test">Bosh sahifa</a></div>'; });
+}
+
 function closed() {
   app.innerHTML = '<div class="card hero"><div class="big">🔒</div><h1>Test vaqtincha yopiq</h1><p class="muted">Keyinroq qayta kiring. Sertifikatni tekshirish uchun havoladagi raqamdan foydalaning.</p><a class="btn p" href="/">Bosh sahifa</a></div>' + cta();
 }
-var code = new URLSearchParams(location.search).get('c');
+var params = new URLSearchParams(location.search);
+var code = params.get('c');
+var dcode = params.get('d');
 if (code) verify(code);
-else api('GET', '/api/public/info').then(function (j) { if (j && j.academy_site === false) closed(); else intro(); }).catch(function () { intro(); });
+else api('GET', '/api/public/info').then(function (j) {
+  INFO = j || {};
+  if (dcode) return openDuel(dcode);
+  if (INFO.academy_site === false) closed(); else intro();
+}).catch(function () { if (dcode) openDuel(dcode); else intro(); });
 </script>
 </body>
 </html>

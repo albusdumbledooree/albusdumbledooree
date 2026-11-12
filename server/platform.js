@@ -13,7 +13,7 @@ const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 const { open } = require('./db');
 const { createApi, MODULES, BUSINESS_TYPES, SHOP_TYPES } = require('./api');
-const { createPublicAcademy } = require('./academy');
+const { createPublicAcademy, createDuels } = require('./academy');
 const { createHub } = require('./events');
 const { snapshot, listTenantBackups, stampNow } = require('./backup');
 const { createLeads } = require('./leads');
@@ -147,7 +147,7 @@ function createPlatform(dataDir) {
     const hub = createHub();
     ctx = { id, db, hub, row, file };
     ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row, plan: () => planFor(ctx.row), branches: () => branchesOf(id), file, telegram: telegramFor(id), helpbot: helpbot.forTenant(id), secret, academy: () => academy.content(),
-      academyRegister: (info) => academy.register({ ...info, tenant_id: id, tenant_name: ctx.row.name }) });
+      academyRegister: (info) => academy.register({ ...info, tenant_id: id, tenant_name: ctx.row.name }), academyDuels: duels });
     contexts.set(id, ctx);
     return ctx;
   }
@@ -197,6 +197,10 @@ function createPlatform(dataDir) {
   const leads = createLeads({ pdb, pget, pset, now });
   // FLOWI Akademiya: the lessons every business gets (editable here) and the open test on the site.
   const academy = createPublicAcademy(pdb, { pget, pset, now });
+  // Bellashuv: duels between workers (of one business or of any), site visitors, or by a link; a result reaches the worker's screen.
+  const duels = createDuels(pdb, { content: () => academy.content(), now,
+    notify: (tid, data) => { const c = contexts.get(tid); if (c) c.hub.publish('duel', data, { userIds: [data.to] }); },
+    globalOn: () => pget('academy_duel_global', '1') !== '0', siteOn: () => pget('academy_duel_site', '1') !== '0' && academy.siteOn() });
   // The second bot: payments and questions of the businesses (Telegram → admin chat; "+1 oy" moves the term).
   const helpbot = createHelpBot({ pdb, pget, pset, now, tenant: (id) => q('SELECT * FROM tenants WHERE id = ?').get(id), planFor: (row) => planFor(row),
     setPaidUntil: (id, ms) => {
@@ -555,6 +559,7 @@ function createPlatform(dataDir) {
       terms: getTerms(),
       support: supportFor(null),
       academy_site: academy.siteOn(),
+      duel_site: pget('academy_duel_site', '1') !== '0' && academy.siteOn(),
     };
   }
 
@@ -922,6 +927,11 @@ function createPlatform(dataDir) {
     ['PUT', '/api/platform/academy', true, ({ body }) => academy.save(body)],
     ['POST', '/api/platform/academy/reset', true, () => academy.reset()],
     ['PUT', '/api/platform/academy/site', true, ({ body }) => academy.setSite(!!body.on)],
+    ['PUT', '/api/platform/academy/duel', true, ({ body }) => {
+      if (body.global !== undefined) pset('academy_duel_global', body.global ? '1' : '0');
+      if (body.site !== undefined) pset('academy_duel_site', body.site ? '1' : '0');
+      return { ok: true, global: pget('academy_duel_global', '1') !== '0', site: pget('academy_duel_site', '1') !== '0' };
+    }],
     ['GET', '/api/platform/academy/certs', true, ({ query }) => { syncAcademyCerts(); return academy.certs({ query }); }],
     ['GET', '/api/platform/helpbot', true, () => helpbot.status()],
     ['PUT', '/api/platform/helpbot', true, helpbot.setToken],
@@ -951,7 +961,8 @@ function createPlatform(dataDir) {
         const base = { id: t.id, name: t.name, code: t.code, mode: t.academy_mode, price: t.academy_price, plan: planFor(t).name, plan_full: planFor(t).modules.includes('academy') };
         try { return { ...base, ...context(t.id).api.academyBrief() }; } catch { return { ...base, error: true }; }
       });
-    return { content: academy.content(), custom: academy.custom(), site: academy.siteOn(), public: academy.stats(), tenants };
+    return { content: academy.content(), custom: academy.custom(), site: academy.siteOn(), public: academy.stats(), tenants,
+      duel: { global: pget('academy_duel_global', '1') !== '0', site: pget('academy_duel_site', '1') !== '0', stats: duels.stats(), top: duels.rating({ scope: 'global' }).top.slice(0, 5), businesses: duels.rating({ scope: 'global' }).businesses.slice(0, 5) } };
   }
 
   function handle(method, pathname, args) {
@@ -977,7 +988,7 @@ function createPlatform(dataDir) {
     pdb.close();
   }
 
-  return { handle, byCode, byToken, byGuestKey, remindTick, tgBackupTick, sendBackups, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, seoVerify, desktopTick, submitLead: leads.submit, academyStart: academy.start, academyFinish: academy.finish, academyCert: academy.cert, helpRemindTick: (o) => helpbot.remindTick(o) };
+  return { handle, byCode, byToken, byGuestKey, remindTick, tgBackupTick, sendBackups, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, seoVerify, desktopTick, submitLead: leads.submit, academyStart: academy.start, academyFinish: academy.finish, academyCert: academy.cert, duels, duelSiteOn: () => pget('academy_duel_site', '1') !== '0' && academy.siteOn(), helpRemindTick: (o) => helpbot.remindTick(o) };
 }
 
 module.exports = { createPlatform };

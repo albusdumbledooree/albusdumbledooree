@@ -2,6 +2,17 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.42.0 — Bellashuv: jamoa, boshqa choyxonalar, havola va saytda; oylik reyting
+
+- **Akademiya → ⚔️ Bellashuv**: ikki kishiga bir xil 10 ta savol, har biriga 20 soniya. Ko'p to'g'ri javob bergan yutadi, teng bo'lsa — tezroq yechgan. Javoblar serverda tekshiriladi, vaqtni ham server o'lchaydi.
+- **O'z jamoam**: hamkasbni tanlab chaqirasiz, unga darhol xabar (ovoz va bildirishnoma) boradi — "Qabul qilish" yoki "Rad etish".
+- **Boshqa choyxonalar**: butun FLOWI bo'yicha tasodifiy raqib. Kutib turgan bo'lsa darhol, bo'lmasa siz hozir yechasiz, raqib keyin — natija kelganda xabar keladi.
+- **Havola orqali**: do'stingizga Telegramda yuborasiz, u `flowi.uz/test?d=…` da (dasturisiz) o'ynaydi.
+- **Saytda**: flowi.uz/test sahifasida tasodifiy raqib, do'stni chaqirish, "Bellashuvlarim" va oyning reytingi. Testdan keyin "Do'stingizni bellashuvga chaqiring" tugmasi.
+- **Oylik reyting**: g'alaba — 3 ball, durang — 1. Jamoa, butun FLOWI (va choyxonalar reytingi), sayt. Boshqa choyxonaga faqat ism va choyxona nomi, saytda faqat ism ko'rinadi.
+- **Boshliq** (Akademiya → Xodimlar): har xodimning g'alaba/durang/mag'lubiyati; bellashuvni, boshqa choyxonalar bilan bellashuvni va ish vaqtida bellashuvni yoqish/o'chirish. Standart holatda ochiq cheki yoki smenasi bor xodim bellashuv boshlay olmaydi.
+- **Platforma → Akademiya**: bizneslararo va saytdagi bellashuvni yoqish/o'chirish, oxirgi 30 kun soni, oyning eng yaxshilari va bizneslar reytingi.
+
 ## 1.41.0 — Sertifikatda QR kod, urinish raqami, platformada sertifikatlar
 
 - Har bir yakuniy test **nechanchi urinish** ekani yoziladi: natijada, sertifikatda ("2-urinishda o'tdi"), boshliq ro'yxatida (urinishlar va "55% → 90%" tarixi), platformada.

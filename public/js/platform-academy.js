@@ -40,6 +40,11 @@ function academyHtml() {
     <div class="card pa-site" style="margin-bottom:14px"><div class="row" style="flex-wrap:nowrap"><div class="grow"><b>${icon('link', 16)} Saytda ochiq test</b>
         <p class="small muted" style="margin:4px 0 0">${A.site ? `Hamma uchun: <a href="/test" target="_blank" rel="noopener"><b>${esc(location.host)}/test</b></a> — bosh sahifada ham havola bor.` : "O'chiq: bosh sahifada havola yo'q, /test sahifasida \"Test vaqtincha yopiq\" chiqadi."} Berilgan sertifikatlarni tekshirish (<b>/test?c=KOD</b>) doim ishlaydi.</p></div>
       <label class="switch" title="Saytdagi testni yoqish / o'chirish"><input type="checkbox" id="pa-site" ${A.site ? 'checked' : ''}><span></span></label></div></div>
+    ${A.duel ? `<div class="card" style="margin-bottom:14px"><b>⚔️ Bellashuv</b> <span class="small muted">· 30 kunda ${A.duel.stats.all} ta (${A.duel.stats.done} tasi tugagan): jamoa ${A.duel.stats.team}, bizneslararo ${A.duel.stats.global}, havola ${A.duel.stats.link}, sayt ${A.duel.stats.site}</span>
+      <div class="switch-row"><div class="grow"><b>Bizneslararo bellashuv</b><span class="small muted">Xodimlar butun FLOWI bo'yicha tasodifiy raqib bilan bellashadi (boshliq o'z biznesida o'chira oladi)</span></div><label class="switch"><input type="checkbox" data-pduel="global" ${A.duel.global ? 'checked' : ''}><span></span></label></div>
+      <div class="switch-row"><div class="grow"><b>Saytda bellashuv</b><span class="small muted">flowi.uz/test — tasodifiy raqib, do'stga havola va oylik reyting</span></div><label class="switch"><input type="checkbox" data-pduel="site" ${A.duel.site ? 'checked' : ''}><span></span></label></div>
+      ${A.duel.top.length ? `<p class="small" style="margin:8px 0 0">🏆 Oyning eng yaxshilari: ${A.duel.top.map((r) => `${r.no}. <b>${esc(r.name)}</b> (${esc(r.place)}) — ${r.points}`).join(' · ')}</p>` : ''}
+      ${A.duel.businesses.length ? `<p class="small" style="margin:4px 0 0">🏅 Bizneslar: ${A.duel.businesses.map((b) => `${b.no}. <b>${esc(b.name)}</b> — ${b.points}`).join(' · ')}</p>` : ''}</div>` : ''}
     <div class="pa-grid">
       <div class="card"><div class="row" style="margin-bottom:8px"><b class="grow">${icon('book-open', 16)} Darslar</b>
           <span class="small muted">${C.modules.length} modul · ${lessons} dars · ${questions} savol${A.custom ? ' · <span class="chip">tahrirlangan</span>' : ''}</span></div>
@@ -91,6 +96,9 @@ async function saveAcademy(content) {
 const paClone = () => JSON.parse(JSON.stringify(PA.data.content));
 
 function bindAcademy(root) {
+  root.querySelectorAll('[data-pduel]').forEach((c) => c.onchange = async () => {
+    try { const r = await PUT('/api/platform/academy/duel', { [c.dataset.pduel]: c.checked }); PA.data.duel.global = r.global; PA.data.duel.site = r.site; toast('Saqlandi', 'ok'); } catch (e) { c.checked = !c.checked; toastError(e); }
+  });
   const cq = root.querySelector('#pa-cq');
   if (cq) { let tm = null; cq.oninput = () => { clearTimeout(tm); tm = setTimeout(async () => { PA.certQ = cq.value.trim(); try { await loadCerts(); render(); const el = document.getElementById('pa-cq'); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } } catch (e) { toastError(e); } }, 350); }; }
   root.querySelectorAll('[data-csrc]').forEach((b) => b.onclick = async () => { PA.certSrc = b.dataset.csrc; try { await loadCerts(); render(); } catch (e) { toastError(e); } });

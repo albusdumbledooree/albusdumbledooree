@@ -77,7 +77,7 @@ function routeModule(pattern) {
 // opts.hub: live-event hub of this choyxona; opts.tokenPrefix marks which choyxona a session token belongs to;
 // opts.tenant(): the choyxona's platform record (code, name, paid_until); opts.plan(): its plan (sections, staff limit);
 // opts.file: its database file.
-function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () => null, branches = () => [], file = null, telegram = null, helpbot = null, secret = NO_BOX, academy = null, academyRegister = null } = {}) {
+function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () => null, branches = () => [], file = null, telegram = null, helpbot = null, secret = NO_BOX, academy = null, academyRegister = null, academyDuels = null } = {}) {
   const events = hub;
   // Shared devices (the staff-list screen) get tokens of their own: "d<choyxona>_…".
   const devicePrefix = tokenPrefix.replace(/^t/, 'd');
@@ -110,6 +110,47 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   const academyMode = () => { const m = (tenant() || {}).academy_mode; return ['full', 'free', 'off'].includes(m) ? m : 'plan'; };
   const acad = createAcademy(db, { ...(academy ? { content: academy } : {}), register: academyRegister, hidden: () => academyMode() === 'off',
     full: () => { const m = academyMode(); return m === 'full' || (m === 'plan' && moduleOn('academy')); } });
+  // Bellashuv: the duels live on the platform (so workers of different businesses can meet); here only who may play.
+  const tenantNo = Number((/^t(\d+)_/.exec(tokenPrefix) || [])[1]) || 0;
+  function duelGate(user, starting) {
+    if (!academyDuels || acad.hidden()) throw new HttpError(404, 'Akademiya bu biznesda yoqilmagan');
+    const st = settings();
+    if (!st.duel_on) throw new HttpError(403, "Bellashuv boshliq tomonidan o'chirilgan");
+    const m = academyMode();
+    if (!(m === 'full' || (m === 'plan' && moduleOn('academy')))) throw new HttpError(403, 'Bellashuv Biznes va Pro tariflarida');
+    if (starting && !st.duel_work) {
+      const working = (work.state(user).open) || q("SELECT 1 FROM orders WHERE waiter_id = ? AND status = 'open' LIMIT 1").get(user.id);
+      if (working) throw new HttpError(403, "Ish vaqtida bellashuv o'chiq — ochiq chekingiz yoki smenangiz tugagach o'ynang");
+    }
+    return academyDuels.forWorker({ tenant: tenantNo, user: user.id, name: user.name, place: st.name });
+  }
+  const duelRoutes = {
+    home: ({ user }) => {
+      const st = settings();
+      const base = { on: st.duel_on, global: st.duel_global, work: st.duel_work, size: academyDuels ? academyDuels.DUEL_SIZE : 10, seconds: academyDuels ? academyDuels.DUEL_SECONDS : 20 };
+      let w; try { w = duelGate(user, false); } catch (e) { return { ...base, blocked: e.message, list: [], colleagues: [] }; }
+      const tally = academyDuels.tally(tenantNo);
+      const colleagues = q("SELECT id, name, role, position FROM users WHERE active = 1 AND app != 0 AND id != ? AND role != 'owner' ORDER BY name").all(user.id)
+        .map((u) => ({ ...u, ...(tally[u.id] || { win: 0, draw: 0, loss: 0 }), online: hub.isOnline ? hub.isOnline(u.id) : false }));
+      return { ...base, list: w.list(), colleagues, mine: tally[user.id] || { win: 0, draw: 0, loss: 0 } };
+    },
+    create: ({ user, body }) => {
+      const w = duelGate(user, true);
+      if (body.mode === 'global' && !settings().duel_global) throw new HttpError(403, "Boshqa choyxonalar bilan bellashuv boshliq tomonidan o'chirilgan");
+      const colleague = body.mode === 'team' ? q("SELECT id, name FROM users WHERE id = ? AND active = 1 AND app != 0 AND id != ?").get(Number(body.user_id) || 0, user.id) : null;
+      return w.create(body, colleague);
+    },
+    accept: ({ user, params }) => duelGate(user, true).accept(params.id),
+    decline: ({ user, params }) => duelGate(user, false).decline(params.id),
+    answer: ({ user, params, body }) => duelGate(user, false).answer(params.id, body),
+    get: ({ user, params }) => duelGate(user, false).get(params.id),
+    rating: ({ user, query }) => {
+      duelGate(user, false);
+      const scope = ['team', 'flowi', 'site'].includes(query.scope) ? query.scope : 'team';
+      return academyDuels.rating({ scope: scope === 'flowi' ? 'global' : scope, tenant: tenantNo, me: { kind: 'app', tenant: tenantNo, user: user.id } });
+    },
+    tally: () => (academyDuels ? academyDuels.tally(tenantNo) : {}),
+  };
 
   function tx(fn) {
     db.exec('BEGIN');
@@ -140,6 +181,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     out.waiter_cancel = out.waiter_cancel === '1';
     // The cashier sees the checks' list; the day's (period's) total takings only when the boss allows.
     out.cashier_sums = out.cashier_sums === '1';
+    // Akademiya duels: on unless the boss turns them off; with other businesses too; during work only when allowed.
+    out.duel_on = out.duel_on !== '0';
+    out.duel_global = out.duel_global !== '0';
+    out.duel_work = out.duel_work === '1';
     out.has_cancel_code = !!out.cancel_code_hash;
     delete out.cancel_code_hash;
     out.auto_lock_minutes = Number(out.auto_lock_minutes) || 0;
@@ -509,7 +554,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   // ---------- Settings ----------
   function updateSettings({ user, body }) {
-    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'receipt_logo_size', 'receipt_group', 'receipt_per_person', 'room_assign', 'delivery_fee', 'big_box_from', 'cashier_sums',
+    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'receipt_logo_size', 'receipt_group', 'receipt_per_person', 'room_assign', 'delivery_fee', 'big_box_from', 'cashier_sums', 'duel_on', 'duel_global', 'duel_work',
       'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo',
       'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', 'cashback_pct', 'qr_order', 'qr_from', 'qr_to',
       'geo_lat', 'geo_lng', 'geo_radius', 'work_from', 'expense_groups', 'staff_types', ...GEO_FLAGS, ...OWNER_SETTINGS];
@@ -591,7 +636,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
         continue;
       }
       if (k === 'waiter_cancel') v = v ? '1' : '0';
-      if (k === 'cashier_sums') v = v ? '1' : '0';
+      if (k === 'cashier_sums' || k === 'duel_on' || k === 'duel_global' || k === 'duel_work') v = v ? '1' : '0';
       if (k === 'auto_lock_minutes') v = int(v, 'Avtomatik qulf', { max: 240 });
       if (k === 'service_type' && !['percent', 'per_guest'].includes(v)) throw new HttpError(400, "Xizmat haqi turi noto'g'ri");
       if (k === 'service_per_guest') v = int(v, 'Odam boshiga xizmat haqi', { max: 10_000_000 });
@@ -2563,8 +2608,15 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['POST', '/api/academy/lesson', ALL, acad.lessonDone],
     ['POST', '/api/academy/test', ALL, acad.startTest],
     ['POST', '/api/academy/test/:id', ALL, acad.finishTest],
-    ['GET', '/api/academy/team', MANAGERS, acad.team],
+    ['GET', '/api/academy/team', MANAGERS, (a) => { const r = acad.team(a); const t = duelRoutes.tally(); for (const x of r.rows) x.duel = t[x.id] || null; return r; }],
     ['GET', '/api/academy/cert/:id', ALL, acad.certificate],
+    ['GET', '/api/academy/duels', ALL, duelRoutes.home],
+    ['POST', '/api/academy/duels', ALL, duelRoutes.create],
+    ['GET', '/api/academy/duels/:id', ALL, duelRoutes.get],
+    ['POST', '/api/academy/duels/:id/accept', ALL, duelRoutes.accept],
+    ['POST', '/api/academy/duels/:id/decline', ALL, duelRoutes.decline],
+    ['POST', '/api/academy/duels/:id/answer', ALL, duelRoutes.answer],
+    ['GET', '/api/academy/rating', ALL, duelRoutes.rating],
   ].map(([method, pattern, roles, handler]) => {
     const keys = [];
     const re = new RegExp('^' + pattern.replace(/:(\w+)/g, (_, k) => { keys.push(k); return '(\\d+)'; }) + '$');

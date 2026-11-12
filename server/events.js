@@ -40,7 +40,10 @@ function createHub() {
     for (const c of clients) if (c.token && tokens.has(c.token)) c.res.end();
   }
 
-  return { subscribe, publish, disconnectUser, disconnectSessions, size: () => clients.size };
+  // Has this person a screen open right now (any device)?
+  function isOnline(userId) { for (const c of clients) if (c.user.id === userId) return true; return false; }
+
+  return { subscribe, publish, disconnectUser, disconnectSessions, isOnline, size: () => clients.size };
 }
 
 module.exports = { createHub };

@@ -194,6 +194,12 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       if (pathname === '/api/public/test' && req.method === 'POST') return reply(platform.academyStart({ body, ip }));
       if (pathname === '/api/public/test/finish' && req.method === 'POST') return reply(platform.academyFinish({ body }));
       if (pathname === '/api/public/cert' && req.method === 'GET') return reply(platform.academyCert(String(query.c || '')));
+      // Bellashuv on the site: start (a random opponent or a link), see a link, join it, send the answers; the month's rating.
+      if (pathname === '/api/public/duel' && req.method === 'POST') return reply(platform.duels.siteCreate(body));
+      if (pathname === '/api/public/duel' && req.method === 'GET') return reply(platform.duels.linkInfo(String(query.c || ''), String(query.k || '')));
+      if (pathname === '/api/public/duel/join' && req.method === 'POST') return reply(platform.duels.siteJoin(body));
+      if (pathname === '/api/public/duel/answer' && req.method === 'POST') return reply(platform.duels.siteAnswer(body));
+      if (pathname === '/api/public/rating' && req.method === 'GET') return reply(platform.duels.rating({ scope: query.scope === 'flowi' ? 'global' : 'site' }));
 
       // Login screen: which choyxona does this code belong to?
       if (pathname === '/api/info' && req.method === 'GET') {
