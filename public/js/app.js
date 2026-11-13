@@ -34,7 +34,7 @@ function navOrder(role) {
   }[role];
 }
 const CHILD_OF = { staffday: 'money', fixed: 'money', pnl: 'money', room: 'rooms', order: 'rooms', soboy: 'rooms', dostavka: 'rooms', reports: 'money', finance: 'money', payroll: 'money', attendance: 'staff', customers: 'money', inventory: 'money', branches: 'money',
-  profit: 'money', purchases: 'money', debts: 'money', masters: 'money', academy: 'staff' };
+  profit: 'money', purchases: 'money', debts: 'money', masters: 'money', academy: 'staff', ratings: 'money' };
 let currentView = null;
 let currentParams = [];
 let currentData = null;

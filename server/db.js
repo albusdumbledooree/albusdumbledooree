@@ -884,6 +884,17 @@ CREATE INDEX IF NOT EXISTS idx_academy_tests_user ON academy_tests(user_id, star
   // A courier works with a waiter's rights plus the delivery screen.
   addCol('users', 'delivery', 'INTEGER NOT NULL DEFAULT 0');
   addCol('orders', 'cancel_total', 'INTEGER NOT NULL DEFAULT 0');
+  // The boss was already told this check has been open too long (one message per check).
+  addCol('orders', 'alerted_open', 'INTEGER NOT NULL DEFAULT 0');
+  // The key of the "rate us" page printed on the check, and the marks guests gave.
+  addCol('orders', 'rate_key', "TEXT NOT NULL DEFAULT ''");
+  db.exec(`CREATE TABLE IF NOT EXISTS order_ratings (
+    order_id INTEGER PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
+    waiter_id INTEGER,
+    stars INTEGER NOT NULL,
+    comment TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL
+  ); CREATE INDEX IF NOT EXISTS idx_order_ratings_at ON order_ratings(created_at);`);
   // Door shop: a sale with an advance (bosh to'lov). balance = what is still owed on this very check, due_at = when.
   if (!colsOf('orders').includes('balance')) {
     db.exec(`ALTER TABLE orders ADD COLUMN balance INTEGER NOT NULL DEFAULT 0;

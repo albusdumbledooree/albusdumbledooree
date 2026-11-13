@@ -380,6 +380,7 @@ const MONEY_PAGES = () => [
   ['masters', 'hammer', t('Ustalar va ishlar'), t("O'lchov, yetkazish, o'rnatish va ustalarga to'lov")],
   ['customers', 'book-user', t('Mijozlar'), t('Qarz daftari, keshbek va doimiy mijozlar')],
   ['inventory', 'warehouse', t('Ombor'), t("Masalliqlar qoldig'i, kirim va tex-karta")],
+  ['ratings', 'star', t('Mijoz baholari'), t("Chekdagi QR orqali berilgan baho va izohlar")],
   ['branches', 'network', t('Filiallar'), t("Hamma filial savdosi bitta jadvalda")],
 ];
 Views.money = {
@@ -875,9 +876,10 @@ Views.inventory = {
         ${kpi(t('Ombordagi qiymat'), money(d.value), t('qoldiq × oxirgi narx'), '', 'coins')}
         ${kpi(t('Kam qolgan'), d.low, low.map((r) => esc(r.name)).join(', '), d.low ? 'bad' : 'good', 'triangle-alert')}</div>
       <div class="card">${d.rows.length ? `<div class="table-wrap"><table>
-        <tr><th>${t('Masalliq')}</th><th class="right">${t('Qoldiq')}</th><th class="right">${t('Minimal')}</th><th class="right">${t('Narx (1 birlik)')}</th><th class="right">${t('Qiymat')}</th><th class="right">${t('Taomlarda')}</th><th></th></tr>
+        <tr><th>${t('Masalliq')}</th><th class="right">${t('Qoldiq')}</th><th class="right" title="${esc(t("Oxirgi 7 kunlik sarf bo'yicha"))}">${t('Yetadi')}</th><th class="right">${t('Minimal')}</th><th class="right">${t('Narx (1 birlik)')}</th><th class="right">${t('Qiymat')}</th><th class="right">${t('Taomlarda')}</th><th></th></tr>
         ${d.rows.map((r) => `<tr><td><b>${esc(r.name)}</b></td>
           <td class="right num ${r.low ? 'red' : ''}"><b>${qtyText(r.stock, r.unit)}</b>${r.low ? ` ${icon('triangle-alert', 14)}` : ''}</td>
+          <td class="right">${r.days_left === null ? '<span class="muted">—</span>' : `<span class="chip ${r.days_left <= 2 ? 'red' : r.days_left <= 5 ? 'orange' : 'green'}" title="${esc(t('Kuniga {0} sarflanadi', qtyText(Math.round(r.daily * 100) / 100, r.unit)))}">${r.days_left < 1 ? t('bugun') : t('{0} kun', Math.floor(r.days_left))}</span>`}</td>
           <td class="right num">${r.min_stock ? qtyText(r.min_stock, r.unit) : '—'}</td><td class="right num">${money(r.cost)}</td><td class="right num">${money(Math.max(0, r.value))}</td>
           <td class="right">${r.dishes || '—'}</td>
           <td class="actions">${can('owner', 'admin', 'chef') ? `<button class="btn sm" data-wo="${r.id}">${icon('trash-2', 15)} ${t('Chiqarish')}</button><button class="btn sm" data-cnt="${r.id}">${icon('list', 15)} ${t('Sanoq')}</button>` : ''}
@@ -1706,9 +1708,10 @@ Views.settings = {
         <div class="row" style="margin-top:14px;gap:8px"><button class="btn primary">${icon('check', 18)} ${t('Saqlash')}</button>
           <button type="button" class="btn" id="rc-test">${icon('printer', 18)} ${t('Sinov cheki')}</button></div></div>
         <div class="rc-right"><div class="small muted rc-live">${t("Jonli ko'rinish")}</div><iframe id="rc-preview" title="${esc(t("Jonli ko'rinish"))}"></iframe></div></div></form>
-    </div>`;
+    </div>${receiptQrSettingsHtml()}`;
   },
   bind_look(root) {
+    bindReceiptQrSettings(root);
     const s = App.settings;
     const code = App.tenant.code;
     const cur = { ...(s.lock_bg || { mode: 'default' }) };
@@ -2327,4 +2330,54 @@ Views.panel = {
     const flat = this._links.flatMap(([, , , items]) => items);
     root.querySelectorAll('[data-pl]').forEach((b) => b.onclick = () => flat[Number(b.dataset.pl)].act());
   },
+};
+
+
+// ---------- QR codes at the foot of the check: "rate us" and "pay by phone" (all off until the boss turns them on) ----------
+function receiptQrSettingsHtml() {
+  if (!can('owner') || isShop()) return '';
+  const s = App.settings;
+  const sw = (k, title, hint) => `<div class="switch-row"><div class="grow"><b>${title}</b><span class="small muted">${hint}</span></div><label class="switch"><input type="checkbox" data-qrset="${k}" ${s[k] ? 'checked' : ''}><span></span></label></div>`;
+  const inp = (k, label, ph) => `<label class="field" style="flex:1;min-width:160px">${label}<input data-qrset="${k}" value="${esc(s[k] || '')}" placeholder="${esc(ph)}" autocomplete="off" spellcheck="false"></label>`;
+  return `<div class="card" style="max-width:760px;margin-top:14px"><h3 style="margin:0 0 4px">${icon('qr-code', 18)} ${t('Chekdagi QR kodlar')}</h3>
+    <p class="small muted">${t("Mijoz cheki va hisob varag'ining pastida chiqadi. Hammasi standart holatda o'chiq.")}</p>
+    ${moduleOn('ratings') ? sw('rating_on', t('Mijoz bahosi'), t("Mehmon QR'ni skanerlab 1–5 yulduz qo'yadi. 1–3 yulduz — boshliqqa darhol Telegram xabar. Natijalar: Moliya → Mijoz baholari."))
+      : `<div class="switch-row"><div class="grow"><b>${t('Mijoz bahosi')} ${icon('lock', 14)}</b><span class="small muted">${t('Biznes va Pro tariflarida')}</span></div></div>`}
+    ${sw('pay_payme_on', t("Payme orqali to'lash"), t("Summa QR ichida — mehmon faqat tasdiqlaydi."))}
+    <div class="row" style="gap:10px;flex-wrap:wrap;${s.pay_payme_on ? '' : 'display:none'}" data-qrbox="pay_payme_on">${inp('pay_payme_id', t('Payme kassa ID (merchant ID)'), '5e730e8e0b852a417aa49ceb')}${inp('pay_payme_field', t('Hisob maydoni nomi'), 'order_id')}</div>
+    ${sw('pay_click_on', t("Click orqali to'lash"), t("Summa QR ichida — mehmon faqat tasdiqlaydi."))}
+    <div class="row" style="gap:10px;flex-wrap:wrap;${s.pay_click_on ? '' : 'display:none'}" data-qrbox="pay_click_on">${inp('pay_click_service', t('Click service ID'), '12345')}${inp('pay_click_merchant', t('Click merchant ID'), '6789')}</div>
+    <p class="small muted" style="margin:10px 0 0">${icon('info', 14)} ${t("ID'larni Payme Business va Click Merchant kabinetidan olasiz. To'lov kelganini kassir o'sha ilovada ko'rib, chekni yopadi — dastur buni bankdan o'zi bilmaydi. Avval kichik summa bilan sinab ko'ring.")}</p></div>`;
+}
+function bindReceiptQrSettings(root) {
+  root.querySelectorAll('[data-qrset]').forEach((el) => el.onchange = async () => {
+    const k = el.dataset.qrset;
+    try {
+      App.settings = await PUT('/api/settings', { [k]: el.type === 'checkbox' ? el.checked : el.value.trim() });
+      toast(t('Saqlandi'), 'ok');
+      const box = root.querySelector(`[data-qrbox="${k}"]`); if (box) box.style.display = el.checked ? '' : 'none';
+    } catch (e) { if (el.type === 'checkbox') el.checked = !el.checked; toastError(e); }
+  });
+}
+
+// ---------- What guests said (the QR on the check) ----------
+Views.ratings = {
+  title: () => t('Mijoz baholari'), icon: () => 'star', roles: ['owner', 'admin', 'cashier'], module: 'ratings', on: () => !isShop(),
+  async load() { const r = periodRange(); return GET(`/api/ratings?from=${r.from}&to=${r.to}`); },
+  render(d) {
+    const stars = (n) => `<span class="stars">${'★'.repeat(n)}<i>${'★'.repeat(5 - n)}</i></span>`;
+    const max = Math.max(1, ...d.dist.map((x) => x.n));
+    return `<div class="page-head"><a class="btn sm" href="#/money">${icon('arrow-left', 16)}</a><h1>${t('Mijoz baholari')}</h1></div>
+      ${periodPicker()}
+      ${d.on ? '' : `<div class="notice">${icon('info', 18)} ${t("Mijoz bahosi hozir o'chiq. Yoqish: Sozlamalar → Ko'rinish → Chekdagi QR kodlar.")}</div>`}
+      <div class="kpis">${kpi(t("O'rtacha baho"), d.count ? `${d.avg} ★` : '—', t('{0} ta baho', d.count), d.avg >= 4.5 ? 'good' : d.count && d.avg < 4 ? 'bad' : '', 'star')}
+        ${kpi(t('Past baholar (1–3)'), num(d.low), '', d.low ? 'bad' : 'good', 'triangle-alert')}</div>
+      <div class="rt-grid">
+        <div class="card"><h3 style="margin:0 0 8px">${t('Baholar')}</h3>${d.dist.map((x) => `<div class="rt-bar"><span>${x.stars} ★</span><span class="track"><span class="fill" style="width:${(x.n / max) * 100}%"></span></span><b>${x.n}</b></div>`).join('')}</div>
+        <div class="card"><h3 style="margin:0 0 8px">${roleName('waiter')}</h3>${d.waiters.length ? d.waiters.map((w) => `<div class="rt-bar"><span class="grow"><b>${esc(w.name)}</b></span><span class="small muted">${t('{0} ta baho', w.n)}${w.low ? ` · <span class="red">${t('past')}: ${w.low}</span>` : ''}</span><b>${w.avg} ★</b></div>`).join('') : `<p class="small muted">${t("Hali baho yo'q")}</p>`}</div></div>
+      <div class="card" style="margin-top:12px"><h3 style="margin:0 0 8px">${t('Oxirgi baholar')}</h3>
+        ${d.rows.length ? d.rows.map((r) => `<div class="rt-row ${r.stars <= 3 ? 'low' : ''}">${stars(r.stars)}<div class="grow">${r.comment ? `<b>${esc(r.comment)}</b><br>` : ''}<span class="small muted">${esc(r.place)} · ${t('Chek')} #${r.order_id}${r.waiter ? ` · ${esc(r.waiter)}` : ''} · ${fmtDateTime(r.created_at)}</span></div></div>`).join('')
+          : `<p class="small muted">${t("Hali baho yo'q")}</p>`}</div>`;
+  },
+  bind(root) { bindPeriod(root); },
 };

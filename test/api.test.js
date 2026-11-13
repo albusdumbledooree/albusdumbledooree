@@ -3162,3 +3162,135 @@ test('bellashuv: team invite, FLOWI-wide opponent, link to the site, site random
   await call('PUT', '/api/platform/academy/duel', admin, { global: true, site: true });
   assert.ok((await call('GET', '/api/platform/academy', admin)).data.duel.stats.done >= 4);
 });
+
+test('boss alerts in Telegram: many cancellations, a big discount, a deleted check, a cash difference, a check left open', async () => {
+  const http = require('node:http');
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  await call('POST', '/api/platform/tenants', admin, { name: 'Ogoh', code: 'ogoh', owner_name: 'E', owner_username: 'ogohb', owner_password: 'parol12345', plan: 'biznes', sample: true, kitchen_mode: 'off' });
+  const boss = await login('ogohb', 'parol12345', 'ogoh');
+  await call('POST', '/api/users', boss, { name: 'Sardor', username: 'sardor', password: 'parol1', role: 'cashier' });
+  const waiter = await login('sardor', 'parol1', 'ogoh');
+  const sent = []; const updates = [];
+  const tg = http.createServer((req, res) => {
+    const chunks = []; req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      const method = req.url.split('/').pop().split('?')[0];
+      const ok = (result) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, result })); };
+      if (method === 'getMe') return ok({ username: 'flowi_bot' });
+      if (method === 'getUpdates') return setTimeout(() => ok(updates.splice(0)), 60);
+      if (method === 'sendMessage') { sent.push(JSON.parse(Buffer.concat(chunks).toString())); return ok({ message_id: sent.length }); }
+      return ok(true);
+    });
+  });
+  await new Promise((r) => tg.listen(0, r));
+  process.env.TELEGRAM_API = `http://127.0.0.1:${tg.address().port}`;
+  const waitFor = async (fn, what) => { for (let i = 0; i < 100; i++) { const v = await fn(); if (v) return v; await new Promise((r) => setTimeout(r, 50)); } throw new Error(what); };
+  const got = (re) => waitFor(() => sent.find((m) => String(m.chat_id) === '5151' && re.test(m.text)), String(re));
+  try {
+    await call('PUT', '/api/platform/telegram', admin, { token: '123456:ABCdefGHIjklMNOpqrSTUvwxYZ_12345' });
+    const st = (await call('POST', '/api/telegram/link', boss)).data;
+    updates.push({ update_id: 11, message: { message_id: 1, chat: { id: 5151, type: 'private', first_name: 'Ega' }, text: `/start ${st.link_code}` } });
+    await waitFor(async () => (await call('GET', '/api/telegram', boss)).data.linked, 'linked');
+    const s0 = (await call('GET', '/api/me', boss)).data.settings;
+    assert.equal(s0.alert_on, true); assert.equal(s0.alert_cancel_n, 5); assert.equal(s0.alert_discount_pct, 15);
+    assert.equal((await call('PUT', '/api/settings', boss, { alert_cancel_n: 2, alert_shift_diff: 1000 })).status, 200);
+    const menu = (await call('GET', '/api/menu', boss)).data; const rooms = (await call('GET', '/api/rooms', boss)).data;
+    // Two dishes cancelled by one waiter: the message comes when the limit is reached, once.
+    const o = (await call('POST', '/api/orders', waiter, { room_id: rooms[0].id })).data;
+    const items = (await call('POST', `/api/orders/${o.id}/items`, waiter, { items: [{ dish_id: menu.dishes[0].id, qty: 3 }, { dish_id: menu.dishes[1].id, qty: 1 }] })).data.items;
+    await call('POST', `/api/items/${items[0].id}/cancel`, waiter, { qty: 1, reason: 'xato' });
+    assert.equal(sent.filter((m) => /bekor qilish/.test(m.text)).length, 0);
+    await call('POST', `/api/items/${items[0].id}/cancel`, waiter, { qty: 1, reason: 'xato' });
+    const c = await got(/Ko'p bekor qilish/); assert.match(c.text, /Sardor/); assert.match(c.text, /2 ta/);
+    // A 20% discount at payment.
+    const paid = await call('POST', `/api/orders/${o.id}/close`, boss, { paid_cash: 1e7, discount: Math.round(menu.dishes[0].price * 0.4) });
+    assert.equal(paid.status, 200, JSON.stringify(paid.data));
+    assert.match((await got(/Katta chegirma/)).text, /%/);
+    // A check with dishes deleted.
+    const o2 = (await call('POST', '/api/orders', waiter, { room_id: rooms[1].id })).data;
+    await call('POST', `/api/orders/${o2.id}/items`, waiter, { items: [{ dish_id: menu.dishes[0].id, qty: 2 }] });
+    assert.equal((await call('POST', `/api/orders/${o2.id}/cancel`, boss, { reason: 'mijoz ketdi' })).status, 200);
+    assert.match((await got(/Chek o'chirildi/)).text, /mijoz ketdi/);
+    // The cash at the end of the shift differs.
+    assert.equal((await call('POST', '/api/shifts/open', boss, { opening_cash: 0 })).status, 200);
+    const cur = (await call('GET', '/api/shifts/current', boss)).data;
+    await call('POST', '/api/shifts/close', boss, { closing_cash: (cur.expected || 0) + 5000 });
+    assert.match((await got(/Kassa farqi/)).text, /5 000/);
+    // A check open for hours: told once.
+    const o3 = (await call('POST', '/api/orders', waiter, { room_id: rooms[2].id })).data;
+    const { DatabaseSync } = require('node:sqlite');
+    const raw = new DatabaseSync(path.join(server.dataDir, 'tenants', 'ogoh.db')); raw.prepare('UPDATE orders SET opened_at = opened_at - 5 * 3600000 WHERE id = ?').run(o3.id); raw.close();
+    await server.platform.remindTick(); await got(/Ochiq qolgan chek/);
+    const before = sent.length; await server.platform.remindTick(); await new Promise((r) => setTimeout(r, 150));
+    assert.equal(sent.slice(before).filter((m) => /Ochiq qolgan/.test(m.text)).length, 0);
+    // Switched off: silence.
+    await call('PUT', '/api/settings', boss, { alert_on: false });
+    const o4 = (await call('POST', '/api/orders', waiter, { room_id: rooms[3].id })).data;
+    await call('POST', `/api/orders/${o4.id}/items`, waiter, { items: [{ dish_id: menu.dishes[0].id, qty: 1 }] });
+    const n = sent.length; await call('POST', `/api/orders/${o4.id}/cancel`, boss, { reason: 'x' }); await new Promise((r) => setTimeout(r, 150));
+    assert.equal(sent.length, n);
+  } finally { delete process.env.TELEGRAM_API; tg.close(); await call('DELETE', '/api/platform/telegram', admin); }
+});
+
+test('on the check: "rate us" QR (off by default, low marks to the boss) and Payme / Click payment links with the sum', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  await call('POST', '/api/platform/tenants', admin, { name: 'Baho', code: 'baho', owner_name: 'E', owner_username: 'bahob', owner_password: 'parol12345', plan: 'biznes', sample: true, kitchen_mode: 'off' });
+  const boss = await login('bahob', 'parol12345', 'baho');
+  const menu = (await call('GET', '/api/menu', boss)).data; const rooms = (await call('GET', '/api/rooms', boss)).data;
+  const o = (await call('POST', '/api/orders', boss, { room_id: rooms[0].id })).data;
+  await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: menu.dishes[0].id, qty: 2 }] });
+  // Nothing on the check until switched on.
+  let d = (await call('GET', `/api/orders/${o.id}`, boss)).data;
+  assert.equal(d.rate_path, undefined); assert.deepEqual(d.pay, {});
+  assert.equal((await call('PUT', '/api/settings', boss, { pay_payme_id: 'bad id!' })).status, 400);
+  assert.equal((await call('PUT', '/api/settings', boss, { rating_on: true, pay_payme_on: true, pay_payme_id: 'abc123', pay_click_on: true, pay_click_service: '111', pay_click_merchant: '222' })).status, 200);
+  d = (await call('GET', `/api/orders/${o.id}`, boss)).data;
+  assert.match(d.rate_path, /^\/r\/baho\/\d+-[0-9a-f]{12}$/);
+  assert.equal(Buffer.from(d.pay.payme.split('/').pop(), 'base64').toString(), `m=abc123;ac.order_id=${o.id};a=${d.total * 100}`);
+  assert.equal(d.pay.click, `https://my.click.uz/services/pay?service_id=111&merchant_id=222&amount=${d.total}&transaction_param=${o.id}`);
+  assert.equal((await call('GET', `/api/orders/${o.id}`, boss)).data.rate_path, d.rate_path, 'the key stays the same');
+  // The guest's page and mark: once per check.
+  const k = d.rate_path.split('/').pop();
+  assert.equal((await fetch(`${base}${d.rate_path}`)).status, 200);
+  assert.equal((await call('GET', `/api/rate?c=baho&k=${k}`)).data.name, 'Baho');
+  assert.equal((await call('GET', '/api/rate?c=baho&k=1-000000000000')).status, 404);
+  assert.equal((await call('POST', '/api/rate', null, { c: 'baho', k, stars: 9 })).status, 400);
+  assert.equal((await call('POST', '/api/rate', null, { c: 'baho', k, stars: 2, comment: 'Taom sovuq keldi' })).status, 200);
+  assert.equal((await call('POST', '/api/rate', null, { c: 'baho', k, stars: 5 })).status, 409);
+  assert.equal((await call('GET', `/api/rate?c=baho&k=${k}`)).data.done, true);
+  const r = (await call('GET', '/api/ratings', boss)).data;
+  assert.equal(r.count, 1); assert.equal(r.avg, 2); assert.equal(r.low, 1); assert.equal(r.rows[0].comment, 'Taom sovuq keldi'); assert.equal(r.waiters[0].n, 1);
+  // A paid check has nothing left to pay: no payment QR; rating off: the page stops working.
+  await call('POST', `/api/orders/${o.id}/close`, boss, { paid_cash: 1e7 });
+  assert.deepEqual((await call('GET', `/api/orders/${o.id}`, boss)).data.pay, {});
+  await call('PUT', '/api/settings', boss, { rating_on: false });
+  assert.equal((await call('GET', `/api/rate?c=baho&k=${k}`)).status, 404);
+  assert.equal((await call('GET', `/api/orders/${o.id}`, boss)).data.rate_path, undefined);
+});
+
+test('store forecast: how many days each ingredient lasts, and the morning shopping list (Pro)', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  await call('POST', '/api/platform/tenants', admin, { name: 'Ombor', code: 'ombor', owner_name: 'E', owner_username: 'omborb', owner_password: 'parol12345', plan: 'pro', sample: true, kitchen_mode: 'off' });
+  const boss = await login('omborb', 'parol12345', 'ombor');
+  const menu = (await call('GET', '/api/menu', boss)).data; const rooms = (await call('GET', '/api/rooms', boss)).data;
+  const dish = menu.dishes[0];
+  const guruch = (await call('POST', '/api/ingredients', boss, { name: 'Guruch', unit: 'kg', stock: 3, min_stock: 0, cost: 16000 })).data;
+  const tuz = (await call('POST', '/api/ingredients', boss, { name: 'Tuz', unit: 'kg', stock: 50, min_stock: 0, cost: 2000 })).data;
+  assert.equal((await call('PUT', `/api/dishes/${dish.id}/recipe`, boss, { items: [{ ingredient_id: guruch.id, qty: 0.5 }, { ingredient_id: tuz.id, qty: 0.01 }] })).status, 200);
+  // Nothing sold yet: no forecast, no morning message about the store.
+  let rows = (await call('GET', '/api/ingredients', boss)).data.rows;
+  assert.equal(rows.find((r) => r.name === 'Guruch').days_left, null);
+  const ctx = server.platform.byCode('ombor');
+  assert.equal(ctx.api.morningText(), null);
+  // 4 portions today = 2 kg of rice a day; 1 kg left → half a day: "runs out", with a list to buy for five days.
+  const o = (await call('POST', '/api/orders', boss, { room_id: rooms[0].id })).data;
+  await call('POST', `/api/orders/${o.id}/items`, boss, { items: [{ dish_id: dish.id, qty: 4 }] });
+  assert.equal((await call('POST', `/api/orders/${o.id}/close`, boss, { paid_cash: 1e7 })).status, 200);
+  const d = (await call('GET', '/api/ingredients', boss)).data;
+  const g = d.rows.find((r) => r.name === 'Guruch'); const t = d.rows.find((r) => r.name === 'Tuz');
+  assert.equal(g.stock, 1); assert.equal(g.daily, 2); assert.equal(g.days_left, 0.5); assert.equal(g.low, true);
+  assert.equal(t.low, false); assert.ok(t.days_left > 100);
+  assert.equal(d.low, 1);
+  const text = ctx.api.morningText();
+  assert.match(text, /Ombor: tugayapti \(1\)/); assert.match(text, /Guruch — <b>bugunga<\/b> yetadi/); assert.match(text, /Guruch 9 kg/); assert.doesNotMatch(text, /Tuz/);
+});

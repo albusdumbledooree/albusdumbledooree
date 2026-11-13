@@ -59,6 +59,8 @@ function serveStatic(req, res, pathname) {
   else if (/^\/c\/[a-z0-9-]+\/?$/i.test(pathname) || pathname === '/app') file = path.join(PUBLIC, 'index.html');
   // A room's QR code: the guest menu (no login).
   else if (/^\/q\/\d+-[A-Za-z0-9]{12}\/?$/.test(pathname)) file = path.join(PUBLIC, 'guest.html');
+  // "Rate us": the page behind the QR on a guest's check.
+  else if (/^\/r\/[a-z0-9-]+\/\d+-[0-9a-f]{12}\/?$/i.test(pathname)) file = path.join(PUBLIC, 'rate.html');
   // The open waiter test (and a certificate link: /test?c=CODE).
   else if (pathname === '/test' || pathname === '/test/') file = path.join(PUBLIC, 'test.html');
   else if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
@@ -186,6 +188,13 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
         throw new HttpError(404, 'Topilmadi');
       }
 
+      // "Rate us" from the QR on a check: the page's data and the guest's mark (no login; the check's own key is the address).
+      if (pathname === '/api/rate') {
+        const ctx = platform.byCode(String(req.method === 'GET' ? query.c : body.c || ''));
+        if (!ctx || ctx.row.status !== 'active') throw new HttpError(404, "Bu havola endi ishlamaydi");
+        if (req.method === 'GET') return reply(ctx.api.rateInfo(String(query.k || '')));
+        if (req.method === 'POST') return reply(ctx.api.rateSubmit(String(body.k || ''), body));
+      }
       // Front page: current plans and prices, and how to reach the platform owner.
       if (pathname === '/api/public/info' && req.method === 'GET') return reply(platform.publicInfo());
       // Front page: "leave an application" — saved, then sent to the owner's Telegram bot.

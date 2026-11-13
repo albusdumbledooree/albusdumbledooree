@@ -748,7 +748,25 @@ async function telegramSettingsHtml() {
             ${['', '20:00', '21:00', '22:00', '22:30', '23:00', '23:30'].map((x) => `<option value="${x}" ${(nn(s.report_time, '23:00')) === x ? 'selected' : ''}>${x || t("Yubormaslik")}</option>`).join('')}</select></label></div>
           <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" id="tg-report">${icon('chart-column', 16)} ${t('Hisobotni hozir yuborish')}</button>
             <button class="btn" id="tg-test">${icon('send', 16)} ${t('Sinov xabari')}</button></div>`
-        : linkBlock || `<button class="btn primary" id="tg-link">${icon('send', 18)} ${t('Telegramni ulash')}</button>`}</div>` };
+        : linkBlock || `<button class="btn primary" id="tg-link">${icon('send', 18)} ${t('Telegramni ulash')}</button>`}</div>${alertSettingsHtml(chats.length > 0)}` };
+}
+// What the boss is told at once in Telegram; each limit is the boss's own (0 = no message).
+function alertSettingsHtml(linked) {
+  if (!moduleOn('alerts')) return '';
+  const s = App.settings;
+  const num = (k, label, hint, unit) => `<div class="switch-row"><div class="grow"><b>${label}</b><span class="small muted">${hint}</span></div>
+    <input type="number" min="0" data-alert="${k}" value="${s[k]}" style="max-width:110px"> <span class="small muted" style="min-width:44px">${unit}</span></div>`;
+  return `<div class="card" style="max-width:640px;margin-top:14px"><div class="switch-row" style="padding-top:0"><div class="grow"><h3 style="margin:0">${icon('triangle-alert', 18)} ${t('Ogohlantirishlar')}</h3>
+      <span class="small muted">${t("Siz yo'qligingizda nima bo'layotganini darhol bilasiz — xabar shu Telegramga keladi.")}</span></div>
+      <label class="switch"><input type="checkbox" data-alert="alert_on" ${s.alert_on ? 'checked' : ''}><span></span></label></div>
+    ${linked ? '' : `<div class="notice">${icon('info', 18)} ${t('Avval yuqorida Telegramni ulang — xabarlar o\'sha yerga keladi.')}</div>`}
+    ${num('alert_cancel_n', t("Ko'p bekor qilish"), t("Bir xodim bir kunda shuncha taomni bekor qilsa"), t('ta'))}
+    ${num('alert_discount_pct', t('Katta chegirma'), t("To'lovda shu foizdan katta chegirma berilsa"), '%')}
+    <div class="switch-row"><div class="grow"><b>${t("Chek o'chirish")}</b><span class="small muted">${t("Taom urilgan chek o'chirilsa — kim, qancha, sababi")}</span></div>
+      <label class="switch"><input type="checkbox" data-alert="alert_delete" ${s.alert_delete ? 'checked' : ''}><span></span></label></div>
+    ${isShop() ? '' : num('alert_open_hours', t('Ochiq qolgan chek'), t("Chek shuncha soatdan beri yopilmagan bo'lsa"), t('soat'))}
+    ${num('alert_shift_diff', t('Kassa farqi'), t("Smena yopilganda naqd pul shuncha so'mdan ko'p farq qilsa"), t("so'm"))}
+    <p class="small muted" style="margin:8px 0 0">${t("0 yozsangiz — o'sha xabar kelmaydi.")}</p></div>`;
 }
 function bindTelegramSettings(root) {
   const a = (id, fn) => { const b = root.querySelector(id); if (b) b.onclick = async () => { try { await fn(); } catch (e) { toastError(e); } }; };
@@ -759,6 +777,10 @@ function bindTelegramSettings(root) {
   root.querySelectorAll('[data-tg-del]').forEach((b) => b.onclick = async () => {
     if (!(await confirmModal(t('Uzish'), t("Bu chatga endi hisobot kelmaydi. Davom etamizmi?"), t('Uzish')))) return;
     try { await DEL(`/api/telegram?chat=${encodeURIComponent(b.dataset.tgDel)}`); refreshView(); } catch (e) { toastError(e); }
+  });
+  root.querySelectorAll('[data-alert]').forEach((el) => el.onchange = async () => {
+    try { App.settings = await PUT('/api/settings', { [el.dataset.alert]: el.type === 'checkbox' ? el.checked : Math.max(0, Number(el.value) || 0) }); toast(t('Saqlandi'), 'ok'); }
+    catch (e) { toastError(e); }
   });
   const tm = root.querySelector('#tg-time');
   if (tm) tm.onchange = async () => { try { await PUT('/api/telegram/report', { time: tm.value }); toast(t('Saqlandi'), 'ok'); } catch (e) { toastError(e); } };

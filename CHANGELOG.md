@@ -2,6 +2,13 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.43.0 — Boshliqqa ogohlantirishlar, mijoz bahosi, chekda to'lov QR'i, ombor prognozi
+
+- **Ogohlantirishlar (Telegram)** — Sozlamalar → Telegram: bir xodim ko'p taom bekor qilsa, katta chegirma berilsa, taomli chek o'chirilsa, chek soatlab ochiq qolsa, smena yopilganda kassa farq qilsa — boshliqqa darhol xabar. Har birining chegarasini boshliq o'zi belgilaydi (0 — kelmaydi). Biznes va Pro tariflarida.
+- **Mijoz bahosi** (standart holatda o'chiq) — Sozlamalar → Ko'rinish → Chekdagi QR kodlar. Chek pastida QR: mehmon 1–5 yulduz qo'yadi va izoh yozadi. 1–3 yulduz boshliqqa darhol Telegram orqali boradi. Natijalar: Moliya → Mijoz baholari (o'rtacha baho, har ofitsant bo'yicha, izohlar). Biznes va Pro tariflarida.
+- **Chekda to'lov QR'i** (sozlamadan yoqiladi) — Payme va Click alohida. Summa QR ichida, mehmon faqat tasdiqlaydi. To'lov kelganini kassir Payme/Click ilovasida ko'rib chekni yopadi.
+- **Ombor prognozi** (Pro) — har masalliq oxirgi 7 kunlik sarf bo'yicha necha kunga yetishi ko'rinadi; 2 kundan kam qolgani "kam qolgan" hisoblanadi. Ertalab Telegram'ga "tugayapti" ro'yxati va 5 kunga yetadigan xarid ro'yxati keladi.
+
 ## 1.42.0 — Bellashuv: jamoa, boshqa choyxonalar, havola va saytda; oylik reyting
 
 - **Akademiya → ⚔️ Bellashuv**: ikki kishiga bir xil 10 ta savol, har biriga 20 soniya. Ko'p to'g'ri javob bergan yutadi, teng bo'lsa — tezroq yechgan. Javoblar serverda tekshiriladi, vaqtni ham server o'lchaydi.

@@ -174,8 +174,39 @@ function createPro(db, { audit, events, now, moduleOn, settings }) {
     const rows = q('SELECT * FROM ingredients WHERE active = 1 ORDER BY name').all();
     const uses = q('SELECT di.ingredient_id, COUNT(*) c FROM dish_ingredients di JOIN dishes d ON d.id = di.dish_id AND d.active = 1 GROUP BY di.ingredient_id').all();
     const useMap = new Map(uses.map((u) => [u.ingredient_id, u.c]));
-    for (const r of rows) { r.dishes = useMap.get(r.id) || 0; r.value = Math.round(r.stock * r.cost); r.low = r.min_stock > 0 && r.stock <= r.min_stock; }
+    const use = usage();
+    for (const r of rows) {
+      r.dishes = useMap.get(r.id) || 0; r.value = Math.round(r.stock * r.cost);
+      // How much goes a day (the last week's sales and write-offs) and for how many days what is left will last.
+      r.daily = use.get(r.id) || 0;
+      r.days_left = r.daily > 0 ? Math.max(0, Math.floor((r.stock / r.daily) * 10) / 10) : null;
+      r.low = (r.min_stock > 0 && r.stock <= r.min_stock) || (r.days_left !== null && r.days_left <= SOON_DAYS);
+    }
     return { rows, value: rows.reduce((s, r) => s + Math.max(0, r.value), 0), low: rows.filter((r) => r.low).length, units: UNITS };
+  }
+  // ingredient id → average spent per day over the last 7 days (fewer when the records are newer than that).
+  const SOON_DAYS = 2; const BUY_FOR_DAYS = 5; const WEEK = 7 * 24 * 3600 * 1000;
+  function usage() {
+    const from = now() - WEEK;
+    const first = q("SELECT MIN(created_at) t FROM ingredient_moves WHERE kind = 'sale'").get().t;
+    const days = Math.max(1, Math.min(7, first ? Math.ceil((now() - Math.max(first, from)) / (24 * 3600 * 1000)) : 7));
+    const rows = q("SELECT ingredient_id id, -SUM(qty) used FROM ingredient_moves WHERE created_at >= ? AND kind IN ('sale', 'refund', 'writeoff') GROUP BY ingredient_id").all(from);
+    return new Map(rows.filter((r) => r.used > 0).map((r) => [r.id, r.used / days]));
+  }
+  // The morning word for the boss: what runs out within two days and what to buy to last five (null when all is well).
+  function stockText() {
+    if (!moduleOn('inventory')) return null;
+    const esc = (v) => String(v == null ? '' : v).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const n = (v) => String(Math.round(v * 10) / 10).replace('.', ',');
+    const low = listIngredients().rows.filter((r) => r.low);
+    if (!low.length) return null;
+    const lines = low.map((r) => `• ${esc(r.name)} — ${r.stock <= 0 ? '<b>tugadi</b>' : r.days_left !== null ? `<b>${r.days_left < 1 ? 'bugunga' : `${Math.floor(r.days_left)} kunga`}</b> yetadi (${n(r.stock)} ${r.unit})` : `<b>${n(r.stock)} ${r.unit}</b> qoldi (minimal ${n(r.min_stock)})`}`);
+    const buy = low.map((r) => {
+      const want = r.daily > 0 ? r.daily * BUY_FOR_DAYS : r.min_stock * 2;
+      const lack = Math.max(0, want - Math.max(0, r.stock));
+      return lack > 0 ? `${esc(r.name)} ${n(Math.ceil(lack))} ${r.unit}` : null;
+    }).filter(Boolean);
+    return [`📦 <b>Ombor: tugayapti (${low.length})</b>`, ...lines, ...(buy.length ? ['', `🛒 <b>Xarid ro'yxati</b> (${BUY_FOR_DAYS} kunga yetadigan qilib):`, buy.join(' · ')] : [])].join('\n');
   }
   function saveIngredient({ user, params, body }) {
     need('inventory', 'Masalliq ombori');
@@ -336,7 +367,7 @@ function createPro(db, { audit, events, now, moduleOn, settings }) {
 
   return {
     listCustomers, saveCustomer, customerDetail, payDebt, preparePayment, afterPayment, ensureCustomer, payChecks, move,
-    listIngredients, saveIngredient, deleteIngredient, receive, adjust, listMoves, getRecipe, setRecipe, consume, DEBT_PAYMENT,
+    listIngredients, stockText, saveIngredient, deleteIngredient, receive, adjust, listMoves, getRecipe, setRecipe, consume, DEBT_PAYMENT,
   };
 }
 

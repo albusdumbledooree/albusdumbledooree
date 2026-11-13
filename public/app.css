@@ -1456,3 +1456,8 @@ details.ver summary .grow { flex: 1 1 200px; min-width: 0; }
 .ac-vs .crown { font-size: 28px; height: 34px; }
 .ac-vs-res { text-align: center; font-weight: 850; font-size: 18px; margin-top: 10px; } .ac-vs-res.win { color: var(--green); } .ac-vs-res.loss { color: var(--red); }
 .chip.red { background: var(--red-soft); color: var(--red); }
+/* Guests' marks */
+.stars { color: #f5b301; letter-spacing: 1px; font-size: 18px; white-space: nowrap; } .stars i { color: var(--line); font-style: normal; }
+.rt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-top: 12px; }
+.rt-bar { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 14px; } .rt-bar .track { flex: 1; height: 8px; background: var(--panel-2); border-radius: 8px; overflow: hidden; } .rt-bar .fill { display: block; height: 100%; background: #f5b301; }
+.rt-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; } .rt-row.low { background: var(--red-soft); margin: 0 -8px; padding: 10px 8px; border-radius: 8px; }

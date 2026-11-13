@@ -64,7 +64,7 @@ const CODE_RE = /^[a-z0-9][a-z0-9-]{1,30}$/;
  * the three keys stay. max_staff 0 = no limit. A lower plan never deletes anything: it only stops adding more.
  */
 const PLAN_KEYS = ['start', 'biznes', 'pro'];
-const BIZ_MODULES = ['stoplist', 'reports', 'finance', 'payroll', 'reservations', 'history', 'audit', 'export', 'qrmenu', 'qrorder', 'debts', 'pnl', 'academy'];
+const BIZ_MODULES = ['stoplist', 'reports', 'finance', 'payroll', 'reservations', 'history', 'audit', 'export', 'qrmenu', 'qrorder', 'debts', 'pnl', 'academy', 'alerts', 'ratings'];
 const PRO_MODULES = [...BIZ_MODULES, 'customers', 'inventory', 'branches'];
 // A section moved into a plan after the plans were saved; each is applied once (the owner may take it out again).
 const PLAN_ADDITIONS = [['biznes', 'debts'], ['start', 'finance']];
@@ -295,6 +295,8 @@ function createPlatform(dataDir) {
         return this.status();
       },
       async test() { return sendAll(id, '✅ FLOWI: sinov xabari. Kunlik hisobot shu yerga keladi.'); },
+      // An urgent word for the boss (a deleted check, a big discount…); silent when no chat is linked.
+      alert(text) { if (leads.ready() && chatsOf(id).length) sendAll(id, text).catch((e) => console.error(`Telegram ogohlantirish (${id}): ${e.message}`)); },
     };
   }
   leads.onMessage((msg) => {

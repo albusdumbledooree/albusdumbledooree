@@ -14,6 +14,8 @@ const { createPrint } = require('./print');
 const { createPayroll } = require('./payroll');
 const { createWork, STAFF_ROLES } = require('./work');
 const { createAcademy } = require('./academy');
+const { createAlerts, ALERT_DEFAULTS } = require('./alerts');
+const { createRating } = require('./rating');
 const { snapshot } = require('./backup');
 const Units = require('../public/js/units');
 const UNIT_WORDS = { piece: 'dona', pack: 'pachka', box: 'karobka' };
@@ -50,6 +52,8 @@ const MODULES = {
   qrorder: "QR orqali buyurtma va chaqiruv",
   pnl: 'Sof foyda hisoboti (oylik)',
   academy: "Akademiya: barcha darslar, yakuniy test va sertifikat",
+  alerts: 'Boshliqqa Telegram ogohlantirishlari (bekor qilish, chegirma, chek o\'chirish)',
+  ratings: 'Mijoz bahosi (chekdagi QR orqali)',
 };
 // On/off switches of the place features: staff only inside, "I came" with GPS / the desk's QR / a selfie, guest orders only inside.
 const GEO_FLAGS = ['geo_staff', 'att_clock', 'att_gps', 'att_qr', 'att_selfie', 'qr_geo', 'qr_busy', 'print_agent'];
@@ -105,6 +109,14 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   const print = createPrint(db, { now, events: hub, audit, settings: () => settings(), newToken, devicePrefix });
   // Work hours, GPS and the cash desk's attendance QR code (all optional, switched on in the settings).
   const work = createWork(db, { settings: () => settings(), audit, events: hub, now });
+  // What the boss hears about at once in Telegram (a worker cancelling a lot, a big discount, a deleted check…).
+  const alerts = createAlerts(db, { raw: (k) => (q('SELECT value FROM settings WHERE key = ?').get(k) || {}).value, telegram, enabled: () => moduleOn('alerts'),
+    now, startOfDay: (ts) => tasks.startOfDay(ts), money: (n) => shop.money(n), name: () => settings().name });
+  const placeFor = (o) => placeName(o, (o.room_id && q('SELECT name FROM rooms WHERE id = ?').get(o.room_id)) || { name: '' });
+  // On the guest's check: a "rate us" QR and Payme / Click payment QRs (each switched on in the settings).
+  const rawSetting = (k) => (q('SELECT value FROM settings WHERE key = ?').get(k) || {}).value;
+  const rating = createRating(db, { raw: rawSetting, flag: (k) => rawSetting(k) === '1', enabled: () => moduleOn('ratings'), code: () => (tenant() || {}).code || 'demo', now, telegram,
+    name: () => settings().name, placeOf: (o) => placeFor(o), money: (n) => shop.money(n) });
   // FLOWI Akademiya: lessons from the platform (the same for every business); the whole course comes with the plan's section.
   // The platform may open it fully for this business, leave only the free modules, or hide it; else the plan decides.
   const academyMode = () => { const m = (tenant() || {}).academy_mode; return ['full', 'free', 'off'].includes(m) ? m : 'plan'; };
@@ -182,6 +194,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     // The cashier sees the checks' list; the day's (period's) total takings only when the boss allows.
     out.cashier_sums = out.cashier_sums === '1';
     // Akademiya duels: on unless the boss turns them off; with other businesses too; during work only when allowed.
+    for (const [k, d] of Object.entries(ALERT_DEFAULTS)) { const v = out[k] === undefined || out[k] === '' ? d : out[k]; out[k] = k === 'alert_on' || k === 'alert_delete' ? v === '1' : Number(v) || 0; }
+    // Off until the boss turns them on: the "rate us" QR and the payment QRs on the check.
+    for (const k of ['rating_on', 'pay_payme_on', 'pay_click_on']) out[k] = out[k] === '1';
+    for (const k of ['pay_payme_id', 'pay_payme_field', 'pay_click_service', 'pay_click_merchant']) out[k] = out[k] || '';
     out.duel_on = out.duel_on !== '0';
     out.duel_global = out.duel_global !== '0';
     out.duel_work = out.duel_work === '1';
@@ -462,9 +478,11 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     const due = money.fixedDue();
     const dueLines = due.map((x) => `• ${esc(x.name)} — ${shop.money(x.amount)} so'm${x.overdue ? ` (${shop.fmtDate(x.due_at)} edi)` : ''}`);
     if (businessType() !== 'doors') {
-      if (!due.length) return null;
-      return [`☀️ <b>${esc(settings().name)}</b>`, '', `💳 <b>To'lov kuni keldi (${due.length}):</b>`, ...dueLines,
-        '', "To'langanda dasturda Moliya → Doimiy xarajatlar → \"To'landi\" ni bosing."].join('\n');
+      // Pro: what runs out in the store within two days, with a shopping list.
+      const stock = pro.stockText();
+      if (!due.length && !stock) return null;
+      return [`☀️ <b>${esc(settings().name)}</b>`, ...(due.length ? ['', `💳 <b>To'lov kuni keldi (${due.length}):</b>`, ...dueLines,
+        '', "To'langanda dasturda Moliya → Doimiy xarajatlar → \"To'landi\" ni bosing."] : []), ...(stock ? ['', stock] : [])].join('\n');
     }
     const d = tasks.digest();
     const s = settings();
@@ -510,6 +528,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return out.join('\n');
   }
   function soonTexts() {
+    alerts.openTick(placeFor);
     return tasks.dueSoon().map((x) => `⏰ <b>${shop.fmtTime(x.due_at)}</b> — ${esc(x.title)}${x.note ? `\n${esc(x.note)}` : ''}`);
   }
   const esc = (v) => String(v ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -554,7 +573,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   // ---------- Settings ----------
   function updateSettings({ user, body }) {
-    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'receipt_logo_size', 'receipt_group', 'receipt_per_person', 'room_assign', 'delivery_fee', 'big_box_from', 'cashier_sums', 'duel_on', 'duel_global', 'duel_work',
+    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'receipt_logo_size', 'receipt_group', 'receipt_per_person', 'room_assign', 'delivery_fee', 'big_box_from', 'cashier_sums', 'duel_on', 'duel_global', 'duel_work', 'rating_on', 'pay_payme_on', 'pay_click_on', 'pay_payme_id', 'pay_payme_field', 'pay_click_service', 'pay_click_merchant', 'alert_on', 'alert_cancel_n', 'alert_discount_pct', 'alert_delete', 'alert_open_hours', 'alert_shift_diff',
       'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo',
       'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', 'cashback_pct', 'qr_order', 'qr_from', 'qr_to',
       'geo_lat', 'geo_lng', 'geo_radius', 'work_from', 'expense_groups', 'staff_types', ...GEO_FLAGS, ...OWNER_SETTINGS];
@@ -636,7 +655,16 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
         continue;
       }
       if (k === 'waiter_cancel') v = v ? '1' : '0';
-      if (k === 'cashier_sums' || k === 'duel_on' || k === 'duel_global' || k === 'duel_work') v = v ? '1' : '0';
+      if (k === 'cashier_sums' || k === 'duel_on' || k === 'duel_global' || k === 'duel_work' || k === 'alert_on' || k === 'alert_delete') v = v ? '1' : '0';
+      if (k === 'rating_on' || k === 'pay_payme_on' || k === 'pay_click_on') v = v ? '1' : '0';
+      if (['pay_payme_id', 'pay_payme_field', 'pay_click_service', 'pay_click_merchant'].includes(k)) {
+        v = String(v || '').trim();
+        if (!/^[\w-]{0,64}$/.test(v)) throw new HttpError(400, "To'lov tizimi ID'si faqat harf va raqamlardan iborat bo'lsin");
+      }
+      if (k === 'alert_cancel_n') v = int(v || 0, 'Bekor qilish chegarasi', { max: 1000 });
+      if (k === 'alert_discount_pct') v = int(v || 0, 'Chegirma chegarasi', { max: 100 });
+      if (k === 'alert_open_hours') v = int(v || 0, 'Ochiq chek soati', { max: 240 });
+      if (k === 'alert_shift_diff') v = int(v || 0, 'Kassa farqi', { max: 1e10 });
       if (k === 'auto_lock_minutes') v = int(v, 'Avtomatik qulf', { max: 240 });
       if (k === 'service_type' && !['percent', 'per_guest'].includes(v)) throw new HttpError(400, "Xizmat haqi turi noto'g'ri");
       if (k === 'service_per_guest') v = int(v, 'Odam boshiga xizmat haqi', { max: 10_000_000 });
@@ -1203,7 +1231,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       WHERE m.order_id = ? AND m.kind = 'debt_pay' ORDER BY m.id`).all(id) : [];
     return { ...order, refunded, customer, payments, ...{ subtotal: t.subtotal, service_type: t.service_type || 'percent', service_pct: t.service_pct,
       service_amount: t.service_amount, discount: t.discount, total: t.total },
-      items, room, waiter, cashier };
+      items, room, waiter, cashier, ...rating.extras(order, order.status === 'closed' ? (order.balance > 0 ? order.balance : 0) : t.total) };
   }
 
   function listOrders({ user, query }) {
@@ -1495,6 +1523,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       if (it.dish_id) q('UPDATE dishes SET stock = stock + ?, available = 1 WHERE id = ? AND stock IS NOT NULL').run(qty * (it.unit_mult || 1), it.dish_id);
     });
     audit(user, 'item_cancel', `#${it.order_id} ${it.name}×${qty} (${it.status}) ${reason}`);
+    alerts.itemCancelled(user, qty);
     events.publish('kitchen');
     events.publish('rooms');
     if (it.needs_kitchen && ['new', 'cooking'].includes(it.status)) {
@@ -1556,6 +1585,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     if (!live.length) throw new HttpError(400, "Chekda taom yo'q. Bo'sh buyurtmani bekor qiling");
     const r = tx(() => settle(user, o, items, body, true));
     audit(user, 'order_close', `#${o.id} jami ${r.total}${r.discount ? `, chegirma ${r.discount}` : ''}`);
+    { const typed = Number(body.discount) || 0; if (typed > 0) alerts.discount(user, placeFor(o), typed, r.total + r.discount); }
     events.publish('rooms');
     events.publish('finance');
     return { ...orderDetails(o.id), change: r.change };
@@ -1825,6 +1855,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       q("UPDATE orders SET status = 'cancelled', closed_at = ?, cancel_reason = ? WHERE id = ?").run(now(), reason, o.id);
     });
     audit(user, 'order_cancel', `#${o.id} ${reason}${what ? ` — ${what}` : ''}`);
+    if (what) alerts.orderDeleted(user, placeFor(o), q('SELECT cancel_total FROM orders WHERE id = ?').get(o.id).cancel_total, reason);
     events.publish('rooms');
     events.publish('kitchen');
     // The kitchen must know at once: a "CHEK O'CHIRILDI" slip on the order printers (each its own sections)
@@ -2272,6 +2303,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       now(), closing, s.expected, str(body.note, 'Izoh', { max: 300 }), s.id
     );
     audit(user, 'shift_close', `#${s.id} kutilgan ${s.expected}, haqiqiy ${closing}, farq ${closing - s.expected}`);
+    alerts.shiftClosed(user, s.expected, closing);
     work.shiftClosed();
     return q('SELECT * FROM shifts WHERE id = ?').get(s.id);
   }
@@ -2610,6 +2642,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['POST', '/api/academy/test/:id', ALL, acad.finishTest],
     ['GET', '/api/academy/team', MANAGERS, (a) => { const r = acad.team(a); const t = duelRoutes.tally(); for (const x of r.rows) x.duel = t[x.id] || null; return r; }],
     ['GET', '/api/academy/cert/:id', ALL, acad.certificate],
+    ['GET', '/api/ratings', MONEY, rating.list],
     ['GET', '/api/academy/duels', ALL, duelRoutes.home],
     ['POST', '/api/academy/duels', ALL, duelRoutes.create],
     ['GET', '/api/academy/duels/:id', ALL, duelRoutes.get],
@@ -2728,7 +2761,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return { today: sum(dayStartTs()), d7: sum(d(7)), d30: sum(d(30)) };
   }
 
-  return { logError, noteClient, sampleUsage, activityBrief, activity, salesBrief, academyBrief: acad.brief, academySyncCerts: acad.syncCerts,
+  return { logError, noteClient, sampleUsage, activityBrief, activity, salesBrief, academyBrief: acad.brief, academySyncCerts: acad.syncCerts, rateInfo: rating.info, rateSubmit: rating.submit,
     match, guard, workGate: (route, user) => work.gate(route, user), authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, planInfo, wasKicked, summary, ROLES,
     guestInfo: guest.info, guestImage: guest.image, guestRequest: guest.request, morningText, eveningText, soonTexts };
 }

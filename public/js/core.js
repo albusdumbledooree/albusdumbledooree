@@ -791,7 +791,16 @@ function receiptBody(o, s = App.settings) {
       ${o.balance > 0 ? `<tr class="big"><td>${t('QOLDI')}:</td><td>${num(o.balance)}</td></tr>${o.due_at ? `<tr><td>${t("To'lash sanasi")}:</td><td>${fmtDate(o.due_at)}</td></tr>` : ''}`
         : `<tr class="big"><td colspan="2" class="c">${t("TO'LIQ TO'LANDI")}</td></tr>`}</table>` : ''}
     ${o.cashier || o.printed_by ? `<div style="margin-top:4px">${t('Kassir')}: ${esc(o.cashier ? o.cashier.name : o.printed_by)}</div>` : ''}
-    ${foot.length ? `<div class="foot">${foot.map((x) => `<div>${esc(x)}</div>`).join('')}</div>` : ''}`;
+    ${foot.length ? `<div class="foot">${foot.map((x) => `<div>${esc(x)}</div>`).join('')}</div>` : ''}${receiptQrs(o)}`;
+}
+// At the foot of the check, when the boss switched them on: "pay by phone" (Payme / Click, the sum inside) and "rate us".
+function receiptQrs(o) {
+  if (typeof qrSvg !== 'function') return '';
+  const pay = o.pay || {};
+  const box = (url, label) => `<div style="text-align:center"><div style="width:27mm;height:27mm;margin:0 auto">${qrSvg(url).replace('<svg ', '<svg style="width:100%;height:100%" ')}</div><div>${label}</div></div>`;
+  const pays = [pay.payme && box(pay.payme, 'Payme'), pay.click && box(pay.click, 'Click')].filter(Boolean);
+  return `${pays.length ? `<hr><div class="c">${t('Telefon bilan to\'lash')}:</div><div style="display:flex;justify-content:space-around;margin-top:2px">${pays.join('')}</div>` : ''}
+    ${o.rate_path ? `<hr><div class="c">${t('Xizmat yoqdimi? Baholang')}:</div>${box(location.origin + o.rate_path, t('10 soniya'))}` : ''}`;
 }
 function printReceipt(o, s = App.settings) {
   printDoc(`${t('Chek')} #${o.id}`, receiptBody(o, s), 'receipt', s, true);
