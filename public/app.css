@@ -1461,3 +1461,6 @@ details.ver summary .grow { flex: 1 1 200px; min-width: 0; }
 .rt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-top: 12px; }
 .rt-bar { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 14px; } .rt-bar .track { flex: 1; height: 8px; background: var(--panel-2); border-radius: 8px; overflow: hidden; } .rt-bar .fill { display: block; height: 100%; background: #f5b301; }
 .rt-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; } .rt-row.low { background: var(--red-soft); margin: 0 -8px; padding: 10px 8px; border-radius: 8px; }
+/* Online booking requests */
+.ob { margin-bottom: 12px; } .ob-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px; border-radius: 10px; margin-top: 8px; border: 1px solid var(--line); }
+.ob-row.new { background: var(--orange-soft); border-color: #f3dc8b; }

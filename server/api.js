@@ -16,6 +16,7 @@ const { createWork, STAFF_ROLES } = require('./work');
 const { createAcademy } = require('./academy');
 const { createAlerts, ALERT_DEFAULTS } = require('./alerts');
 const { createRating } = require('./rating');
+const { createBooking } = require('./booking');
 const { snapshot } = require('./backup');
 const Units = require('../public/js/units');
 const UNIT_WORDS = { piece: 'dona', pack: 'pachka', box: 'karobka' };
@@ -117,6 +118,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   const rawSetting = (k) => (q('SELECT value FROM settings WHERE key = ?').get(k) || {}).value;
   const rating = createRating(db, { raw: rawSetting, flag: (k) => rawSetting(k) === '1', enabled: () => moduleOn('ratings'), code: () => (tenant() || {}).code || 'demo', now, telegram,
     name: () => settings().name, placeOf: (o) => placeFor(o), money: (n) => shop.money(n) });
+  // Online booking: a guest's request from the business's page, confirmed here into a normal reservation.
+  const booking = createBooking(db, { flag: (k) => rawSetting(k) === '1', enabled: () => moduleOn('reservations') && !SHOP_TYPES.includes(businessType()), now,
+    name: () => settings().name, phone: () => settings().phone || '', events: hub, telegram, audit,
+    reserve: (user, body) => saveReservation({ user, params: {}, body }) });
   // FLOWI Akademiya: lessons from the platform (the same for every business); the whole course comes with the plan's section.
   // The platform may open it fully for this business, leave only the free modules, or hide it; else the plan decides.
   const academyMode = () => { const m = (tenant() || {}).academy_mode; return ['full', 'free', 'off'].includes(m) ? m : 'plan'; };
@@ -196,7 +201,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     // Akademiya duels: on unless the boss turns them off; with other businesses too; during work only when allowed.
     for (const [k, d] of Object.entries(ALERT_DEFAULTS)) { const v = out[k] === undefined || out[k] === '' ? d : out[k]; out[k] = k === 'alert_on' || k === 'alert_delete' ? v === '1' : Number(v) || 0; }
     // Off until the boss turns them on: the "rate us" QR and the payment QRs on the check.
-    for (const k of ['rating_on', 'pay_payme_on', 'pay_click_on']) out[k] = out[k] === '1';
+    for (const k of ['rating_on', 'pay_payme_on', 'pay_click_on', 'booking_on']) out[k] = out[k] === '1';
     for (const k of ['pay_payme_id', 'pay_payme_field', 'pay_click_service', 'pay_click_merchant']) out[k] = out[k] || '';
     out.duel_on = out.duel_on !== '0';
     out.duel_global = out.duel_global !== '0';
@@ -573,7 +578,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   // ---------- Settings ----------
   function updateSettings({ user, body }) {
-    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'receipt_logo_size', 'receipt_group', 'receipt_per_person', 'room_assign', 'delivery_fee', 'big_box_from', 'cashier_sums', 'duel_on', 'duel_global', 'duel_work', 'rating_on', 'pay_payme_on', 'pay_click_on', 'pay_payme_id', 'pay_payme_field', 'pay_click_service', 'pay_click_merchant', 'alert_on', 'alert_cancel_n', 'alert_discount_pct', 'alert_delete', 'alert_open_hours', 'alert_shift_diff',
+    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'receipt_logo_size', 'receipt_group', 'receipt_per_person', 'room_assign', 'delivery_fee', 'big_box_from', 'cashier_sums', 'duel_on', 'duel_global', 'duel_work', 'rating_on', 'booking_on', 'pay_payme_on', 'pay_click_on', 'pay_payme_id', 'pay_payme_field', 'pay_click_service', 'pay_click_merchant', 'alert_on', 'alert_cancel_n', 'alert_discount_pct', 'alert_delete', 'alert_open_hours', 'alert_shift_diff',
       'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo',
       'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', 'cashback_pct', 'qr_order', 'qr_from', 'qr_to',
       'geo_lat', 'geo_lng', 'geo_radius', 'work_from', 'expense_groups', 'staff_types', ...GEO_FLAGS, ...OWNER_SETTINGS];
@@ -656,7 +661,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       }
       if (k === 'waiter_cancel') v = v ? '1' : '0';
       if (k === 'cashier_sums' || k === 'duel_on' || k === 'duel_global' || k === 'duel_work' || k === 'alert_on' || k === 'alert_delete') v = v ? '1' : '0';
-      if (k === 'rating_on' || k === 'pay_payme_on' || k === 'pay_click_on') v = v ? '1' : '0';
+      if (k === 'rating_on' || k === 'pay_payme_on' || k === 'pay_click_on' || k === 'booking_on') v = v ? '1' : '0';
       if (['pay_payme_id', 'pay_payme_field', 'pay_click_service', 'pay_click_merchant'].includes(k)) {
         v = String(v || '').trim();
         if (!/^[\w-]{0,64}$/.test(v)) throw new HttpError(400, "To'lov tizimi ID'si faqat harf va raqamlardan iborat bo'lsin");
@@ -1144,6 +1149,40 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     audit(user, prev.id ? 'dish_update' : 'dish_create', d.name);
     events.publish('menu');
     return q('SELECT * FROM dishes WHERE id = ?').get(id);
+  }
+
+  // A whole menu at once (pasted text or Excel cells, checked on the screen first): new dishes are added,
+  // a dish that is already there by name gets the new price (and section, when one is given).
+  function importMenu({ user, body }) {
+    if (!Array.isArray(body.rows) || !body.rows.length) throw new HttpError(400, "Ro'yxat bo'sh");
+    if (body.rows.length > 1000) throw new HttpError(400, "Bir martada 1000 tadan ko'p taom yuklab bo'lmaydi");
+    const cats = new Map(q('SELECT id, name FROM categories').all().map((c) => [c.name.toLowerCase(), c.id]));
+    let added = 0; let updated = 0; let newCats = 0;
+    tx(() => {
+      body.rows.forEach((r, i) => {
+        const at = `${i + 1}-qator: `;
+        const name = str(r.name, `${at}Nomi`, { required: true, max: 80 });
+        const price = int(r.price, `${at}Narxi`, { required: true, max: 10_000_000_000 });
+        const cname = str(r.category, `${at}Bo'lim`, { max: 60 });
+        let catId = null;
+        if (cname) {
+          catId = cats.get(cname.toLowerCase());
+          if (!catId) { catId = Number(q("INSERT INTO categories (name, icon, sort) VALUES (?, '', ?)").run(cname, cats.size).lastInsertRowid); cats.set(cname.toLowerCase(), catId); newCats++; }
+        }
+        const same = q('SELECT * FROM dishes WHERE active = 1 AND LOWER(name) = LOWER(?)').get(name);
+        if (same) {
+          q('UPDATE dishes SET price = ?, category_id = COALESCE(?, category_id) WHERE id = ?').run(price, catId, same.id);
+          if (same.price !== price) audit(user, 'price_change', `${name}: ${same.price} → ${price}`);
+          updated++;
+        } else {
+          q("INSERT INTO dishes (category_id, name, price, cost, prep_minutes, unit, needs_kitchen, available) VALUES (?, ?, ?, 0, 10, 'porsiya', 1, 1)").run(catId, name, price);
+          added++;
+        }
+      });
+    });
+    audit(user, 'menu_import', `${added} ta yangi, ${updated} ta yangilandi`);
+    events.publish('menu');
+    return { added, updated, categories: newCats };
   }
 
   function deleteDish({ user, params }) {
@@ -2539,6 +2578,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['POST', '/api/dishes/:id/count', MONEY, shop.count],
     ['GET', '/api/dishes/:id/history', MANAGERS, shop.stockHistory],
     ['POST', '/api/import/products', MANAGERS, shop.importProducts],
+    ['POST', '/api/import/menu', MANAGERS, importMenu],
     ['POST', '/api/barcodes', MANAGERS, shop.assignBarcodes],
     ['GET', '/api/masters', ['owner', 'admin', 'cashier', 'waiter'], shop.listMasters],
     ['POST', '/api/masters', MANAGERS, shop.saveMaster],
@@ -2643,6 +2683,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['GET', '/api/academy/team', MANAGERS, (a) => { const r = acad.team(a); const t = duelRoutes.tally(); for (const x of r.rows) x.duel = t[x.id] || null; return r; }],
     ['GET', '/api/academy/cert/:id', ALL, acad.certificate],
     ['GET', '/api/ratings', MONEY, rating.list],
+    ['GET', '/api/bookings', MONEY, booking.list],
+    ['POST', '/api/bookings/:id', MONEY, booking.decide],
     ['GET', '/api/academy/duels', ALL, duelRoutes.home],
     ['POST', '/api/academy/duels', ALL, duelRoutes.create],
     ['GET', '/api/academy/duels/:id', ALL, duelRoutes.get],
@@ -2761,7 +2803,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return { today: sum(dayStartTs()), d7: sum(d(7)), d30: sum(d(30)) };
   }
 
-  return { logError, noteClient, sampleUsage, activityBrief, activity, salesBrief, academyBrief: acad.brief, academySyncCerts: acad.syncCerts, rateInfo: rating.info, rateSubmit: rating.submit,
+  return { logError, noteClient, sampleUsage, activityBrief, activity, salesBrief, academyBrief: acad.brief, academySyncCerts: acad.syncCerts, rateInfo: rating.info, rateSubmit: rating.submit, bookPage: booking.page, bookRequest: booking.request, bookStatus: booking.status,
     match, guard, workGate: (route, user) => work.gate(route, user), authenticate, authenticateDevice, settings, getAsset, businessType, startSession, audit, planInfo, wasKicked, summary, ROLES,
     guestInfo: guest.info, guestImage: guest.image, guestRequest: guest.request, morningText, eveningText, soonTexts };
 }

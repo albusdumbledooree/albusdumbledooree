@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Xona band qilish — FLOWI</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #0f172a; background: #f4f6f9; display: flex; flex-direction: column; }
+  header { background: #0f2130; color: #fff; padding: 18px 20px; text-align: center; }
+  header b { font-size: 21px; display: block; } header small { opacity: .75; }
+  main { flex: 1; width: 100%; max-width: 520px; margin: 0 auto; padding: 16px; }
+  .card { background: #fff; border: 1px solid #dfe3ea; border-radius: 18px; padding: 16px; margin-bottom: 12px; }
+  h2 { font-size: 16px; margin: 0 0 8px; } p { margin: 0 0 8px; } .muted { color: #5b6472; } .small { font-size: 14px; }
+  .days { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+  .day { flex: none; min-width: 70px; text-align: center; border: 2px solid #dfe3ea; background: #fff; border-radius: 12px; padding: 8px 6px; cursor: pointer; font: inherit; color: inherit; }
+  .day b { display: block; font-size: 18px; } .day small { color: #5b6472; font-size: 12px; } .day.on { border-color: #2156e8; background: #e6edfd; }
+  .row { display: flex; gap: 10px; } .row > * { flex: 1; }
+  label { display: block; font-weight: 600; font-size: 14px; margin-top: 10px; }
+  input, select, textarea { width: 100%; font: inherit; padding: 12px; border: 1.5px solid #dfe3ea; border-radius: 12px; margin-top: 4px; background: #fff; color: #0f172a; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: #2156e8; }
+  .room { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; color: inherit; background: #fff; border: 2px solid #dfe3ea; border-radius: 12px; padding: 12px; margin-top: 8px; cursor: pointer; }
+  .room.on { border-color: #2156e8; background: #e6edfd; } .room[disabled] { opacity: .5; cursor: default; }
+  .room .no { min-width: 38px; height: 38px; border-radius: 10px; background: #0f2130; color: #fff; display: grid; place-items: center; font-weight: 800; }
+  .room span { flex: 1; } .room small { display: block; color: #5b6472; }
+  .chip { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 20px; background: #e6f6ec; color: #159947; white-space: nowrap; } .chip.r { background: #fdecec; color: #c62828; }
+  .btn { display: block; width: 100%; font: inherit; font-weight: 700; padding: 15px; border-radius: 12px; border: 0; background: #2156e8; color: #fff; margin-top: 14px; cursor: pointer; text-align: center; text-decoration: none; }
+  .btn:disabled { opacity: .5; } .btn.w { background: #fff; color: #0f172a; border: 1.5px solid #dfe3ea; }
+  .err { color: #dc2626; font-size: 14px; margin-top: 8px; min-height: 20px; }
+  .big { font-size: 60px; line-height: 1.1; text-align: center; } .c { text-align: center; }
+  .hp { position: absolute; left: -9999px; }
+  footer { text-align: center; color: #94a3b8; font-size: 12.5px; padding: 14px; } footer a { color: inherit; }
+</style>
+</head>
+<body>
+<header><b id="name">&nbsp;</b><small>Xona band qilish</small></header>
+<main id="app"><div class="card c muted">Yuklanmoqda…</div></main>
+<footer><a href="/">FLOWI</a> — choyxona va restoranlar uchun dastur</footer>
+<script>
+'use strict';
+var C = ((/^\/b\/([a-z0-9-]+)/i.exec(location.pathname) || [])[1] || '').toLowerCase();
+var app = document.getElementById('app');
+var S = { day: '', time: '19:00', guests: 4, room: 0, rooms: null, info: null };
+var DAYS = ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan'];
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function pad(n) { return (n < 10 ? '0' : '') + n; }
+function iso(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+function nice(ts) { var d = new Date(ts); return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear() + ', ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+function api(method, path, body) {
+  return fetch(path, { method: method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+    .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error((j && j.error) || 'Xatolik'); return j; }); });
+}
+function keyStore(v) { try { if (v === undefined) return localStorage.getItem('flowi_book_' + C) || ''; if (v) localStorage.setItem('flowi_book_' + C, v); else localStorage.removeItem('flowi_book_' + C); } catch (e) { /* private mode */ } return ''; }
+
+function times() { var out = []; for (var h = 9; h <= 23; h++) { out.push(pad(h) + ':00'); out.push(pad(h) + ':30'); } return out; }
+function loadRooms() {
+  return api('GET', '/api/book?c=' + C + '&day=' + S.day + '&time=' + encodeURIComponent(S.time)).then(function (d) {
+    S.rooms = d.rooms; S.past = d.past;
+    if (S.room && !d.rooms.some(function (r) { return r.id === S.room && r.free; })) S.room = 0;
+    draw();
+  });
+}
+function draw() {
+  var today = new Date(); var days = [];
+  for (var i = 0; i < 14; i++) { var d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i); days.push(d); }
+  var fits = function (r) { return r.capacity >= S.guests; };
+  app.innerHTML = '<div class="card"><h2>1. Kun va vaqt</h2><div class="days">' + days.map(function (d, i) {
+      return '<button type="button" class="day' + (iso(d) === S.day ? ' on' : '') + '" data-day="' + iso(d) + '"><small>' + (i === 0 ? 'Bugun' : i === 1 ? 'Ertaga' : DAYS[d.getDay()]) + '</small><b>' + d.getDate() + '</b><small>' + pad(d.getMonth() + 1) + '-oy</small></button>';
+    }).join('') + '</div><div class="row"><label>Vaqt<select id="time">' + times().map(function (t) { return '<option' + (t === S.time ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select></label>' +
+    '<label>Necha kishi<input id="guests" type="number" min="1" max="500" value="' + S.guests + '"></label></div></div>' +
+    '<div class="card"><h2>2. Xona</h2>' + (S.past ? '<p class="small muted">Bu vaqt o\'tib ketgan yoki juda yaqin — boshqa vaqtni tanlang.</p>' : '') +
+    (S.rooms ? S.rooms.map(function (r) {
+      var ok = r.free && !S.past;
+      return '<button type="button" class="room' + (S.room === r.id ? ' on' : '') + '" data-room="' + r.id + '"' + (ok ? '' : ' disabled') + '><b class="no">' + esc(r.number) + '</b><span><b>' + esc(r.name) + '</b><small>' + r.capacity + ' kishigacha' + (ok && !fits(r) ? ' · sizlarga torlik qilishi mumkin' : '') + '</small></span><i class="chip' + (r.free ? '' : ' r') + '" style="font-style:normal">' + (r.free ? 'bo\'sh' : 'band') + '</i></button>';
+    }).join('') : '<p class="muted">Yuklanmoqda…</p>') + '</div>' +
+    '<div class="card"><h2>3. Siz haqingizda</h2><form id="f"><label>Ismingiz<input name="name" required maxlength="80" value="' + esc(S.name || '') + '"></label>' +
+    '<label>Telefon<input name="phone" type="tel" inputmode="tel" required placeholder="90 123 45 67" value="' + esc(S.phone || '') + '"></label>' +
+    '<label>Izoh <span class="muted" style="font-weight:400">(ixtiyoriy)</span><textarea name="note" rows="2" maxlength="300" placeholder="Masalan: tug\'ilgan kun, 20:00 da tort">' + esc(S.note || '') + '</textarea></label>' +
+    '<input class="hp" name="website" tabindex="-1" autocomplete="off"><div class="err" id="err"></div>' +
+    '<button class="btn" id="go"' + (S.room ? '' : ' disabled') + '>' + (S.room ? 'Band qilish' : 'Avval xonani tanlang') + '</button></form>' +
+    '<p class="small muted" style="margin-top:10px">Bu so\'rov. Javobni (tasdiqlandi yoki yo\'q) shu sahifada ko\'rasiz' + (S.info && S.info.phone ? ', shoshilinch bo\'lsa qo\'ng\'iroq qiling: <a href="tel:' + esc(S.info.phone) + '">' + esc(S.info.phone) + '</a>' : '') + '.</p></div>';
+  var keep = function () { var f = document.getElementById('f'); S.name = f.name.value; S.phone = f.phone.value; S.note = f.note.value; };
+  Array.prototype.forEach.call(app.querySelectorAll('[data-day]'), function (b) { b.onclick = function () { keep(); S.day = b.getAttribute('data-day'); S.rooms = null; draw(); loadRooms(); }; });
+  Array.prototype.forEach.call(app.querySelectorAll('[data-room]'), function (b) { b.onclick = function () { keep(); S.room = Number(b.getAttribute('data-room')); draw(); }; });
+  document.getElementById('time').onchange = function (e) { keep(); S.time = e.target.value; loadRooms(); };
+  document.getElementById('guests').onchange = function (e) { keep(); S.guests = Math.max(1, Number(e.target.value) || 1); draw(); };
+  document.getElementById('f').onsubmit = function (e) {
+    e.preventDefault(); keep(); var f = e.target; var b = document.getElementById('go'); b.disabled = true;
+    api('POST', '/api/book', { c: C, room_id: S.room, day: S.day, time: S.time, guests: S.guests, name: S.name, phone: S.phone, note: S.note, website: f.website.value })
+      .then(function (r) { keyStore(r.key); status(r.key); window.scrollTo(0, 0); })
+      .catch(function (err) { b.disabled = false; document.getElementById('err').textContent = err.message; });
+  };
+}
+// The answer to a request sent earlier from this phone (asked again every few seconds while it waits).
+var timer = null;
+function status(key) {
+  clearTimeout(timer);
+  api('GET', '/api/book/status?c=' + C + '&k=' + key).then(function (r) {
+    document.getElementById('name').textContent = r.name;
+    var head = r.status === 'confirmed' ? ['✅', 'Bron tasdiqlandi!', 'Sizni kutamiz.'] : r.status === 'rejected' ? ['❌', 'Afsuski, band qilib bo\'lmadi', 'Boshqa vaqt yoki xonani tanlab ko\'ring.'] : ['⏳', 'So\'rovingiz yuborildi', 'Tasdiqlanishini kuting — bu sahifa o\'zi yangilanadi.'];
+    app.innerHTML = '<div class="card"><div class="big">' + head[0] + '</div><h2 class="c" style="font-size:20px">' + head[1] + '</h2><p class="c muted">' + head[2] + '</p>' +
+      '<p class="c"><b>' + esc(r.room) + '</b><br>' + esc(r.when || nice(r.at)) + ' · ' + r.guests + ' kishi<br><span class="muted">' + esc(r.customer) + '</span></p>' +
+      (r.reply ? '<p class="c">"' + esc(r.reply) + '"</p>' : '') +
+      (r.phone ? '<a class="btn w" href="tel:' + esc(r.phone) + '">📞 ' + esc(r.phone) + '</a>' : '') +
+      '<button class="btn' + (r.status === 'new' ? ' w' : '') + '" id="new">Yangi bron</button></div>';
+    document.getElementById('new').onclick = function () { clearTimeout(timer); keyStore(null); start(); };
+    if (r.status === 'new' || r.status === 'confirming') timer = setTimeout(function () { status(key); }, 8000);
+  }).catch(function () { keyStore(null); start(); });
+}
+function start() {
+  api('GET', '/api/book?c=' + C).then(function (d) {
+    S.info = d; document.getElementById('name').textContent = d.name; document.title = 'Xona band qilish — ' + d.name;
+    if (!S.day) S.day = iso(new Date());
+    draw(); loadRooms();
+  }).catch(function (e) { app.innerHTML = '<div class="card"><div class="big">🔒</div><h2 class="c">' + esc(e.message) + '</h2></div>'; });
+}
+var k = keyStore();
+if (k) status(k); else start();
+</script>
+</body>
+</html>

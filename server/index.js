@@ -59,6 +59,8 @@ function serveStatic(req, res, pathname) {
   else if (/^\/c\/[a-z0-9-]+\/?$/i.test(pathname) || pathname === '/app') file = path.join(PUBLIC, 'index.html');
   // A room's QR code: the guest menu (no login).
   else if (/^\/q\/\d+-[A-Za-z0-9]{12}\/?$/.test(pathname)) file = path.join(PUBLIC, 'guest.html');
+  // Online booking: a business's own page.
+  else if (/^\/b\/[a-z0-9-]+\/?$/i.test(pathname)) file = path.join(PUBLIC, 'book.html');
   // "Rate us": the page behind the QR on a guest's check.
   else if (/^\/r\/[a-z0-9-]+\/\d+-[0-9a-f]{12}\/?$/i.test(pathname)) file = path.join(PUBLIC, 'rate.html');
   // The open waiter test (and a certificate link: /test?c=CODE).
@@ -194,6 +196,14 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
         if (!ctx || ctx.row.status !== 'active') throw new HttpError(404, "Bu havola endi ishlamaydi");
         if (req.method === 'GET') return reply(ctx.api.rateInfo(String(query.k || '')));
         if (req.method === 'POST') return reply(ctx.api.rateSubmit(String(body.k || ''), body));
+      }
+      // Online booking from a business's page (/b/<code>): free rooms for a day and time, the request, and its answer.
+      if (pathname === '/api/book' || pathname === '/api/book/status') {
+        const ctx = platform.byCode(String(req.method === 'GET' ? query.c : body.c || ''));
+        if (!ctx || ctx.row.status !== 'active') throw new HttpError(404, "Onlayn bron hozircha yopiq");
+        if (pathname === '/api/book/status' && req.method === 'GET') return reply(ctx.api.bookStatus(String(query.k || '')));
+        if (pathname === '/api/book' && req.method === 'GET') return reply(ctx.api.bookPage(query));
+        if (pathname === '/api/book' && req.method === 'POST') return reply(ctx.api.bookRequest(body, ip));
       }
       // Front page: current plans and prices, and how to reach the platform owner.
       if (pathname === '/api/public/info' && req.method === 'GET') return reply(platform.publicInfo());

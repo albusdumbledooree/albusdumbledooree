@@ -1049,12 +1049,13 @@ Views.branches = {
 Views.reservations = {
   title: () => t('Bronlar'), icon: () => 'calendar', roles: ['owner', 'admin', 'cashier'], refreshOn: ['rooms'], module: 'reservations',
   async load() {
-    const [list, rooms] = await Promise.all([GET(`/api/reservations?from=${dayStart().getTime()}`), GET('/api/rooms?all=1')]);
-    return { list, rooms };
+    const [list, rooms, online] = await Promise.all([GET(`/api/reservations?from=${dayStart().getTime()}`), GET('/api/rooms?all=1'), GET('/api/bookings').catch(() => null)]);
+    return { list, rooms, online };
   },
-  render({ list }) {
+  render({ list, online }) {
     const st = { active: `<span class="chip new">${t('Kutilmoqda')}</span>`, arrived: `<span class="chip green">${t('Keldi')}</span>`, cancelled: `<span class="chip red">${t('Bekor')}</span>` };
     return `<div class="page-head"><h1>${t('Bronlar')}</h1><button class="btn primary" id="add">${icon('plus', 18)} ${t('Yangi bron')}</button></div>
+      ${onlineBookingHtml(online)}
       <div class="card">${list.length ? `<div class="table-wrap"><table><tr><th>${t('Vaqt')}</th><th>${t('Xona')}</th><th>${t('Mijoz')}</th><th class="right">${icon('users', 15)}</th><th class="right">${t('Avans')}</th><th></th><th></th></tr>
         ${list.map((x) => `<tr><td><b>${fmtDateTime(x.starts_at)}</b></td><td>${esc(x.room_number)} · ${esc(x.room_name)}</td>
           <td>${esc(x.customer)}<br><span class="small muted">${esc(x.phone)}${x.note ? ` · ${esc(x.note)}` : ''}</span></td>
@@ -1084,6 +1085,7 @@ Views.reservations = {
       } }],
     });
     root.querySelector('#add').onclick = () => edit();
+    bindOnlineBooking(root);
     root.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => edit(list.find((x) => x.id === Number(b.dataset.edit))));
     root.querySelectorAll('[data-st]').forEach((b) => b.onclick = async () => {
       try { await POST(`/api/reservations/${b.dataset.id}/status`, { status: b.dataset.st }); refreshView(); } catch (e) { toastError(e); }
@@ -1107,6 +1109,7 @@ Views.menuadmin = {
     const idish = isIdish();
     return `<div class="page-head"><h1>${idish ? t('Ombor') : W('Menyu')}</h1>
       <input type="search" id="menu-search" placeholder="${esc(shop ? t('Shtrix-kod yoki nomi') : t('Qidirish'))}" value="${esc(UI.menuSearch || '')}" style="max-width:240px">
+      ${shop ? '' : `<button class="btn" id="menu-import">${icon('upload', 18)} ${t('Import')}</button>`}
       ${shop ? `<button class="btn ok" id="mol-keldi">${icon('package-plus', 18)} ${t('Mol keldi')}</button><button class="btn" id="mol-import">${icon('file-spreadsheet', 18)} Excel</button><button class="btn" id="mol-labels">${icon('scan-barcode', 18)} ${t('Yorliq')}</button>` : ''}
       ${shop ? '' : `<button class="btn" id="mods-btn">${icon('list', 18)} ${t("Qo'shimcha tanlovlar")}</button>`}
       <button class="btn" id="add-cat">${icon('plus', 18)} ${t("Bo'lim")}</button><button class="btn primary" id="add-dish">${icon('plus', 18)} ${W('Taom')}</button></div>
@@ -1134,6 +1137,7 @@ Views.menuadmin = {
     root.querySelectorAll('[data-stock]').forEach((b) => b.onclick = () => stockMenu(dishes.find((d) => d.id === Number(b.dataset.stock))));
     const mk = root.querySelector('#mol-keldi'); if (mk) mk.onclick = () => purchaseDialog();
     const mi = root.querySelector('#mol-import'); if (mi) mi.onclick = () => importDialog();
+    const mn = root.querySelector('#menu-import'); if (mn) mn.onclick = () => menuImportDialog(categories);
     const ml = root.querySelector('#mol-labels'); if (ml) ml.onclick = () => labelsDialog();
     const editCat = (c = {}) => openModal({
       title: `${icon('list')} ${c.id ? t("Bo'limni tahrirlash") : t("Yangi bo'lim")}`,
@@ -2381,3 +2385,111 @@ Views.ratings = {
   },
   bind(root) { bindPeriod(root); },
 };
+
+
+// ---------- A whole menu at once: pasted text ("Osh 45000" a line) or cells copied from Excel ----------
+// A line without a price is a section's heading for the lines under it; without headings the section is guessed from the name.
+const MENU_GUESS = [
+  [/choy|kofe|qahva|cola|kola|fanta|sprite|suv|sharbat|kompot|limonad|pepsi|ayron|moxito|sok\b/i, 'Ichimliklar'],
+  [/kabob|shashlik|qozon kabob|tandir go'sht|lyulya|lula/i, 'Kaboblar'],
+  [/sho'rva|shorva|lag'mon|lagmon|mastava|chuchvara|norin|moshxo'rda|ugra|borsh|suyuq/i, 'Suyuq taomlar'],
+  [/salat|achchiq-chuchuk|achichuk|olivye|sezar|vinegret/i, 'Salatlar'],
+  [/\bnon\b|patir|somsa|lochira/i, 'Non va boshqalar'],
+  [/tort|shirinlik|desert|muzqaymoq|paxlava|holva|chak-chak/i, 'Shirinliklar'],
+  [/osh\b|palov|manti|dimlama|qovurdoq|qazi|jiz|bifshteks|kotlet|norin|honim|xonim|do'lma|tovuq|baliq/i, 'Quyuq taomlar'],
+];
+function menuPrice(s) {
+  // "45 000", "45000", "45.000", "45,000 so'm", "45 ming", "45k"
+  const m = /(\d{1,3}(?:[ .,']\d{3})+|\d+)\s*(ming|k|тыс)?\.?\s*(so'm|som|сум|sum|uzs)?\s*$/i.exec(s.trim());
+  if (!m) return null;
+  let n = Number(m[1].replace(/[ .,']/g, ''));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  if (m[2]) n *= 1000;
+  return { price: Math.round(n), name: s.trim().slice(0, m.index).replace(/[\s—–\-:.·…_]+$/, '').trim() };
+}
+function parseMenuText(text) {
+  const all = text.replace(/\r/g, '').split('\n').map((l) => l.trim());
+  const lines = all.filter(Boolean);
+  if (!lines.length) return [];
+  // Cells copied from Excel (tabs) with a heading row the columns are known by.
+  if (lines[0].includes('\t')) {
+    const t0 = parsePasted(text);
+    if (t0.rows.some((r) => r.price)) return t0.rows.filter((r) => r.name && r.price).map((r) => ({ name: r.name, price: r.price, category: r.category || menuGuess(r.name) }));
+    // No headings: name, price (and maybe a section) by position.
+    return lines.map((l) => l.split('\t').map((c) => c.trim())).map((c) => { const p = menuPrice(c[1] || ''); return p ? { name: c[0], price: p.price, category: c[2] || menuGuess(c[0]) } : null; }).filter((r) => r && r.name);
+  }
+  const out = []; let section = '';
+  for (const l of all) {
+    if (!l) { section = ''; continue; } // an empty line ends the section
+    const p = menuPrice(l.replace(/^\d+[.)]\s+/, ''));
+    if (p && p.name) out.push({ name: p.name.slice(0, 80), price: p.price, category: section || menuGuess(p.name) });
+    else if (!p) section = l.replace(/[:：]+$/, '').trim().slice(0, 60);
+  }
+  return out;
+}
+function menuGuess(name) { const g = MENU_GUESS.find(([re]) => re.test(name)); return g ? g[1] : ''; }
+function menuImportDialog(categories) {
+  let rows = [];
+  const catNames = () => [...new Set([...categories.map((c) => c.name), ...rows.map((r) => r.category).filter(Boolean), ...MENU_GUESS.map((g) => g[1])])];
+  const form = openModal({
+    title: `${icon('upload')} ${t('Menyuni import qilish')}`, size: 'wide',
+    body: `<p class="small muted" style="margin-top:0">${t("Menyuni shu yerga yozing yoki joylang: har qatorda taom nomi va narxi. Narxsiz qator — bo'lim nomi (pastidagi taomlar shu bo'limga tushadi). Excel'dan nusxa olib joylasa ham bo'ladi.")}</p>
+      <textarea name="text" rows="9" spellcheck="false" placeholder="${esc("Suyuq taomlar\nLag'mon 38000\nMastava 30 000\n\nKaboblar\nJigar kabob 18 ming\nQo'y go'shti kabob — 25 000 so'm\n\nKo'k choy 5000")}"></textarea>
+      <div id="mi-prev" style="margin-top:12px"></div>
+      <p class="small muted">${t("Menyuda shu nomli taom bo'lsa — narxi yangilanadi, yangi taom qo'shilmaydi.")}</p>`,
+    actions: [{ label: t('Bekor') }, { label: t('Saqlash'), cls: 'primary', icon: 'check', onClick: async (f) => {
+      const list = [...f.querySelectorAll('[data-mi]')].map((tr) => ({ name: tr.querySelector('[name=n]').value.trim(), price: Number(tr.querySelector('[name=p]').value) || 0, category: tr.querySelector('[name=c]').value.trim() })).filter((r) => r.name && r.price > 0);
+      if (!list.length) { toast(t("Ro'yxat bo'sh"), 'warn'); return false; }
+      const r = await POST('/api/import/menu', { rows: list });
+      toast(t('Yuklandi: {0} ta yangi, {1} ta yangilandi', r.added, r.updated), 'ok', 7000); refreshView();
+    } }],
+  });
+  const draw = () => {
+    const names = catNames();
+    form.querySelector('#mi-prev').innerHTML = rows.length ? `<b>${t('{0} ta taom topildi — tekshirib saqlang', rows.length)}</b>
+      <datalist id="mi-cats">${names.map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
+      <div class="table-wrap" style="max-height:300px;margin-top:6px"><table><tr><th>${t('Nomi')}</th><th>${t("Bo'lim")}</th><th class="right">${t('Narxi')}</th><th></th></tr>
+      ${rows.map((r, i) => `<tr data-mi="${i}"><td><input name="n" value="${esc(r.name)}" style="min-height:36px"></td><td><input name="c" list="mi-cats" value="${esc(r.category || '')}" placeholder="${esc(t("Bo'limsiz"))}" style="min-height:36px"></td>
+        <td class="right"><input name="p" type="number" min="0" value="${r.price}" style="min-height:36px;max-width:130px;text-align:right"></td><td><button type="button" class="icon-btn ghost" data-mirm="${i}">${icon('x', 15)}</button></td></tr>`).join('')}</table></div>` : '';
+    form.querySelectorAll('[data-mirm]').forEach((b) => b.onclick = () => b.closest('tr').remove());
+  };
+  form.text.oninput = () => { rows = parseMenuText(form.text.value); draw(); };
+}
+
+
+// ---------- Online booking: guests' requests from the business's own page, answered here ----------
+function bookingUrl() { return `${location.origin}/b/${(App.info && App.info.code) || ''}`; }
+function onlineBookingHtml(o) {
+  if (!o || !o.available) return '';
+  const waiting = o.rows.filter((x) => x.status === 'new');
+  const done = o.rows.filter((x) => x.status !== 'new');
+  return `<div class="card ob"><div class="switch-row" style="padding-top:0"><div class="grow"><b>${icon('link', 16)} ${t('Onlayn bron')}</b>
+      <span class="small muted">${o.on ? `${t('Mehmonlar shu sahifadan xona band qiladi')}: <a href="${esc(bookingUrl())}" target="_blank" rel="noopener"><b>${esc(bookingUrl().replace(/^https?:\/\//, ''))}</b></a>` : t("Yoqsangiz, mehmonlar telefonidan xona band qilish so'rovini yuboradi — siz tasdiqlaysiz.")}</span></div>
+      ${o.on ? `<button class="btn sm" id="ob-copy">${icon('copy', 15)} ${t('Havola')}</button>` : ''}
+      ${can('owner', 'admin') ? `<label class="switch"><input type="checkbox" id="ob-on" ${o.on ? 'checked' : ''}><span></span></label>` : ''}</div>
+    ${waiting.map((x) => `<div class="ob-row new"><div class="grow"><b>${esc(x.room_number || '')} · ${esc(x.room_name || '')}</b> — ${fmtDateTime(x.starts_at)} · ${icon('users', 14)} ${x.guests}
+        <br><span class="small">${esc(x.customer)} · <a href="tel:${esc(x.phone)}">${esc(x.phone)}</a>${x.note ? ` · ${esc(x.note)}` : ''}</span></div>
+        <button class="btn sm" data-obno="${x.id}">${icon('x', 15)} ${t('Rad etish')}</button><button class="btn sm ok" data-obok="${x.id}">${icon('check', 15)} ${t('Tasdiqlash')}</button></div>`).join('')}
+    ${done.length ? `<details class="small" style="margin-top:8px"><summary class="muted">${t("Oxirgi javoblar")} (${done.length})</summary>${done.map((x) => `<div class="ob-row"><div class="grow">${esc(x.room_name || '')} — ${fmtDateTime(x.starts_at)} · ${esc(x.customer)} ${esc(x.phone)}</div>
+      <span class="chip ${x.status === 'confirmed' ? 'green' : 'red'}">${x.status === 'confirmed' ? t('Tasdiqlandi') : t('Rad etildi')}</span></div>`).join('')}</details>` : ''}</div>`;
+}
+function bindOnlineBooking(root) {
+  const sw = root.querySelector('#ob-on');
+  if (sw) sw.onchange = async () => { try { App.settings = await PUT('/api/settings', { booking_on: sw.checked }); toast(t('Saqlandi'), 'ok'); refreshView(); } catch (e) { sw.checked = !sw.checked; toastError(e); } };
+  const cp = root.querySelector('#ob-copy');
+  if (cp) cp.onclick = async () => { try { await navigator.clipboard.writeText(bookingUrl()); toast(t('Havola nusxalandi'), 'ok'); } catch { prompt(t('Havola'), bookingUrl()); } };
+  root.querySelectorAll('[data-obok]').forEach((b) => b.onclick = async () => {
+    try { await POST(`/api/bookings/${b.dataset.obok}`, { ok: true }); toast(t('Bron tasdiqlandi'), 'ok'); refreshView(); } catch (e) { toastError(e); }
+  });
+  root.querySelectorAll('[data-obno]').forEach((b) => b.onclick = async () => {
+    const reply = await promptModal(t('Rad etish'), t('Mehmonga sabab (ixtiyoriy): masalan, "shu vaqtga joy yo\'q"'));
+    if (reply === null) return;
+    try { await POST(`/api/bookings/${b.dataset.obno}`, { ok: false, reply }); refreshView(); } catch (e) { toastError(e); }
+  });
+}
+Live.on('booking', (d) => {
+  if (!App.user || !can('owner', 'admin', 'cashier')) return;
+  Voice.chime('alert');
+  notifySystem(t('Yangi onlayn bron'), `${d.room} · ${fmtDateTime(d.at)} · ${d.customer}`);
+  toast(`${t('Yangi onlayn bron')}: ${d.room} · ${fmtDateTime(d.at)} · ${d.customer}`, 'info', 10000);
+});

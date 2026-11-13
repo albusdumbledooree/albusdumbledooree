@@ -2,6 +2,11 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.44.0 — Menyuni tez kiritish (import) va onlayn bron
+
+- **Menyu importi** — Menyu → Import. Menyuni matn qilib yozing yoki Excel'dan nusxa olib joylang: har qatorda taom nomi va narxi ("Norin 35000", "Tovuq kabob 22 ming", "Qatiq — 6 000 so'm"). Narxsiz qator bo'lim nomi hisoblanadi. Saqlashdan oldin ro'yxat ko'rinadi — nom, bo'lim, narxni tuzatish yoki qatorni olib tashlash mumkin. Menyuda shu nomli taom bo'lsa, faqat narxi yangilanadi.
+- **Onlayn bron** (standart holatda o'chiq) — Bronlar bo'limida yoqiladi. Mehmon `/b/<kod>` sahifasida kun, vaqt, xona tanlab so'rov qoldiradi; band xonalar ko'rinib turadi. So'rov Bronlar bo'limida va Telegram'da chiqadi — "Tasdiqlash" yoki "Rad etish". Mehmon javobni o'sha sahifaning o'zida ko'radi. Tasdiqlangan so'rov oddiy bronga aylanadi. "Olib ketish" bo'limi ro'yxatda chiqmaydi.
+
 ## 1.43.0 — Boshliqqa ogohlantirishlar, mijoz bahosi, chekda to'lov QR'i, ombor prognozi
 
 - **Ogohlantirishlar (Telegram)** — Sozlamalar → Telegram: bir xodim ko'p taom bekor qilsa, katta chegirma berilsa, taomli chek o'chirilsa, chek soatlab ochiq qolsa, smena yopilganda kassa farq qilsa — boshliqqa darhol xabar. Har birining chegarasini boshliq o'zi belgilaydi (0 — kelmaydi). Biznes va Pro tariflarida.

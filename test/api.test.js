@@ -3294,3 +3294,62 @@ test('store forecast: how many days each ingredient lasts, and the morning shopp
   const text = ctx.api.morningText();
   assert.match(text, /Ombor: tugayapti \(1\)/); assert.match(text, /Guruch — <b>bugunga<\/b> yetadi/); assert.match(text, /Guruch 9 kg/); assert.doesNotMatch(text, /Tuz/);
 });
+
+test('menu import: new dishes with their sections, a known dish only gets its new price', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  await call('POST', '/api/platform/tenants', admin, { name: 'Import', code: 'importm', owner_name: 'E', owner_username: 'importb', owner_password: 'parol12345', plan: 'start' });
+  const boss = await login('importb', 'parol12345', 'importm');
+  const r = await call('POST', '/api/import/menu', boss, { rows: [{ name: 'Osh', price: 45000, category: 'Quyuq taomlar' }, { name: "Lag'mon", price: 38000, category: 'Suyuq taomlar' }, { name: 'Non', price: 5000, category: '' }] });
+  assert.equal(r.status, 200, JSON.stringify(r.data)); assert.deepEqual(r.data, { added: 3, updated: 0, categories: 2 });
+  let menu = (await call('GET', '/api/menu', boss)).data;
+  const osh = menu.dishes.find((d) => d.name === 'Osh');
+  assert.equal(osh.price, 45000); assert.equal(menu.categories.find((c) => c.id === osh.category_id).name, 'Quyuq taomlar');
+  assert.equal(menu.dishes.find((d) => d.name === 'Non').category_id, null);
+  const again = (await call('POST', '/api/import/menu', boss, { rows: [{ name: 'osh', price: 50000, category: 'quyuq taomlar' }, { name: 'Manti', price: 40000, category: 'Quyuq taomlar' }] })).data;
+  assert.deepEqual(again, { added: 1, updated: 1, categories: 0 });
+  menu = (await call('GET', '/api/menu', boss)).data;
+  assert.equal(menu.dishes.filter((d) => d.name.toLowerCase() === 'osh').length, 1); assert.equal(menu.dishes.find((d) => d.name === 'Osh').price, 50000);
+  assert.equal((await call('POST', '/api/import/menu', boss, { rows: [{ name: '', price: 1 }] })).status, 400);
+  assert.equal((await call('POST', '/api/import/menu', boss, { rows: [] })).status, 400);
+});
+
+test('online booking: off by default; a guest request, free and taken rooms, confirm into a reservation, refuse with a reason', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  await call('POST', '/api/platform/tenants', admin, { name: 'Bron', code: 'bronx', owner_name: 'E', owner_username: 'bronb', owner_password: 'parol12345', plan: 'biznes', sample: true });
+  const boss = await login('bronb', 'parol12345', 'bronx');
+  const day = localDay(2);
+  assert.equal((await call('GET', '/api/book?c=bronx')).status, 404, 'closed until switched on');
+  assert.equal((await fetch(`${base}/b/bronx`)).status, 200);
+  await call('PUT', '/api/settings', boss, { booking_on: true });
+  const page = (await call('GET', `/api/book?c=bronx&day=${day}&time=19:00`)).data;
+  assert.equal(page.name, 'Bron'); assert.ok(page.rooms.length > 1 && page.rooms.every((r) => r.free));
+  const room = page.rooms[0];
+  assert.equal((await call('POST', '/api/book', null, { c: 'bronx', room_id: room.id, day, time: '19:00', guests: 6, name: 'Ali', phone: '' })).status, 400, 'phone required');
+  assert.equal((await call('POST', '/api/book', null, { c: 'bronx', room_id: room.id, day: localDay(-1), time: '19:00', name: 'Ali', phone: '901234567' })).status, 400, 'not in the past');
+  const k1 = (await call('POST', '/api/book', null, { c: 'bronx', room_id: room.id, day, time: '19:00', guests: 6, name: 'Ali Valiyev', phone: '90 123 45 67', note: 'tug\'ilgan kun' })).data.key;
+  assert.equal((await call('GET', `/api/book/status?c=bronx&k=${k1}`)).data.status, 'new');
+  // The same room an hour later is taken while the request waits; another room is free.
+  assert.equal((await call('GET', `/api/book?c=bronx&day=${day}&time=20:00`)).data.rooms.find((r) => r.id === room.id).free, false);
+  assert.equal((await call('POST', '/api/book', null, { c: 'bronx', room_id: room.id, day, time: '20:00', name: 'Vali', phone: '901112233' })).status, 409);
+  const k2 = (await call('POST', '/api/book', null, { c: 'bronx', room_id: page.rooms[1].id, day, time: '20:00', guests: 2, name: 'Vali', phone: '901112233' })).data.key;
+  // In the program: two wait; one confirmed (a normal reservation appears), one refused with a reason.
+  let list = (await call('GET', '/api/bookings', boss)).data;
+  assert.equal(list.waiting, 2); assert.equal(list.rows[0].key, undefined, 'the guest key is not shown');
+  const a = list.rows.find((x) => x.customer === 'Ali Valiyev'); const b = list.rows.find((x) => x.customer === 'Vali');
+  assert.equal((await call('POST', `/api/bookings/${a.id}`, boss, { ok: true })).status, 200);
+  assert.equal((await call('POST', `/api/bookings/${a.id}`, boss, { ok: true })).status, 409);
+  assert.equal((await call('POST', `/api/bookings/${b.id}`, boss, { ok: false, reply: 'Joy yo\'q' })).status, 200);
+  const res = (await call('GET', '/api/reservations', boss)).data;
+  const made = res.find((x) => x.customer === 'Ali Valiyev');
+  assert.equal(made.phone, '+998901234567'); assert.equal(made.guests, 6); assert.match(made.note, /onlayn bron/);
+  assert.equal((await call('GET', `/api/book/status?c=bronx&k=${k1}`)).data.status, 'confirmed');
+  const st2 = (await call('GET', `/api/book/status?c=bronx&k=${k2}`)).data;
+  assert.equal(st2.status, 'rejected'); assert.equal(st2.reply, 'Joy yo\'q');
+  assert.equal((await call('GET', `/api/book?c=bronx&day=${day}&time=20:00`)).data.rooms.find((r) => r.id === page.rooms[1].id).free, true, 'a refused request frees the room');
+  assert.equal((await call('GET', '/api/bookings', boss)).data.waiting, 0);
+  // Start plan: no reservations section, so no online booking either.
+  await call('POST', '/api/platform/tenants', admin, { name: 'Kichik', code: 'kichik', owner_name: 'E', owner_username: 'kichikb', owner_password: 'parol12345', plan: 'start' });
+  const small = await login('kichikb', 'parol12345', 'kichik');
+  await call('PUT', '/api/settings', small, { booking_on: true });
+  assert.equal((await call('GET', '/api/book?c=kichik')).status, 404);
+});
