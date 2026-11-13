@@ -521,7 +521,8 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && Ap
   const imp = /^#\/imp\/([A-Za-z0-9_]+)$/.exec(location.hash);
   if (imp) { App.token = imp[1]; store('cp_token', App.token); history.replaceState(null, '', location.pathname); }
   if (App.token) {
-    try { await afterLogin(); } catch { App.token = null; store('cp_token', null); }
+    // (No internet and nothing saved on this device yet: the session is kept, the next start tries again.)
+    try { await afterLogin(); } catch (e) { if (!e || !e.offline) { App.token = null; store('cp_token', null); } }
   }
   if (!App.user) {
     const code = (App.device && App.device.code) || store('cp_code');
@@ -532,6 +533,8 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && Ap
   // The boss switches this computer's printer on or off from Settings: the device follows within half a minute.
   setInterval(() => { if (App.device) OrderPrinter.load().then(() => OrderPrinter.sync()); }, 30000);
   render();
+  Offline.paint();
+  if (Offline.list().length) { Offline.watch(); Offline.flush(); }
 })();
 
 // ---------- Program errors on this screen go to the platform's activity view (a few per page load) ----------

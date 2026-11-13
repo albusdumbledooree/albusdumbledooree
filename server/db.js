@@ -895,6 +895,14 @@ CREATE INDEX IF NOT EXISTS idx_academy_tests_user ON academy_tests(user_id, star
     comment TEXT NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL
   ); CREATE INDEX IF NOT EXISTS idx_order_ratings_at ON order_ratings(created_at);`);
+  // Orders written on a phone without internet: each one's own key, so a repeated delivery is written only once.
+  db.exec(`CREATE TABLE IF NOT EXISTS offline_sync (
+    key TEXT PRIMARY KEY,
+    order_id INTEGER NOT NULL,
+    user_id INTEGER,
+    made_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+  )`);
   // Door shop: a sale with an advance (bosh to'lov). balance = what is still owed on this very check, due_at = when.
   if (!colsOf('orders').includes('balance')) {
     db.exec(`ALTER TABLE orders ADD COLUMN balance INTEGER NOT NULL DEFAULT 0;

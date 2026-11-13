@@ -200,11 +200,24 @@ function store(key, val) {
 
 // ---------- API ----------
 async function api(method, path, body, token = App.token) {
-  const res = await fetch(path, {
-    method,
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(App.financeKey ? { 'X-Finance': App.financeKey } : {}) },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res = null;
+  try {
+    res = await fetch(path, {
+      method,
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(App.financeKey ? { 'X-Finance': App.financeKey } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) { res = null; }
+  // No internet (or the server is not answering): the menu, rooms and checks seen last come from the device's own copy.
+  if (!res || (res.status >= 502 && res.status <= 504)) {
+    const saved = method === 'GET' && token === App.token ? Offline.cached(path) : undefined;
+    Offline.down();
+    if (saved !== undefined) return saved;
+    const err = new Error(t("Internet yo'q — bu amal internet kelganda ishlaydi"));
+    err.offline = true;
+    throw err;
+  }
+  Offline.up();
   checkVersion(res.headers.get('X-App-Version'));
   let data = null;
   try { data = await res.json(); } catch { /* empty */ }
@@ -228,6 +241,7 @@ async function api(method, path, body, token = App.token) {
     }
     throw err;
   }
+  if (method === 'GET' && token === App.token) Offline.keep(path, data);
   return data;
 }
 const GET = (p) => api('GET', p);
@@ -698,7 +712,13 @@ async function printCheck(orderId) {
     if (!r.sent_to) return printReceipt({ ...r, printed_by: App.user && App.user.name });
     if (r.sent_to.online) toast(t('Chek {0} printeriga yuborildi', r.sent_to.name), 'ok');
     else toast(t("{0} printeri hozir ulanmagan — chek u yoqilganda chiqadi", r.sent_to.name), 'warn', 8000);
-  } catch (e) { toastError(e); }
+  } catch (e) {
+    // No internet: the bill is printed here from the check as it was last seen.
+    const saved = e.offline ? Offline.cached(`/api/orders/${orderId}`) : undefined;
+    if (!saved) return toastError(e);
+    printReceipt({ ...saved, printed_by: App.user && App.user.name });
+    toast(t("Internet yo'q — chek oxirgi ko'rilgan holatida chop etildi"), 'warn', 7000);
+  }
 }
 
 // Logo at the top of the check: a separate check logo if the boss uploaded one, otherwise the main logo.
@@ -816,11 +836,11 @@ function printKitchenTicket(tk) {
       .kt-room{text-align:center;font-size:26px;font-weight:900;line-height:1.2}.kt-sub{text-align:center}
       .kt-head{display:flex;justify-content:space-between}.kt-it{display:flex;justify-content:space-between;gap:8px;font-size:19px;font-weight:900;line-height:1.25;margin-top:4px}
       .kt-it span:last-child{white-space:nowrap}.kt-note{padding-left:14px}</style>
-    ${tk.test ? mark(t('SINOV')) : ''}${tk.cancel ? mark(t('BEKOR QILINDI')) : ''}
+    ${tk.test ? mark(t('SINOV')) : ''}${tk.offline ? mark(t('INTERNETSIZ')) : ''}${tk.cancel ? mark(t('BEKOR QILINDI')) : ''}
     ${tk.deleted ? `<div class="c">${t("BUTUN CHEK O'CHIRILDI")}</div>${tk.reason ? `<div class="c">${t('Sabab')}: ${esc(tk.reason)}</div>` : ''}` : ''}
     ${tk.reprint ? mark(t('QAYTA CHOP ETILDI')) : ''}${tk.late ? `<div class="c">${t('KECHIKIB CHIQDI')} (${fmtTime(tk.at)})</div>` : ''}
     <div class="kt-room">${esc(tk.room)}</div>
-    <div class="kt-sub">${t('Chek')} #${tk.order_id} - ${esc(tk.waiter || '')}${tk.by && tk.by !== tk.waiter ? ` (${esc(tk.by)})` : ''} - ${fmtTime(tk.at || Date.now())}</div><hr>
+    <div class="kt-sub">${t('Chek')} ${tk.offline && !Number(tk.order_id) ? '' : '#'}${tk.order_id} - ${esc(tk.waiter || '')}${tk.by && tk.by !== tk.waiter ? ` (${esc(tk.by)})` : ''} - ${fmtTime(tk.at || Date.now())}</div><hr>
     <div class="kt-head"><span>${t('Nomi')}</span><span>${t('Soni')}</span></div><hr>
     ${tk.items.map((i) => `<div class="kt-it"><span>${esc(i.name)}</span><span>${i.qty}</span></div>${modsText(i) ? `<div class="kt-note">+ ${esc(modsText(i))}</div>` : ''}${i.note ? `<div class="kt-note">* ${esc(i.note)}</div>` : ''}`).join('')}<hr>`,
   'kitchen', App.settings, true);

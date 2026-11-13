@@ -261,6 +261,8 @@ function checkPane({ order, room, cart, takeaway, couriers, readonly: ro }) {
        ${ro ? `<span class="guests">${icon('users', 16)} ${guests}</span>` : `<span class="guests" title="${esc(t('Mehmonlar soni'))}"><button data-g="-1">−</button><span>${icon('users', 16)} ${guests}</span><button data-g="1">+</button></span>`}`;
   const sent = groupSent(items.filter((i) => i.status !== 'cancelled')).map(groupItem);
   const cancelled = items.filter((i) => i.status === 'cancelled');
+  // Written without internet and still waiting on this device.
+  const queued = (room || order) ? Offline.forPlace(takeaway ? null : room.id, order ? order.id : null).reduce((a, e) => a.concat(e.lines), []) : [];
   const ready = items.filter((i) => i.status === 'ready').length;
   let no = 0;
   const total = order ? order.total : 0;
@@ -278,7 +280,11 @@ function checkPane({ order, room, cart, takeaway, couriers, readonly: ro }) {
           <span class="nm">${esc(c.name)}${c.modsText ? `<small class="md">+ ${esc(c.modsText)}</small>` : ''}${c.note ? `<small class="nt">✎ ${esc(c.note)}</small>` : ''}</span>
           <span class="qt"><button data-dec="${idx}" aria-label="−">${icon('minus', 14)}</button><b>${c.qty}</b><button data-inc="${idx}" aria-label="+">${icon('plus', 14)}</button></span>
           <span class="sm">${num(c.price * c.qty)}</span></div>`).join('')}` : ''}
-      ${!items.length && !cart.lines.length ? emptyState('utensils', W("Menyudan taom tanlang")) : ''}
+      ${queued.length ? `<div class="batch-title offq-title">${icon('wifi-off', 13)} ${t('Internet kelganda yuboriladi')}</div>
+        ${queued.map((c) => `<div class="row2 offq-line"><span class="no">${++no}</span>
+          <span class="nm">${esc(c.name)}${c.modsText ? `<small class="md">+ ${esc(c.modsText)}</small>` : ''}${c.note ? `<small class="nt">✎ ${esc(c.note)}</small>` : ''}</span>
+          <span class="qt"><b>${c.qty}</b></span><span class="sm">${num(c.price * c.qty)}</span></div>`).join('')}` : ''}
+      ${!items.length && !cart.lines.length && !queued.length ? emptyState('utensils', W("Menyudan taom tanlang")) : ''}
     </div>
     <div class="cp-foot">
       ${order ? `<div class="sum-rows num">
@@ -545,11 +551,23 @@ function confirmSend(d, cart) {
       <p class="small muted" style="margin-top:10px">${icon('info', 14)} ${t("Yuborilgandan keyin taomni faqat ruxsat bilan bekor qilish mumkin.")}</p>`,
     actions: [{ label: t('Orqaga') }, { label: t('Tasdiqlash va yuborish'), cls: 'primary', icon: 'send', onClick: async () => {
       let o = d.order;
-      if (!o) {
-        const room_id = d.takeaway ? (await GET('/api/takeaway')).room_id : d.room.id;
-        o = await POST('/api/orders', { room_id, guests: cart.guests || 1, label: cart.label || '', ...(d.kind === 'dlv' ? { delivery: cart.delivery || {} } : {}) });
+      let roomId = d.takeaway ? null : d.room.id;
+      try {
+        if (!o) {
+          if (d.takeaway) roomId = (await GET('/api/takeaway')).room_id;
+          o = await POST('/api/orders', { room_id: roomId, guests: cart.guests || 1, label: cart.label || '', ...(d.kind === 'dlv' ? { delivery: cart.delivery || {} } : {}) });
+        }
+        await POST(`/api/orders/${o.id}/items`, { items: cart.lines.map(({ dish_id, qty, note, mods }) => ({ dish_id, qty, note, ...(mods ? { mods } : {}) })) });
+      } catch (e) {
+        // No internet: the order stays on this device and goes by itself when the internet is back.
+        if (!e.offline || (!roomId && !o)) throw e;
+        Offline.add({ roomId: roomId || o.room_id, kind: d.kind, place: d.kind === 'dlv' || (o && o.delivery) ? t('Dostavka') : d.takeaway ? t('Olib ketish') : d.room.name }, cart, o && o.id);
+        cart.lines = [];
+        UI.drawer = false;
+        toast(t("Internet yo'q — buyurtma shu qurilmada saqlandi, internet kelganda o'zi yuboriladi"), 'warn', 8000);
+        if ((d.kind === 'soboy' || d.kind === 'dlv') && !o) { delete Carts[d.key]; location.hash = '#/rooms'; } else refreshView();
+        return;
       }
-      await POST(`/api/orders/${o.id}/items`, { items: cart.lines.map(({ dish_id, qty, note, mods }) => ({ dish_id, qty, note, ...(mods ? { mods } : {}) })) });
       cart.lines = [];
       toast(App.kitchenMode === 'off' ? t('Buyurtma qabul qilindi') : t('Buyurtma oshxonaga yuborildi'), 'ok');
       UI.drawer = false;

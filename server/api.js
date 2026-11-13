@@ -1421,6 +1421,46 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return orderDetails(o.id);
   }
 
+  /* An order written on a phone while there was no internet arrives later — maybe twice, when the answer got lost
+     on the way. The phone's own key makes sure it lands on the check exactly once. */
+  function offlineOrder({ user, body }) {
+    const key = String(body.key || '');
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(key)) throw new HttpError(400, "Kalit noto'g'ri");
+    const seen = q('SELECT order_id FROM offline_sync WHERE key = ?').get(key);
+    if (seen) return { ok: true, duplicate: true, order_id: seen.order_id };
+    if (!Array.isArray(body.items) || !body.items.length) throw new HttpError(400, 'Taom tanlanmagan');
+    let o = body.order_id ? q("SELECT * FROM orders WHERE id = ? AND status = 'open'").get(int(body.order_id, 'Chek', { min: 1 })) : null;
+    let created = false;
+    if (o) assertOrderAccess(user, o);
+    else {
+      // The check was closed meanwhile (or never opened): the dishes go onto the room's open check, or a new one.
+      const roomId = int(body.room_id, 'Xona', { min: 1, required: true });
+      const room = q('SELECT type FROM rooms WHERE id = ?').get(roomId);
+      created = !room || room.type === 'soboy' || !q("SELECT id FROM orders WHERE room_id = ? AND status = 'open'").get(roomId);
+      o = getOrderRow(openOrder({ user, body: { room_id: roomId, guests: body.guests, label: body.label, delivery: body.delivery } }).id);
+    }
+    const t = now();
+    let added;
+    try {
+      added = tx(() => {
+        const a = insertItems(o, body.items, t);
+        q('INSERT INTO offline_sync (key, order_id, user_id, made_at, created_at) VALUES (?, ?, ?, ?, ?)').run(key, o.id, user.id, Number(body.at) || t, t);
+        return a;
+      });
+    } catch (e) {
+      // Nothing was written: a check opened just for this order does not stay behind empty.
+      if (created && !q("SELECT 1 FROM order_items WHERE order_id = ? AND dish_id IS NOT NULL").get(o.id)) {
+        q('DELETE FROM order_items WHERE order_id = ?').run(o.id);
+        q('DELETE FROM orders WHERE id = ?').run(o.id);
+        events.publish('rooms');
+      }
+      throw e;
+    }
+    afterItems(user, o, added, t, { printed: !!body.printed });
+    audit(user, 'offline_sync', `#${o.id}: internetsiz yozilgan buyurtma keldi (${added.length} ta taom)`);
+    return { ok: true, order_id: o.id };
+  }
+
   // Writes dishes onto a check (inside a transaction): stock, stop-list and the kitchen mode decide each line's status.
   // opts.tier: the price tier of a tableware sale ('r' retail, 'o' wholesale, 'b' big wholesale).
   function insertItems(o, items, t, opts = {}) {
@@ -1464,7 +1504,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return out;
   }
 
-  function afterItems(user, o, added, t) {
+  function afterItems(user, o, added, t, opts = {}) {
     const room = q('SELECT name FROM rooms WHERE id = ?').get(o.room_id);
     room.name = placeName(o, room);
     const kitchenItems = added.filter((a) => a.kitchen);
@@ -1474,8 +1514,11 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       events.publish('kitchen_new', { order_id: o.id, room: room.name, waiter: waiter && waiter.name, at: t, items: kitchenItems }, { roles: KITCHEN });
     }
     // Every order (waiter's or cashier's) goes to the computers chosen as order printers.
-    print.job('new', { order_id: o.id, room: room.name, waiter: waiter && waiter.name, by: user.name, at: t,
-      items: added.map((a) => ({ name: a.name, qty: a.qty, note: a.note, mods: a.mods, cook: a.cook, category_id: a.category_id })) });
+    // (An order written without internet whose ticket the phone's own computer already printed is not printed twice.)
+    if (!opts.printed) {
+      print.job('new', { order_id: o.id, room: room.name, waiter: waiter && waiter.name, by: user.name, at: t,
+        items: added.map((a) => ({ name: a.name, qty: a.qty, note: a.note, mods: a.mods, cook: a.cook, category_id: a.category_id })) });
+    }
     events.publish('rooms');
     if (added.some((a) => !a.kitchen)) events.publish('menu');
   }
@@ -2595,6 +2638,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['GET', '/api/profit', MONEY, shop.profit],
     ['PUT', '/api/orders/:id', ['owner', 'admin', 'cashier', 'waiter'], updateOrder],
     ['POST', '/api/orders/:id/items', ['owner', 'admin', 'cashier', 'waiter'], addItems],
+    ['POST', '/api/offline/order', ['owner', 'admin', 'cashier', 'waiter'], offlineOrder],
     ['POST', '/api/orders/:id/request-bill', ['owner', 'admin', 'waiter'], requestBill],
     ['POST', '/api/orders/:id/close', ['owner', 'admin', 'cashier', 'waiter'], closeOrder],
     ['POST', '/api/orders/:id/cancel', ['owner', 'admin', 'waiter'], cancelOrder],

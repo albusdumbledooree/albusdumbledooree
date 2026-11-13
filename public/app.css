@@ -1464,3 +1464,23 @@ details.ver summary .grow { flex: 1 1 200px; min-width: 0; }
 /* Online booking requests */
 .ob { margin-bottom: 12px; } .ob-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px; border-radius: 10px; margin-top: 8px; border: 1px solid var(--line); }
 .ob-row.new { background: var(--orange-soft); border-color: #f3dc8b; }
+
+/* ---------- Work without internet ---------- */
+#offbar { position: fixed; left: 50%; top: 6px; transform: translateX(-50%); z-index: 900; display: flex; align-items: center; gap: 8px; max-width: calc(100vw - 16px);
+  padding: 8px 14px; border: 0; border-radius: 999px; font: inherit; font-size: 13.5px; font-weight: 700; color: #fff; background: #b45309; box-shadow: 0 6px 20px rgba(0, 0, 0, .25); cursor: pointer; }
+#offbar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#offbar svg { flex: none; }
+#offbar.bad { background: var(--red); }
+#offbar.sync { background: var(--primary); }
+#offbar.sync svg { animation: offspin 1.2s linear infinite; }
+@keyframes offspin { to { transform: rotate(360deg); } }
+.offq { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; background: var(--panel); }
+.offq.bad { border-color: var(--red); }
+.offq-lines { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: 14px; }
+.offq-lines small { color: var(--muted); }
+.cp-body .offq-title { color: #b45309; }
+.cp-body .row2.offq-line { background: rgba(245, 158, 11, .1); }
+.cp-body .row2.offq-line .qt b { padding: 0 8px; }
+.offq-note { margin: 0 0 12px; padding: 8px 10px; border-radius: 10px; background: rgba(245, 158, 11, .12); color: var(--text); }
+.offq-note svg { vertical-align: -2px; color: #b45309; }
+@media (min-width: 900px) { #offbar { top: auto; left: auto; right: 12px; bottom: 36px; transform: none; } }

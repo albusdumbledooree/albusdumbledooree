@@ -3353,3 +3353,30 @@ test('online booking: off by default; a guest request, free and taken rooms, con
   await call('PUT', '/api/settings', small, { booking_on: true });
   assert.equal((await call('GET', '/api/book?c=kichik')).status, 404);
 });
+
+test('offline order: lands once whatever the number of deliveries, opens the check when needed, leaves nothing behind on a refusal', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  await call('POST', '/api/platform/tenants', admin, { name: 'Oflayn', code: 'oflayn', owner_name: 'E', owner_username: 'oflaynb', owner_password: 'parol12345', plan: 'start', sample: true });
+  const boss = await login('oflaynb', 'parol12345', 'oflayn');
+  const rooms = (await call('GET', '/api/rooms?all=1', boss)).data.filter((r) => !r.order);
+  const menu = (await call('GET', '/api/menu', boss)).data;
+  const dish = menu.dishes.find((d) => d.available !== false && d.available !== 0);
+  const body = { key: 'k_offline_0001', room_id: rooms[0].id, guests: 3, items: [{ dish_id: dish.id, qty: 2, note: 'achchiq' }], at: Date.now() - 60000 };
+  const a = await call('POST', '/api/offline/order', boss, body);
+  assert.equal(a.status, 200, JSON.stringify(a.data)); assert.ok(a.data.order_id);
+  // The answer got lost and the phone sends it again: nothing is added.
+  const b = await call('POST', '/api/offline/order', boss, body);
+  assert.equal(b.data.duplicate, true); assert.equal(b.data.order_id, a.data.order_id);
+  let o = (await call('GET', `/api/orders/${a.data.order_id}`, boss)).data;
+  assert.equal(o.items.length, 1); assert.equal(o.items[0].qty, 2); assert.equal(o.guests, 3);
+  // A second offline order for the same check goes onto it.
+  const c = await call('POST', '/api/offline/order', boss, { key: 'k_offline_0002', order_id: o.id, room_id: rooms[0].id, items: [{ dish_id: dish.id, qty: 1 }], printed: true });
+  assert.equal(c.data.order_id, o.id);
+  o = (await call('GET', `/api/orders/${o.id}`, boss)).data;
+  assert.equal(o.items.reduce((s, i) => s + i.qty, 0), 3);
+  // A dish that no longer exists: refused, and the room does not stay open with an empty check.
+  const bad = await call('POST', '/api/offline/order', boss, { key: 'k_offline_0003', room_id: rooms[1].id, items: [{ dish_id: 999999, qty: 1 }] });
+  assert.ok(bad.status >= 400 && bad.status < 500);
+  assert.equal((await call('GET', '/api/rooms?all=1', boss)).data.find((r) => r.id === rooms[1].id).order, null);
+  assert.equal((await call('POST', '/api/offline/order', boss, { key: 'x', room_id: rooms[1].id, items: [{ dish_id: dish.id, qty: 1 }] })).status, 400);
+});

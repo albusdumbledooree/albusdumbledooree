@@ -2,6 +2,14 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.45.0 — Internetsiz ish (oflayn rejim)
+
+- **Dastur internetsiz ham ochiladi** — telefon, planshet va Windows dasturi oxirgi ko'rilgan menyu, xonalar va ochiq cheklarni o'zida saqlaydi. Internet uzilsa "Internet yo'q" yozuvi chiqadi, ish to'xtamaydi.
+- **Buyurtma navbati** — internetsiz tasdiqlangan buyurtma shu qurilmada saqlanadi va internet kelishi bilan o'zi yuboriladi. Har buyurtmaning o'z kaliti bor: ikki marta yuborilsa ham chekka bir marta yoziladi. Navbatni "Internet yo'q" yozuvini bosib ko'rish, chop etish yoki o'chirish mumkin. Yuborilmay qolgani (masalan, taom menyudan olib tashlangan) sababi bilan qizil ko'rinadi.
+- **Kassa kompyuteri** — internetsiz yozilgan buyurtmaning oshxona cheki darhol shu kompyuterda chiqadi ("INTERNETSIZ" belgisi bilan), internet kelganda qayta chop etilmaydi. "Chek" tugmasi oxirgi ko'rilgan chekni internetsiz chop etadi.
+- **Cheklovlar** — internetsiz paytda qurilmalar bir-birini ko'rmaydi (oshxona ekrani va boshqa telefonlar buyurtmani internet kelgach ko'radi); to'lov qabul qilish, chekni yopish va PIN bilan kirish internet bilan ishlaydi. Shuning uchun xodim internet borligida kirib qo'ygan bo'lishi kerak.
+- Server javob bermay qolganda (502–504) ham dastur xuddi shunday ishlaydi.
+
 ## 1.44.0 — Menyuni tez kiritish (import) va onlayn bron
 
 - **Menyu importi** — Menyu → Import. Menyuni matn qilib yozing yoki Excel'dan nusxa olib joylang: har qatorda taom nomi va narxi ("Norin 35000", "Tovuq kabob 22 ming", "Qatiq — 6 000 so'm"). Narxsiz qator bo'lim nomi hisoblanadi. Saqlashdan oldin ro'yxat ko'rinadi — nom, bo'lim, narxni tuzatish yoki qatorni olib tashlash mumkin. Menyuda shu nomli taom bo'lsa, faqat narxi yangilanadi.
