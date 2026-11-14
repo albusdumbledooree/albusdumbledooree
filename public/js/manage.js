@@ -389,7 +389,7 @@ Views.money = {
   render() {
     return `<div class="page-head"><h1>${t('Moliya')}</h1>${App.settings.finance_lock && App.financeKey ? `<button class="btn sm" id="fin-lock">${icon('lock', 16)} ${t('Qulflash')}</button>` : ''}</div>
       <div class="money-tiles">${MONEY_PAGES().filter(([k]) => viewOn(k)).map(([k, ic, n, d]) => `<a class="money-tile" href="#/${k}">${icon(ic, 32)}<b>${n}</b><span class="small muted">${d}</span></a>`).join('')}
-        ${can('owner') ? MONEY_PAGES().filter(([k]) => planLocked(Views[k].module) && (!Views[k].on || Views[k].on())).map(([k, ic, n, d]) => `<button type="button" class="money-tile locked" data-upgrade="${esc(n)}">${icon(ic, 32)}<b>${n} ${icon('lock', 16)}</b><span class="small muted">${d}</span></button>`).join('') : ''}</div>
+        ${can('owner') ? MONEY_PAGES().filter(([k]) => !viewOn(k) && planLocked(Views[k].module) && (!Views[k].on || Views[k].on())).map(([k, ic, n, d]) => `<button type="button" class="money-tile locked" data-upgrade="${esc(n)}">${icon(ic, 32)}<b>${n} ${icon('lock', 16)}</b><span class="small muted">${d}</span></button>`).join('') : ''}</div>
       <p class="small muted" style="margin-top:14px">${icon('eye-off', 14)} ${t("Bu bo'lim begona ko'zdan uzoqroq turishi uchun menyuning eng chetida.")}${can('owner') ? ` ${t('Kim ko\'rishi va parol: Sozlamalar → Ruxsatlar.')}` : ''}</p>`;
   },
   bind(root) {
@@ -755,7 +755,7 @@ Views.attendance = {
 UI.cust = UI.cust || { tab: 'all', q: '' };
 const MOVE_KINDS = () => ({ cashback: [t('Keshbek'), 'green'], redeem: [t('Bonus ishlatildi'), ''], debt: [t('Qarzga yozildi'), 'red'], debt_pay: [t("Qarz to'landi"), 'green'] });
 Views.customers = {
-  title: () => t('Mijozlar'), icon: () => 'book-user', roles: ['owner', 'admin', 'cashier'], module: 'customers', refreshOn: ['finance'],
+  title: () => t('Mijozlar'), icon: () => 'book-user', roles: ['owner', 'admin', 'cashier'], module: 'customers', anyOf: ['customers', 'debts'], refreshOn: ['finance'],
   async load() { return GET(`/api/customers?q=${encodeURIComponent(UI.cust.q)}${UI.cust.tab === 'debt' ? '&debt=1' : ''}`); },
   render(d) {
     const tt = d.totals;

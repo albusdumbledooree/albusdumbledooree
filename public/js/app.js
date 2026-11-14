@@ -45,6 +45,8 @@ function viewOn(name) {
   if (!v || v.public || !v.roles.includes(App.user.role)) return false;
   if (v.on && !v.on()) return false;
   if (v.module === 'kitchen') return App.kitchenMode !== 'off';
+  // A screen that two sections share (customers: the debt ledger of Biznes, or the bonuses of Pro).
+  if (v.anyOf) return v.anyOf.some(moduleOn);
   return moduleOn(v.module);
 }
 function navKeys() { return navOrder(App.user.role).filter(viewOn); }
