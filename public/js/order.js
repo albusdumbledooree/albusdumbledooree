@@ -262,7 +262,7 @@ function checkPane({ order, room, cart, takeaway, couriers, readonly: ro }) {
   const sent = groupSent(items.filter((i) => i.status !== 'cancelled')).map(groupItem);
   const cancelled = items.filter((i) => i.status === 'cancelled');
   // Written without internet and still waiting on this device.
-  const queued = (room || order) ? Offline.forPlace(takeaway ? null : room.id, order ? order.id : null).reduce((a, e) => a.concat(e.lines), []) : [];
+  const queued = (room || order) ? OFF().forPlace(takeaway ? null : room.id, order ? order.id : null).reduce((a, e) => a.concat(e.lines), []) : [];
   const ready = items.filter((i) => i.status === 'ready').length;
   let no = 0;
   const total = order ? order.total : 0;
@@ -561,7 +561,7 @@ function confirmSend(d, cart) {
       } catch (e) {
         // No internet: the order stays on this device and goes by itself when the internet is back.
         if (!e.offline || (!roomId && !o)) throw e;
-        Offline.add({ roomId: roomId || o.room_id, kind: d.kind, place: d.kind === 'dlv' || (o && o.delivery) ? t('Dostavka') : d.takeaway ? t('Olib ketish') : d.room.name }, cart, o && o.id);
+        OFF().add({ roomId: roomId || o.room_id, kind: d.kind, place: d.kind === 'dlv' || (o && o.delivery) ? t('Dostavka') : d.takeaway ? t('Olib ketish') : d.room.name }, cart, o && o.id);
         cart.lines = [];
         UI.drawer = false;
         toast(t("Internet yo'q — buyurtma shu qurilmada saqlandi, internet kelganda o'zi yuboriladi"), 'warn', 8000);

@@ -6,7 +6,7 @@
    - On the kassa computer (the order printer, or the Windows program) the kitchen ticket is printed at once.
    Limit: without internet the devices do not see each other — the kitchen screen and other phones learn of the
    order only after it is sent. */
-const Offline = {
+var Offline = {
   KEEP: [/^\/api\/me$/, /^\/api\/menu$/, /^\/api\/rooms(\?all=1)?$/, /^\/api\/takeaway$/, /^\/api\/shifts\/current$/, /^\/api\/printers$/, /^\/api\/orders\/\d+$/],
   PUBLIC: /^\/api\/info\?/,
   down_: false, busy: false, timer: null,

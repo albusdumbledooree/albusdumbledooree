@@ -2,6 +2,10 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.45.1 — Tuzatish: kirish buzilgan edi
+
+- 1.45.0 da ba'zi qurilmalarda "Offline is not defined" xatosi chiqib, hisobga kirib bo'lmas edi. Endi internetsiz rejim moduli yuklanmasa ham dastur odatdagidek kiritadi va ishlaydi.
+
 ## 1.45.0 — Internetsiz ish (oflayn rejim)
 
 - **Dastur internetsiz ham ochiladi** — telefon, planshet va Windows dasturi oxirgi ko'rilgan menyu, xonalar va ochiq cheklarni o'zida saqlaydi. Internet uzilsa "Internet yo'q" yozuvi chiqadi, ish to'xtamaydi.

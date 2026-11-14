@@ -198,6 +198,11 @@ function store(key, val) {
   return val;
 }
 
+// The offline module (offline.js) is an extra: if it is missing or fails to load, the program still works (no offline mode).
+const OFFLINE_NONE = { keep() {}, cached() {}, up() {}, down() {}, paint() {}, watch() {}, flush() {}, ping() { return Promise.resolve(); },
+  list() { return []; }, add() {}, forPlace() { return []; }, dialog() {}, print() {} };
+function OFF() { return typeof Offline !== 'undefined' ? Offline : OFFLINE_NONE; }
+
 // ---------- API ----------
 async function api(method, path, body, token = App.token) {
   let res = null;
@@ -210,14 +215,14 @@ async function api(method, path, body, token = App.token) {
   } catch (e) { res = null; }
   // No internet (or the server is not answering): the menu, rooms and checks seen last come from the device's own copy.
   if (!res || (res.status >= 502 && res.status <= 504)) {
-    const saved = method === 'GET' && token === App.token ? Offline.cached(path) : undefined;
-    Offline.down();
+    const saved = method === 'GET' && token === App.token ? OFF().cached(path) : undefined;
+    OFF().down();
     if (saved !== undefined) return saved;
     const err = new Error(t("Internet yo'q — bu amal internet kelganda ishlaydi"));
     err.offline = true;
     throw err;
   }
-  Offline.up();
+  OFF().up();
   checkVersion(res.headers.get('X-App-Version'));
   let data = null;
   try { data = await res.json(); } catch { /* empty */ }
@@ -241,7 +246,7 @@ async function api(method, path, body, token = App.token) {
     }
     throw err;
   }
-  if (method === 'GET' && token === App.token) Offline.keep(path, data);
+  if (method === 'GET' && token === App.token) OFF().keep(path, data);
   return data;
 }
 const GET = (p) => api('GET', p);
@@ -714,7 +719,7 @@ async function printCheck(orderId) {
     else toast(t("{0} printeri hozir ulanmagan — chek u yoqilganda chiqadi", r.sent_to.name), 'warn', 8000);
   } catch (e) {
     // No internet: the bill is printed here from the check as it was last seen.
-    const saved = e.offline ? Offline.cached(`/api/orders/${orderId}`) : undefined;
+    const saved = e.offline ? OFF().cached(`/api/orders/${orderId}`) : undefined;
     if (!saved) return toastError(e);
     printReceipt({ ...saved, printed_by: App.user && App.user.name });
     toast(t("Internet yo'q — chek oxirgi ko'rilgan holatida chop etildi"), 'warn', 7000);

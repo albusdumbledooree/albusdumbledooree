@@ -533,8 +533,8 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && Ap
   // The boss switches this computer's printer on or off from Settings: the device follows within half a minute.
   setInterval(() => { if (App.device) OrderPrinter.load().then(() => OrderPrinter.sync()); }, 30000);
   render();
-  Offline.paint();
-  if (Offline.list().length) { Offline.watch(); Offline.flush(); }
+  OFF().paint();
+  if (OFF().list().length) { OFF().watch(); OFF().flush(); }
 })();
 
 // ---------- Program errors on this screen go to the platform's activity view (a few per page load) ----------
