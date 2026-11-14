@@ -121,8 +121,9 @@ function mainHtml() {
     <div class="seg ptabs"><button class="${P.tab === 'biz' ? 'active' : ''}" data-tab="biz">${icon('store', 16)} Bizneslar</button>
       <button class="${P.tab === 'leads' ? 'active' : ''}" data-tab="leads">${icon('inbox', 16)} Arizalar${P.leads && P.leads.counts.new ? ` <span class="badge">${P.leads.counts.new}</span>` : ''}</button>
       <button class="${P.tab === 'academy' ? 'active' : ''}" data-tab="academy">${icon('graduation-cap', 16)} Akademiya</button>
+      <button class="${P.tab === 'giveaway' ? 'active' : ''}" data-tab="giveaway">${icon('gift', 16)} Konkurs</button>
       <button class="${P.tab === 'versions' ? 'active' : ''}" data-tab="versions">${icon('history', 16)} Versiyalar</button></div>
-    ${P.tab === 'leads' ? leadsHtml() : P.tab === 'versions' ? versionsHtml() : P.tab === 'academy' ? academyHtml() : bizHtml()}
+    ${P.tab === 'leads' ? leadsHtml() : P.tab === 'versions' ? versionsHtml() : P.tab === 'academy' ? academyHtml() : P.tab === 'giveaway' ? giveawayHtml() : bizHtml()}
   </main>`;
 }
 // ---------- Versions: what changed in each update (from CHANGELOG.md) ----------
@@ -599,11 +600,13 @@ function bind(root) {
   root.querySelectorAll('[data-tab]').forEach((b) => b.onclick = async () => {
     P.tab = b.dataset.tab;
     if (P.tab === 'academy') { try { await loadAcademy(); } catch (e) { toastError(e); } }
+    if (P.tab === 'giveaway') { try { await loadGiveaway(); } catch (e) { toastError(e); } }
     if (P.tab === 'versions' && !P.changelog) { try { P.changelog = await GET('/api/platform/changelog'); } catch (e) { toastError(e); P.changelog = { versions: [] }; } }
     render();
   });
   if (P.tab === 'versions') return;
   if (P.tab === 'academy') return bindAcademy(root);
+  if (P.tab === 'giveaway') return bindGiveaway(root);
   if (P.tab === 'leads') return bindLeads(root);
   const s = root.querySelector('#psearch');
   s.oninput = () => { P.search = s.value; render(); };

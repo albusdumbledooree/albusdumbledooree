@@ -3404,3 +3404,126 @@ test('boshqaruv: one line of state per button, only what the person may open', a
   assert.ok(c.customers); assert.equal(c.payroll, undefined); assert.equal(c.attendance, undefined); assert.equal(c.fixed, undefined);
   assert.equal((await call('GET', '/api/hub')).status, 401);
 });
+
+test('konkurs bot: anyone opens a giveaway in their channel, subscribers join with the button, the draw picks only members, the platform watches', async () => {
+  const http = require('node:http');
+  const { parseWhen, when } = require('../server/giveaway');
+  // Dates people type are Tashkent time.
+  const base = Date.UTC(2026, 10, 14, 7, 0); // 14.11.2026 12:00 in Tashkent
+  assert.equal(when(parseWhen('20.11 20:00', base)), '20.11.2026 20:00');
+  assert.equal(when(parseWhen('05.01.2027, 9:30', base)), '05.01.2027 09:30');
+  assert.equal(parseWhen('31.02 10:00', base), null); assert.equal(parseWhen('ertaga', base), null);
+
+  const TOKEN = '888888:KonkursBotTokenABCDEFGHIJKLmn_1';
+  const BOT = 99; const OWNER = 5001; const ALI = 5002; const VALI = 5003; const GUEST = 5004; const STRANGER = 5005;
+  const CH = -1001234; const members = new Set([ALI, VALI, STRANGER]);
+  const calls = []; const updates = []; let uid = 1; let mid = 700;
+  const tg = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      const [, token, method] = /^\/bot([^/]+)\/(\w+)$/.exec(req.url) || [];
+      const body = raw ? JSON.parse(raw) : {};
+      const ok = (result) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, result })); };
+      const no = (d) => { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, description: d })); };
+      if (token !== TOKEN) { res.writeHead(401); return res.end(JSON.stringify({ ok: false, description: 'Unauthorized' })); }
+      calls.push({ method, body });
+      if (method === 'getMe') return ok({ id: BOT, username: 'flowi_konkurs_bot' });
+      if (method === 'getUpdates') return setTimeout(() => ok(updates.splice(0)), 40);
+      if (method === 'getChat') return body.chat_id === '@testkanal' || body.chat_id === CH ? ok({ id: CH, type: 'channel', title: 'Test kanal', username: 'testkanal' }) : no('chat not found');
+      if (method === 'getChatMember') {
+        const u = Number(body.user_id);
+        if (u === BOT) return ok({ status: 'administrator', can_post_messages: true });
+        if (u === OWNER) return ok({ status: 'creator' });
+        return ok({ status: members.has(u) ? 'member' : 'left' });
+      }
+      if (['sendMessage', 'sendPhoto'].includes(method)) return ok({ message_id: ++mid, chat: { id: body.chat_id } });
+      return ok(true);
+    });
+  });
+  await new Promise((r) => tg.listen(0, r));
+  process.env.TELEGRAM_API = `http://127.0.0.1:${tg.address().port}`;
+  const waitFor = async (fn, what) => {
+    for (let i = 0; i < 160; i++) { const v = await fn(); if (v) return v; await new Promise((r) => setTimeout(r, 50)); }
+    throw new Error(`timeout: ${what} ${JSON.stringify(calls.filter((c) => c.method !== 'getUpdates').slice(-6).map((c) => `${c.method}:${c.body.chat_id}:${String(c.body.text || c.body.caption || '').slice(0, 50)}`))}`);
+  };
+  const from = (id, first) => ({ id, first_name: first, username: first.toLowerCase(), is_bot: false });
+  const say = (id, text, extra = {}) => updates.push({ update_id: uid++, message: { message_id: uid, chat: { id, type: 'private' }, from: from(id, `U${id}`), text, ...extra } });
+  const press = (id, data, chat = { id, type: 'private' }) => { const cid = `cb${uid}`; updates.push({ update_id: uid++, callback_query: { id: cid, from: from(id, id === ALI ? 'Ali' : id === VALI ? 'Vali' : `U${id}`), data, message: { message_id: 1, chat } } }); return cid; };
+  const sentTo = (id, re) => calls.find((c) => ['sendMessage', 'sendPhoto'].includes(c.method) && String(c.body.chat_id) === String(id) && re.test(c.body.text || c.body.caption || ''));
+  const answer = (cid) => calls.find((c) => c.method === 'answerCallbackQuery' && c.body.callback_query_id === cid);
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  try {
+    assert.equal((await call('PUT', '/api/platform/giveaway', admin, { token: 'nope' })).status, 400);
+    const st0 = (await call('PUT', '/api/platform/giveaway', admin, { token: TOKEN })).data;
+    assert.equal(st0.bot, 'flowi_konkurs_bot'); assert.equal(st0.configured, true);
+
+    // The organiser: the menu, then the wizard.
+    say(OWNER, '/start');
+    await waitFor(() => sentTo(OWNER, /Konkurs boti/), 'menu');
+    say(OWNER, '➕ Yangi konkurs');
+    await waitFor(() => sentTo(OWNER, /1️⃣/), 'ask channel');
+    say(OWNER, 'https://t.me/testkanal');
+    await waitFor(() => sentTo(OWNER, /2️⃣/), 'ask text');
+    say(OWNER, "iPhone 16 o'ynaymiz! <b>shartlar</b>");
+    await waitFor(() => sentTo(OWNER, /3️⃣/), 'ask winners');
+    press(OWNER, 'gwn:2');
+    await waitFor(() => sentTo(OWNER, /4️⃣/), 'ask end');
+    press(OWNER, 'gwe:24');
+    await waitFor(() => sentTo(OWNER, /iPhone 16/), 'preview');
+    press(OWNER, 'gwc:post');
+    const post = await waitFor(() => sentTo(CH, /KONKURS/), 'posted in the channel');
+    assert.ok(post.body.text.includes('&lt;b&gt;shartlar&lt;/b&gt;'), 'the text is shown as written, not as markup');
+    assert.equal(post.body.reply_markup.inline_keyboard[0][0].callback_data, 'gj:1');
+    await waitFor(() => sentTo(OWNER, /Konkurs joylandi/), 'organiser told');
+
+    // Subscribers press the button; a non-subscriber is told to subscribe first.
+    const channel = { id: CH, type: 'channel' };
+    const a1 = press(ALI, 'gj:1', channel); await waitFor(() => answer(a1), 'ali');
+    assert.match(answer(a1).body.text, /Raqamingiz: 1/);
+    const g1 = press(GUEST, 'gj:1', channel); await waitFor(() => answer(g1), 'guest');
+    assert.match(answer(g1).body.text, /obuna bo'ling/);
+    const a2 = press(ALI, 'gj:1', channel); await waitFor(() => answer(a2), 'ali again');
+    assert.match(answer(a2).body.text, /allaqachon/);
+    const v1 = press(VALI, 'gj:1', channel); await waitFor(() => answer(v1), 'vali');
+    assert.match(answer(v1).body.text, /Raqamingiz: 2/);
+    const s1 = press(STRANGER, 'gj:1', channel); await waitFor(() => answer(s1), 'stranger');
+
+    // Someone who is not the channel's admin cannot open a contest there.
+    say(GUEST, '➕ Yangi konkurs'); await waitFor(() => sentTo(GUEST, /1️⃣/), 'guest wizard');
+    say(GUEST, '@testkanal'); await waitFor(() => sentTo(GUEST, /egasi yoki admini/), 'only the admin');
+
+    // The platform sees it; the counter on the button follows.
+    let ov = (await call('GET', '/api/platform/giveaway', admin)).data;
+    assert.equal(ov.contests.length, 1); assert.equal(ov.contests[0].participants, 3); assert.equal(ov.contests[0].owner.username, `u${OWNER}`);
+    assert.equal(ov.stats.active, 1);
+    await server.platform.giveawayTick();
+    assert.ok(calls.some((c) => c.method === 'editMessageReplyMarkup' && /\(3\)/.test(c.body.reply_markup.inline_keyboard[0][0].text)));
+    const list = (await call('GET', '/api/platform/giveaway/contests/1/participants', admin)).data.rows;
+    assert.deepEqual(list.map((r) => r.no), [1, 2, 3]);
+
+    // The stranger leaves the channel before the draw: never a winner. Two winners out of Ali and Vali.
+    members.delete(STRANGER);
+    const fin = (await call('POST', '/api/platform/giveaway/contests/1/finish', admin)).data;
+    assert.equal(fin.participants, 3);
+    assert.deepEqual(fin.winners.map((w) => Number(w.tg_id)).sort(), [ALI, VALI]);
+    const ann = await waitFor(() => sentTo(CH, /Konkurs yakunlandi/), 'announced');
+    assert.match(ann.body.text, /G'oliblar/); assert.ok(!ann.body.text.includes(String(STRANGER)));
+    await waitFor(() => sentTo(OWNER, /#1 yakunlandi/), 'organiser gets the list');
+    assert.equal((await call('POST', '/api/platform/giveaway/contests/1/finish', admin)).status, 409, 'drawn once');
+    const late = press(VALI, 'gj:1', channel); await waitFor(() => answer(late), 'late press');
+    assert.match(answer(late).body.text, /yakunlangan/);
+
+    // Blocked by the platform: no new contests.
+    assert.equal((await call('PUT', `/api/platform/giveaway/users/${OWNER}`, admin, { banned: true })).status, 200);
+    say(OWNER, '➕ Yangi konkurs'); await waitFor(() => sentTo(OWNER, /cheklangan/), 'banned');
+    ov = (await call('GET', '/api/platform/giveaway', admin)).data;
+    assert.equal(ov.banned.length, 1); assert.equal(ov.contests[0].status, 'done'); assert.equal(ov.contests[0].winners.length, 2);
+    // The businesses' programs know nothing about it.
+    assert.equal((await call('GET', '/api/platform/giveaway')).status, 401);
+  } finally {
+    await call('DELETE', '/api/platform/giveaway', admin);
+    delete process.env.TELEGRAM_API;
+    tg.close();
+  }
+});

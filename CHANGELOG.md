@@ -2,6 +2,15 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.47.0 — Konkurs boti (faqat platformada)
+
+- **Telegram konkurs boti** — istalgan odam botga yozib, o'z kanalida konkurs o'tkaza oladi: kanal (bot va odamning o'zi kanal admini bo'lishi shart) → matn (rasm bilan ham) → g'oliblar soni → tugash vaqti → ko'rib chiqish → "Kanalga joylash".
+- Kanaldagi postda "✅ Ishtirok etaman (N)" tugmasi. Bosgan odam kanalga obuna bo'lsa, raqam oladi; obuna bo'lmasa "avval obuna bo'ling" deydi. Bir odam bir marta qatnashadi.
+- Vaqt kelganda bot g'oliblarni tasodifiy tanlaydi (kanaldan chiqib ketganlar hisobga olinmaydi), kanalga post ostida e'lon qiladi, tashkilotchiga ro'yxatni yuboradi. Tashkilotchi "Konkurslarim"dan muddatidan oldin yakunlashi yoki bekor qilishi mumkin.
+- **Platforma → Konkurs**: bot tokeni, barcha konkurslar, ishtirokchilar ro'yxati, yakunlash, bekor qilish, odamni bloklash va "yangi konkurslar ochiq" tugmasi. Cheklovlar: bir odamga bir vaqtda 3 ta, kuniga 5 ta konkurs, eng uzog'i 30 kun.
+- Choyxona, restoran va do'kon dasturlarida hech narsa o'zgarmadi — bot faqat platformaga tegishli.
+- Telegram botlarga kanal obunachilari ro'yxatini bermaydi va kanal so'rovnomalari anonim — shuning uchun ishtirokchilar tugmani bosganlar.
+
 ## 1.46.1 — Davomat doim ko'rinadi
 
 - Boshqaruv'dagi (va Xodimlar'dagi) Davomat endi "Ishga keldim" yoqilmagan bo'lsa ham ochiladi. Bunday holatda kun dasturga kirgan xodimga o'zi belgilanadi yoki boshliq qo'lda belgilaydi: keldi, kelmadi, dam olish, kasal.

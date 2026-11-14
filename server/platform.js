@@ -18,6 +18,7 @@ const { createHub } = require('./events');
 const { snapshot, listTenantBackups, stampNow } = require('./backup');
 const { createLeads } = require('./leads');
 const { createHelpBot } = require('./helpbot');
+const { createGiveaway } = require('./giveaway');
 const { createSecretBox } = require('./secret');
 const { verifyInput } = require('./seo');
 const { hashPassword, verifyPassword, newToken, HttpError, str, int } = require('./util');
@@ -232,6 +233,10 @@ function createPlatform(dataDir) {
   }
   leads.start();
   helpbot.start();
+  // "Konkurs": a giveaway bot for anyone's Telegram channel — the platform's own, the businesses do not see it.
+  const tokenOf = (k) => { try { return JSON.parse(pget(k, '{}')).token || ''; } catch { return ''; } };
+  const giveaway = createGiveaway({ pdb, pget, pset, now, otherTokens: () => [tokenOf('telegram'), tokenOf('helpbot')] });
+  giveaway.start();
 
   // ---------- A business owner's Telegram: the morning list of tasks, a reminder an hour before a task ----------
   pdb.exec(`CREATE TABLE IF NOT EXISTS tenant_telegram (
@@ -935,6 +940,14 @@ function createPlatform(dataDir) {
       return { ok: true, global: pget('academy_duel_global', '1') !== '0', site: pget('academy_duel_site', '1') !== '0' };
     }],
     ['GET', '/api/platform/academy/certs', true, ({ query }) => { syncAcademyCerts(); return academy.certs({ query }); }],
+    ['GET', '/api/platform/giveaway', true, giveaway.overview],
+    ['PUT', '/api/platform/giveaway', true, giveaway.setToken],
+    ['DELETE', '/api/platform/giveaway', true, giveaway.unlink],
+    ['PUT', '/api/platform/giveaway/open', true, giveaway.setOpen],
+    ['GET', '/api/platform/giveaway/contests/:id/participants', true, giveaway.participants],
+    ['POST', '/api/platform/giveaway/contests/:id/finish', true, giveaway.adminFinish],
+    ['POST', '/api/platform/giveaway/contests/:id/cancel', true, giveaway.adminCancel],
+    ['PUT', '/api/platform/giveaway/users/:id', true, giveaway.ban],
     ['GET', '/api/platform/helpbot', true, () => helpbot.status()],
     ['PUT', '/api/platform/helpbot', true, helpbot.setToken],
     ['POST', '/api/platform/helpbot/relink', true, helpbot.relink],
@@ -983,6 +996,7 @@ function createPlatform(dataDir) {
   function close() {
     leads.stop();
     helpbot.stop();
+    giveaway.stop();
     clearInterval(remindTimer);
     clearInterval(desktopTimer);
     clearTimeout(desktopFirst);
@@ -990,7 +1004,7 @@ function createPlatform(dataDir) {
     pdb.close();
   }
 
-  return { handle, byCode, byToken, byGuestKey, remindTick, tgBackupTick, sendBackups, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, seoVerify, desktopTick, submitLead: leads.submit, academyStart: academy.start, academyFinish: academy.finish, academyCert: academy.cert, duels, duelSiteOn: () => pget('academy_duel_site', '1') !== '0' && academy.siteOn(), helpRemindTick: (o) => helpbot.remindTick(o) };
+  return { handle, byCode, byToken, byGuestKey, remindTick, tgBackupTick, sendBackups, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, seoVerify, desktopTick, submitLead: leads.submit, academyStart: academy.start, academyFinish: academy.finish, academyCert: academy.cert, duels, duelSiteOn: () => pget('academy_duel_site', '1') !== '0' && academy.siteOn(), helpRemindTick: (o) => helpbot.remindTick(o), giveawayTick: () => giveaway.tick() };
 }
 
 module.exports = { createPlatform };
