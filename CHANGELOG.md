@@ -2,6 +2,10 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.46.1 — Davomat doim ko'rinadi
+
+- Boshqaruv'dagi (va Xodimlar'dagi) Davomat endi "Ishga keldim" yoqilmagan bo'lsa ham ochiladi. Bunday holatda kun dasturga kirgan xodimga o'zi belgilanadi yoki boshliq qo'lda belgilaydi: keldi, kelmadi, dam olish, kasal.
+
 ## 1.46.0 — "Boshqaruv" bo'limi
 
 - **Yangi bo'lim: Boshqaruv** — yuqori menyuda, Panel yonida, hamma ko'radigan joyda. Ichida: Mijozlar, Ombor, Mijoz baholari, Davomat, Ish haqi, Doimiy xarajatlar. Har tugmada bugungi holat: nechta mijoz va qancha qarz, nechta masalliq tugayapti, o'rtacha baho, bugun kim keldi, keyingi doimiy to'lov qachon.

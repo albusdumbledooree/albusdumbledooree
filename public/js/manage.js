@@ -725,8 +725,7 @@ function bindWorkLog(root) {
 UI.attDay = UI.attDay || localDay();
 Views.attendance = {
   title: () => t('Davomat'), icon: () => 'calendar', roles: ['owner', 'admin'], refreshOn: ['payroll', 'finance', 'work'], module: 'payroll',
-  // Shown only when the boss turned on "Ishga keldim" (Sozlamalar → Joylashuv); daily pay is still marked in the background.
-  on: () => !!(App.settings && App.settings.att_clock),
+  // Always open: without "Ishga keldim" (Sozlamalar → Joylashuv) the day is marked by the work done and by hand.
   async load() {
     const [d, wl] = await Promise.all([GET(`/api/attendance?day=${UI.attDay}`), GET(`/api/work/log?day=${UI.attDay}`).catch(() => null)]);
     d.work = wl;
