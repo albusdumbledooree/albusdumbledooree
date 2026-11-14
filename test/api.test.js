@@ -3123,9 +3123,10 @@ test('bellashuv: team invite, FLOWI-wide opponent, link to the site, site random
   assert.equal((await call('POST', '/api/public/duel/join', null, { code: l.duel.code, name: 'Do\'st', phone: '' })).status, 400, 'phone required');
   const j = (await call('POST', '/api/public/duel/join', null, { code: l.duel.code, name: 'Dilshod Karimov', phone: '90 765 43 21' })).data;
   assert.equal((await call('POST', '/api/public/duel/join', null, { code: l.duel.code, name: 'Boshqa', phone: '901111111' })).status, 400, 'only one friend joins');
-  const jr = (await call('POST', '/api/public/duel/answer', null, { code: l.duel.code, key: j.key, answers: ans(j.questions, 2) })).data;
+  // (One answer fewer than the challenger: the friend loses whatever the speed, so the ratings below never depend on timing.)
+  const jr = (await call('POST', '/api/public/duel/answer', null, { code: l.duel.code, key: j.key, answers: ans(j.questions, 3) })).data;
   assert.equal(jr.duel.status, 'done');
-  assert.equal((await call('GET', `/api/public/duel?c=${l.duel.code}&k=${j.key}`)).data.me.score, 8);
+  assert.equal((await call('GET', `/api/public/duel?c=${l.duel.code}&k=${j.key}`)).data.me.score, 7);
   // On the site: two visitors meet at random.
   const s1 = (await call('POST', '/api/public/duel', null, { mode: 'random', name: 'Malika', phone: '935556677' })).data;
   await call('POST', '/api/public/duel/answer', null, { code: s1.duel.code, key: s1.key, answers: ans(s1.questions, 4) });
@@ -3136,7 +3137,9 @@ test('bellashuv: team invite, FLOWI-wide opponent, link to the site, site random
   assert.equal(sr.top[0].name, 'Nodir', 'site rating: first name only');
   // Ratings: the team, and all of FLOWI with businesses.
   const tr = (await call('GET', '/api/academy/rating?scope=team', A.w1)).data;
-  assert.equal(tr.top[0].name, 'duela-w1'); assert.equal(tr.top[0].points, 3); assert.equal(tr.mine.me, true);
+  // (w1 and w2 both have one win here: their order between themselves is not what is tested.)
+  assert.equal(tr.top.find((r) => r.name === 'duela-w1').points, 3); assert.equal(tr.top.find((r) => r.name === 'duela-w2').points, 3);
+  assert.equal(tr.mine.me, true); assert.equal(tr.mine.name, 'duela-w1');
   const fr = (await call('GET', '/api/academy/rating?scope=flowi', Bz.w1)).data;
   assert.ok(fr.top.some((r) => r.name === 'duelb-w1' && r.points === 3)); assert.ok(fr.businesses.length >= 2);
   // The boss's list shows the tally; the boss can switch duels off.

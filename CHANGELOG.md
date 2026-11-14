@@ -2,6 +2,10 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.45.2 — Yangilash sinovi tuzatildi
+
+- Serverdagi yangilash sinovlaridan biri (bellashuv reytingi) natijasi tezlikka bog'liq edi va sekinroq serverda yiqilib, 1.45.1 o'rnatilmay qolgan edi. Sinov aniq natijali qilindi. Dasturning o'zida o'zgarish yo'q — bu versiya 1.45.1 dagi kirish tuzatishini serverga yetkazadi.
+
 ## 1.45.1 — Tuzatish: kirish buzilgan edi
 
 - 1.45.0 da ba'zi qurilmalarda "Offline is not defined" xatosi chiqib, hisobga kirib bo'lmas edi. Endi internetsiz rejim moduli yuklanmasa ham dastur odatdagidek kiritadi va ishlaydi.
