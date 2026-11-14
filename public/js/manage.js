@@ -371,16 +371,10 @@ const MONEY_PAGES = () => [
   ['reports', 'chart-column', t('Hisobot'), t("Kirim, chiqim va foyda — kunlar bo'yicha")],
   ['pnl', 'trending-up', t('Sof foyda'), t("Oy bo'yicha: savdo − barcha xarajatlar (ish haqi, ijara, kommunal…)")],
   ['finance', 'arrow-right-left', t('Kirim-chiqim'), t('Xarajat va boshqa kirimlarni yozish')],
-  ['fixed', 'repeat', t('Doimiy xarajatlar'), t("Ijara, svet, gaz, soliq, reklama — to'lov kuni eslatiladi")],
-  ['payroll', 'hand-coins', t('Ish haqi'), t('Maosh, avans, xarajat, bonus va jarima')],
-  ['attendance', 'calendar', t('Davomat'), t("Kim keldi, kunlik ish haqini berish")],
   ['profit', 'coins', t('Foyda hisoboti'), t("Sof foyda, nima ko'p sotildi, pul qayerga ketdi")],
   ['purchases', 'package-plus', t('Mol keldi'), t("Kelgan mollar, yo'lkira, yetkazib beruvchilar")],
   ['debts', 'notebook-pen', t('Qarzlar'), t('Bizga qarz va biz qarzmiz — bitta joyda')],
   ['masters', 'hammer', t('Ustalar va ishlar'), t("O'lchov, yetkazish, o'rnatish va ustalarga to'lov")],
-  ['customers', 'book-user', t('Mijozlar'), t('Qarz daftari, keshbek va doimiy mijozlar')],
-  ['inventory', 'warehouse', t('Ombor'), t("Masalliqlar qoldig'i, kirim va tex-karta")],
-  ['ratings', 'star', t('Mijoz baholari'), t("Chekdagi QR orqali berilgan baho va izohlar")],
   ['branches', 'network', t('Filiallar'), t("Hamma filial savdosi bitta jadvalda")],
 ];
 Views.money = {
@@ -397,6 +391,55 @@ Views.money = {
     if (l) l.onclick = () => { App.financeKey = null; toast(t('Qulflandi'), 'ok'); refreshView(); };
     root.querySelectorAll('[data-upgrade]').forEach((b) => b.onclick = () => upgradeDialog(b.dataset.upgrade));
   },
+};
+
+// ---------- Boshqaruv: everyday management in the open (customers, store, staff, regular costs) ----------
+const HUB_PAGES = () => [
+  ['customers', 'book-user', t('Mijozlar'), t('Qarz daftari, keshbek va doimiy mijozlar')],
+  ['inventory', 'warehouse', t('Ombor'), t("Masalliqlar qoldig'i, kirim va tex-karta")],
+  ['ratings', 'star', t('Mijoz baholari'), t("Chekdagi QR orqali berilgan baho va izohlar")],
+  ['attendance', 'calendar', t('Davomat'), t("Kim keldi, kunlik ish haqini berish")],
+  ['payroll', 'hand-coins', t('Ish haqi'), t('Maosh, avans, xarajat, bonus va jarima')],
+  ['fixed', 'repeat', t('Doimiy xarajatlar'), t("Ijara, svet, gaz, soliq, reklama — to'lov kuni eslatiladi")],
+];
+// Pay and regular costs: the boss and the admin only.
+const HUB_BOSS = ['payroll', 'fixed'];
+function hubOn(k) { return viewOn(k) && (!HUB_BOSS.includes(k) || can('owner', 'admin')); }
+function hubLocked(k) { const v = Views[k]; return !viewOn(k) && planLocked(v.module) && v.roles.includes(App.user.role) && (!v.on || v.on()) && (!HUB_BOSS.includes(k) || can('owner', 'admin')); }
+function hubStat(k, d) {
+  const x = d[k];
+  if (!x) return null;
+  if (k === 'customers') return x.debt > 0 ? [t("{0} mijoz · qarz {1}", num(x.count), moneyText(x.debt)), 'warn'] : [t('{0} mijoz', num(x.count)), ''];
+  if (k === 'inventory') return x.low ? [t('{0} ta masalliq tugayapti', x.low), 'bad'] : x.count ? [t('Hammasi yetarli'), 'good'] : null;
+  if (k === 'ratings') return x.count ? [t('★ {0} · bu oy {1} ta baho', (Math.round(x.avg * 10) / 10).toFixed(1).replace('.', ','), x.count), x.avg >= 4 ? 'good' : 'warn'] : [t("Bu oy hali baho yo'q"), ''];
+  if (k === 'attendance') return x.staff ? [t('Bugun {0} / {1} xodim keldi', x.present, x.staff), x.present ? 'good' : ''] : null;
+  if (k === 'payroll') return [t('{0} xodim', x.staff), ''];
+  if (k === 'fixed') {
+    if (x.overdue) return [t("Muddati o'tgan: {0} ta", x.overdue), 'bad'];
+    if (!x.next) return [t("Bu oy hammasi to'langan"), 'good'];
+    const days = Math.round((startOfDayMs(x.next.due_at) - startOfDayMs(Date.now())) / DAY_MS);
+    return [days <= 0 ? t('Bugun: {0}', x.next.name) : t('Keyingisi: {0} · {1} kundan keyin', x.next.name, days), days <= 3 ? 'warn' : ''];
+  }
+  return null;
+}
+const DAY_MS = 24 * 3600 * 1000;
+function startOfDayMs(ms) { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); }
+Views.hub = {
+  title: () => t('Boshqaruv'), icon: () => 'layout-grid', roles: ['owner', 'admin', 'cashier'],
+  refreshOn: ['finance', 'inventory', 'payroll', 'work'],
+  on: () => HUB_PAGES().some(([k]) => hubOn(k)),
+  async load() { return GET('/api/hub'); },
+  render(d) {
+    const tile = ([k, ic, n, desc]) => {
+      const st = hubStat(k, d);
+      return `<a class="money-tile hub-tile" href="#/${k}">${icon(ic, 32)}<b>${n}</b><span class="small muted">${desc}</span>${st ? `<span class="hub-stat ${st[1]}">${esc(st[0])}</span>` : ''}</a>`;
+    };
+    return `<div class="page-head"><h1>${t('Boshqaruv')}</h1></div>
+      <p class="muted" style="margin:-6px 0 16px">${t("Kundalik ishlar bitta joyda: mijozlar, ombor, xodimlar va doimiy xarajatlar.")}</p>
+      <div class="money-tiles">${HUB_PAGES().filter(([k]) => hubOn(k)).map(tile).join('')}
+        ${can('owner') ? HUB_PAGES().filter(([k]) => hubLocked(k)).map(([k, ic, n, desc]) => `<button type="button" class="money-tile locked" data-upgrade="${esc(n)}">${icon(ic, 32)}<b>${n} ${icon('lock', 16)}</b><span class="small muted">${desc}</span></button>`).join('') : ''}</div>`;
+  },
+  bind(root) { root.querySelectorAll('[data-upgrade]').forEach((b) => b.onclick = () => upgradeDialog(b.dataset.upgrade)); },
 };
 
 // Goods (or dishes) brought back: chosen lines and amounts, money paid back, stock returned.
@@ -529,7 +572,7 @@ Views.payroll = {
     const tt = d.totals;
     const att = new Map(d.attendance.map((a) => [`${a.user_id}|${a.day}`, a.source]));
     const noAdvance = d.staff.filter((r) => r.advance_missing);
-    return `<div class="page-head"><a class="btn sm" href="#/money">${icon('arrow-left', 16)}</a><h1>${t('Ish haqi')}</h1>
+    return `<div class="page-head"><a class="btn sm" href="#/hub">${icon('arrow-left', 16)}</a><h1>${t('Ish haqi')}</h1>
       ${viewOn('attendance') ? `<a class="btn" href="#/attendance">${icon('calendar', 18)} ${t('Bugungi davomat')}</a>` : ''}
       <button class="icon-btn" data-month="-1">${icon('chevron-left')}</button><b>${monthTitle(d.month)}</b><button class="icon-btn" data-month="1">${icon('chevron-right')}</button></div>
       ${noAdvance.length ? `<div class="notice">${icon('wallet', 18)} <span>${t("Avans kuni o'tdi — hali avans berilmagan")}: ${noAdvance.map((r) => `<a href="#" data-adv="${r.id}"><b>${esc(r.name)}</b></a>`).join(', ')}</span></div>` : ''}
@@ -759,7 +802,7 @@ Views.customers = {
   async load() { return GET(`/api/customers?q=${encodeURIComponent(UI.cust.q)}${UI.cust.tab === 'debt' ? '&debt=1' : ''}`); },
   render(d) {
     const tt = d.totals;
-    return `<div class="page-head"><a class="btn sm" href="#/money">${icon('arrow-left', 16)}</a><h1>${t('Mijozlar')}</h1>
+    return `<div class="page-head"><a class="btn sm" href="#/hub">${icon('arrow-left', 16)}</a><h1>${t('Mijozlar')}</h1>
         <input type="search" id="cust-q" placeholder="${esc(t('Ism yoki telefon'))}" value="${esc(UI.cust.q)}" style="max-width:240px">
         <button class="btn primary" id="cust-add">${icon('plus', 18)} ${t('Mijoz')}</button></div>
       <div class="kpis">
@@ -858,7 +901,7 @@ Views.inventory = {
     const manage = can('owner', 'admin');
     const tabs = manage ? `<div class="seg" style="margin-bottom:14px">${[['items', t('Masalliqlar')], ['moves', t('Harakatlar')]].map(([k, n]) => `<button class="${UI.inv.tab === k ? 'active' : ''}" data-itab="${k}">${n}</button>`).join('')}</div>` : '';
     const low = d.rows.filter((r) => r.low);
-    const head = `<div class="page-head">${can('owner', 'admin', 'cashier') ? `<a class="btn sm" href="#/money">${icon('arrow-left', 16)}</a>` : ''}<h1>${t('Ombor')}</h1>
+    const head = `<div class="page-head">${can('owner', 'admin', 'cashier') ? `<a class="btn sm" href="#/hub">${icon('arrow-left', 16)}</a>` : ''}<h1>${t('Ombor')}</h1>
         ${can('owner', 'admin', 'cashier') ? `<button class="btn ok" id="inv-in">${icon('package-plus', 18)} ${t('Kirim')}</button>` : ''}
         ${manage ? `<button class="btn primary" id="inv-add">${icon('plus', 18)} ${t('Masalliq')}</button>` : ''}</div>`;
     if (UI.inv.tab === 'moves' && d.moves) {
@@ -2371,7 +2414,7 @@ Views.ratings = {
   render(d) {
     const stars = (n) => `<span class="stars">${'★'.repeat(n)}<i>${'★'.repeat(5 - n)}</i></span>`;
     const max = Math.max(1, ...d.dist.map((x) => x.n));
-    return `<div class="page-head"><a class="btn sm" href="#/money">${icon('arrow-left', 16)}</a><h1>${t('Mijoz baholari')}</h1></div>
+    return `<div class="page-head"><a class="btn sm" href="#/hub">${icon('arrow-left', 16)}</a><h1>${t('Mijoz baholari')}</h1></div>
       ${periodPicker()}
       ${d.on ? '' : `<div class="notice">${icon('info', 18)} ${t("Mijoz bahosi hozir o'chiq. Yoqish: Sozlamalar → Ko'rinish → Chekdagi QR kodlar.")}</div>`}
       <div class="kpis">${kpi(t("O'rtacha baho"), d.count ? `${d.avg} ★` : '—', t('{0} ta baho', d.count), d.avg >= 4.5 ? 'good' : d.count && d.avg < 4 ? 'bad' : '', 'star')}

@@ -6,9 +6,9 @@ function navOrder(role) {
   // A door shop opens on "Bugun" (today's tasks and numbers) and keeps the menu short.
   if (isDoors()) {
     return {
-      owner: ['today', 'pos', 'menuadmin', 'history', 'staff', 'settings', 'money'],
-      admin: ['today', 'pos', 'menuadmin', 'history', 'staff', 'settings', 'money'],
-      cashier: ['today', 'pos', 'history', 'settings', 'money'],
+      owner: ['today', 'pos', 'menuadmin', 'history', 'hub', 'staff', 'settings', 'money'],
+      admin: ['today', 'pos', 'menuadmin', 'history', 'hub', 'staff', 'settings', 'money'],
+      cashier: ['today', 'pos', 'history', 'hub', 'settings', 'money'],
       waiter: ['today', 'pos', 'settings'],
       chef: ['today', 'settings'],
     }[role];
@@ -16,9 +16,9 @@ function navOrder(role) {
   // A tableware shop: selling, the warehouse, goods arriving, customers and the profit — one tap each.
   if (isIdish()) {
     return {
-      owner: ['pos', 'menuadmin', 'purchases', 'customers', 'profit', 'history', 'staff', 'settings', 'money'],
-      admin: ['pos', 'menuadmin', 'purchases', 'customers', 'profit', 'history', 'staff', 'settings', 'money'],
-      cashier: ['pos', 'purchases', 'customers', 'history', 'settings', 'money'],
+      owner: ['pos', 'menuadmin', 'purchases', 'customers', 'profit', 'history', 'hub', 'staff', 'settings', 'money'],
+      admin: ['pos', 'menuadmin', 'purchases', 'customers', 'profit', 'history', 'hub', 'staff', 'settings', 'money'],
+      cashier: ['pos', 'purchases', 'customers', 'history', 'hub', 'settings', 'money'],
       waiter: ['pos', 'settings'],
       chef: ['settings'],
     }[role];
@@ -26,15 +26,15 @@ function navOrder(role) {
   // "Bugun" (tasks of the day) is a door shop's page; a seller in a shop has no dishes to take from the kitchen.
   const home = isShop() ? ['pos'] : App.biz === 'fastfood' ? ['pos', 'rooms'] : ['rooms'];
   return {
-    owner: [...home, 'panel', 'kitchen', 'history', 'reservations', 'menuadmin', 'staff', 'settings', 'money'],
-    admin: [...home, 'panel', 'kitchen', 'history', 'reservations', 'menuadmin', 'staff', 'settings', 'money'],
-    cashier: [...home, 'history', 'reservations', 'stoplist', 'settings', 'money'],
+    owner: [...home, 'panel', 'hub', 'kitchen', 'history', 'reservations', 'menuadmin', 'staff', 'settings', 'money'],
+    admin: [...home, 'panel', 'hub', 'kitchen', 'history', 'reservations', 'menuadmin', 'staff', 'settings', 'money'],
+    cashier: [...home, 'hub', 'history', 'reservations', 'stoplist', 'settings', 'money'],
     waiter: [...home, ...(isShop() ? [] : ['ready', 'academy']), 'settings'],
     chef: ['kitchen', 'stoplist', 'inventory', 'settings'],
   }[role];
 }
-const CHILD_OF = { staffday: 'money', fixed: 'money', pnl: 'money', room: 'rooms', order: 'rooms', soboy: 'rooms', dostavka: 'rooms', reports: 'money', finance: 'money', payroll: 'money', attendance: 'staff', customers: 'money', inventory: 'money', branches: 'money',
-  profit: 'money', purchases: 'money', debts: 'money', masters: 'money', academy: 'staff', ratings: 'money' };
+const CHILD_OF = { staffday: 'money', fixed: 'hub', pnl: 'money', room: 'rooms', order: 'rooms', soboy: 'rooms', dostavka: 'rooms', reports: 'money', finance: 'money', payroll: 'hub', attendance: 'staff', customers: 'hub', inventory: 'hub', branches: 'money',
+  profit: 'money', purchases: 'money', debts: 'money', masters: 'money', academy: 'staff', ratings: 'hub' };
 let currentView = null;
 let currentParams = [];
 let currentData = null;
@@ -63,7 +63,13 @@ function parseHash() {
 }
 
 // A child page lights up its parent tab, unless the role has no such tab (chef opens Ombor directly).
-const parentOf = (name) => (CHILD_OF[name] && Views[CHILD_OF[name]].roles.includes((App.user && App.user.role)) ? CHILD_OF[name] : name);
+// The menu entry a page belongs to: itself when it has its own (a chef's Ombor, a shop's Mijozlar), else its parent.
+const parentOf = (name) => {
+  const p = CHILD_OF[name];
+  if (!p || !App.user || !Views[p].roles.includes(App.user.role)) return name;
+  const keys = navKeys();
+  return keys.includes(name) || !keys.includes(p) ? name : p;
+};
 
 function navHtml() {
   const { name } = parseHash();

@@ -2,6 +2,13 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.46.0 — "Boshqaruv" bo'limi
+
+- **Yangi bo'lim: Boshqaruv** — yuqori menyuda, Panel yonida, hamma ko'radigan joyda. Ichida: Mijozlar, Ombor, Mijoz baholari, Davomat, Ish haqi, Doimiy xarajatlar. Har tugmada bugungi holat: nechta mijoz va qancha qarz, nechta masalliq tugayapti, o'rtacha baho, bugun kim keldi, keyingi doimiy to'lov qachon.
+- **Moliya** endi faqat pul hisoboti: Hisobot, Sof foyda, Kirim-chiqim (do'konlarda — Foyda, Mol keldi, Qarzlar). Avvalgidek menyuning chetida va parol bilan.
+- **Kim nimani ko'radi** — Ish haqi va Doimiy xarajatlar tugmasi faqat boshliq va adminga. Kassir Mijozlar, Ombor va Baholarni ko'radi. Davomat "Ishga keldim" yoqilgan bo'lsa chiqadi.
+- Moliya paroli yoqilgan bo'lsa, Ish haqi va Doimiy xarajatlar sahifalari parolni so'rashda davom etadi (pul ma'lumoti), tugmalarida esa raqam ko'rsatilmaydi.
+
 ## 1.45.3 — Biznes tarifida Mijozlar ekrani
 
 - Biznes tarifida qarz daftari bor edi, lekin qarzdorlar ro'yxati va "Qarz to'lovi" ekrani (Moliya → Mijozlar) faqat Pro'da ko'rinardi. Endi Biznes'da ham Mijozlar ekrani ochiladi: mijozlar, qarzdorlar, qarzni olish. Bonus va keshbek Pro'da qoladi.

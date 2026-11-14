@@ -2408,6 +2408,36 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     k.exp = now() + FINANCE_TTL;
   }
 
+  // "Boshqaruv": one line of today's state on each of its buttons — only what this person may open.
+  // Pay and fixed costs stay quiet while the money password is on (their pages ask for it).
+  function hubSummary({ user }) {
+    const out = {};
+    const acc = moneyAccess(user);
+    const s = settings();
+    const locked = !!(s.finance_lock && s.has_finance_code);
+    const safe = (fn) => { try { return fn(); } catch (e) { return null; } };
+    if (moduleOn('customers') || moduleOn('debts')) {
+      out.customers = safe(() => q('SELECT COUNT(*) count, COALESCE(SUM(debt), 0) debt, COALESCE(SUM(debt > 0), 0) debtors FROM customers WHERE active = 1').get());
+    }
+    if (moduleOn('inventory')) out.inventory = safe(() => { const l = pro.listIngredients(); return { count: l.rows.length, low: l.low }; });
+    if (moduleOn('ratings')) {
+      const d = new Date(now()); d.setDate(1); d.setHours(0, 0, 0, 0);
+      out.ratings = safe(() => q('SELECT COUNT(*) count, AVG(stars) avg FROM order_ratings WHERE created_at >= ?').get(d.getTime()));
+    }
+    if (moduleOn('payroll') && ['owner', 'admin'].includes(user.role)) {
+      out.attendance = safe(() => { const v = payroll.dayView({ query: {} }); return { present: v.counts.present, staff: v.staff.length }; });
+    }
+    if (moduleOn('payroll') && acc.payroll && !locked) out.payroll = safe(() => q("SELECT COUNT(*) staff FROM users WHERE active = 1 AND role != 'owner'").get());
+    if (moduleOn('finance') && acc.finance && !locked && ['owner', 'admin'].includes(user.role)) {
+      out.fixed = safe(() => {
+        const items = money.fixedList({ query: {} }).items.filter((x) => !x.paid);
+        const next = items.slice().sort((a, b) => a.due_at - b.due_at)[0];
+        return { overdue: items.filter((x) => x.overdue).length, left: items.length, next: next ? { name: next.name, due_at: next.due_at } : null };
+      });
+    }
+    return out;
+  }
+
   // Who came today. Money columns (earned, spent, left to pay) only for those who may pay out: the boss,
   // and an admin the boss lets into the cash book.
   const canPayDaily = (user) => user.role === 'owner' || (user.role === 'admin' && moneyAccess(user).finance);
@@ -2695,6 +2725,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['GET', '/api/work/log', MANAGERS, work.log],
     ['GET', '/api/work/:id/photo', MANAGERS, work.photo],
     ['GET', '/api/customers', MONEY, pro.listCustomers],
+    ['GET', '/api/hub', MONEY, hubSummary],
     ['POST', '/api/customers', MONEY, pro.saveCustomer],
     ['GET', '/api/customers/:id', MONEY, pro.customerDetail],
     ['POST', '/api/client-error', ['owner', 'admin', 'cashier', 'waiter', 'chef'], ({ user, body }) => {

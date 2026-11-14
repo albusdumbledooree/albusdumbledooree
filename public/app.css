@@ -1484,3 +1484,9 @@ details.ver summary .grow { flex: 1 1 200px; min-width: 0; }
 .offq-note { margin: 0 0 12px; padding: 8px 10px; border-radius: 10px; background: rgba(245, 158, 11, .12); color: var(--text); }
 .offq-note svg { vertical-align: -2px; color: #b45309; }
 @media (min-width: 900px) { #offbar { top: auto; left: auto; right: 12px; bottom: 36px; transform: none; } }
+
+/* ---------- Boshqaruv ---------- */
+.hub-stat { margin-top: auto; padding: 5px 10px; border-radius: 999px; background: var(--panel-2); color: var(--text); font-weight: 700; font-size: 13px; align-self: flex-start; }
+.hub-stat.warn { background: rgba(245, 158, 11, .14); color: #b45309; }
+.hub-stat.bad { background: rgba(220, 38, 38, .1); color: var(--red); }
+.hub-stat.good { background: rgba(22, 163, 74, .12); color: #15803d; }

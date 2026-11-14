@@ -3383,3 +3383,24 @@ test('offline order: lands once whatever the number of deliveries, opens the che
   assert.equal((await call('GET', '/api/rooms?all=1', boss)).data.find((r) => r.id === rooms[1].id).order, null);
   assert.equal((await call('POST', '/api/offline/order', boss, { key: 'x', room_id: rooms[1].id, items: [{ dish_id: dish.id, qty: 1 }] })).status, 400);
 });
+
+test('boshqaruv: one line of state per button, only what the person may open', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  await call('POST', '/api/platform/tenants', admin, { name: 'Hub', code: 'hubt', owner_name: 'E', owner_username: 'hubb', owner_password: 'parol12345', plan: 'pro', sample: true });
+  const boss = await login('hubb', 'parol12345', 'hubt');
+  await call('POST', '/api/users', boss, { name: 'Kassir', username: 'hubk', password: 'parol1', role: 'cashier' });
+  const cashier = await login('hubk', 'parol1', 'hubt');
+  await call('POST', '/api/customers', boss, { name: 'Aziz', phone: '+998901112233' });
+  assert.equal((await call('POST', '/api/fixed-costs', boss, { name: 'Ijara', category: 'Ijara', amount: 5000000, due_day: 28 })).status, 200);
+  const h = await call('GET', '/api/hub', boss);
+  assert.equal(h.status, 200, JSON.stringify(h.data));
+  assert.equal(h.data.customers.count, 1); assert.equal(h.data.customers.debt, 0);
+  assert.ok(h.data.inventory && typeof h.data.inventory.low === 'number');
+  assert.equal(h.data.ratings.count, 0);
+  assert.ok(h.data.attendance.staff >= 1); assert.ok(h.data.payroll.staff >= 1);
+  assert.equal(h.data.fixed.left, 1); assert.equal(h.data.fixed.next.name, 'Ijara');
+  // The cashier: no pay, no attendance, no regular costs.
+  const c = (await call('GET', '/api/hub', cashier)).data;
+  assert.ok(c.customers); assert.equal(c.payroll, undefined); assert.equal(c.attendance, undefined); assert.equal(c.fixed, undefined);
+  assert.equal((await call('GET', '/api/hub')).status, 401);
+});

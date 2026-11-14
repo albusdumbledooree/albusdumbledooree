@@ -60,7 +60,7 @@ Views.fixed = {
     const status = (x) => (x.paid ? `<span class="chip green">${icon('check', 14)} ${t("To'langan")} ${fmtDate(x.paid.created_at)}${x.paid.amount !== x.amount ? ` · ${num(x.paid.amount)}` : ''}</span>`
       : x.overdue ? `<span class="chip red">${t("Muddati o'tdi")} · ${fmtDate(x.due_at)}</span>` : x.due_today ? `<span class="chip orange">${t('Bugun')}</span>`
         : `<span class="chip">${fmtDate(x.due_at)}</span>`);
-    return `<div class="page-head"><a class="btn sm" href="#/money">${icon('arrow-left', 16)}</a><h1>${t('Doimiy xarajatlar')}</h1>${monthNav(d.month, 'fixMonth')}
+    return `<div class="page-head"><a class="btn sm" href="#/hub">${icon('arrow-left', 16)}</a><h1>${t('Doimiy xarajatlar')}</h1>${monthNav(d.month, 'fixMonth')}
         ${edit ? `<button class="btn primary" id="fx-add">${icon('plus', 18)} ${t("Qo'shish")}</button>` : ''}</div>
       <div class="kpis">${kpi(t('Bu oy jami'), money(tt.planned), '', '', 'repeat')}${kpi(t("To'langan"), money(tt.paid), '', 'good', 'check')}
         ${kpi(t("To'lanmagan"), money(tt.unpaid), '', tt.unpaid ? 'warn' : 'good', 'triangle-alert')}</div>
