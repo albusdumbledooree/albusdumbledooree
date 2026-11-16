@@ -2,6 +2,15 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.48.0 — Qurilma turlari: asosiy kassa, zal, oshxona
+
+- Qurilmani ulashda **turi** tanlanadi: **Asosiy kassa** (hamma xodim, boshliq ham), **Qo'shimcha qurilma (zal)** — faqat ofitsant va kassir, **Oshxona** — faqat oshpazlar.
+- Boshliq va admin zal planshetida ro'yxatda ko'rinmaydi. Server ham tekshiradi: zal qurilmasida boshliq yoki admin PIN bilan kira olmaydi, sahifa buzilsa ham.
+- Qurilma ekranida turi haqida hech qanday yozuv yo'q — oddiy ko'rinishda turadi.
+- Boshliq boshqa qurilmada ham kira oladi: ⚙ → "Login va parol bilan kirish" (faqat to'liq login va parol bilan).
+- Turini Sozlamalar → Qurilmalar'da faqat boshliq o'zgartiradi.
+- Avval ulangan qurilmalar "Asosiy kassa" bo'lib qoladi — yangilanishdan keyin hech narsa o'zgarmaydi.
+
 ## 1.47.0 — Konkurs boti (faqat platformada)
 
 - **Telegram konkurs boti** — istalgan odam botga yozib, o'z kanalida konkurs o'tkaza oladi: kanal (bot va odamning o'zi kanal admini bo'lishi shart) → matn (rasm bilan ham) → g'oliblar soni → tugash vaqti → ko'rib chiqish → "Kanalga joylash".

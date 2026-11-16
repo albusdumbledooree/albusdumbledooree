@@ -846,6 +846,9 @@ CREATE INDEX IF NOT EXISTS idx_academy_tests_user ON academy_tests(user_id, star
   addCol('print_jobs', 'printer_id', 'INTEGER');
   // The FLOWI Printer program on a business's computer is a device of its own; it reports its printers.
   addCol('devices', 'agent', 'INTEGER NOT NULL DEFAULT 0');
+  // Who may sign in on a device: 'main' (the till: everyone), 'extra' (a hall tablet: waiters and cashiers), 'kitchen' (cooks).
+  // Devices connected before keep 'main', so nobody loses their name on the screen they used.
+  addCol('devices', 'kind', "TEXT NOT NULL DEFAULT 'main'");
   addCol('devices', 'agent_version', "TEXT NOT NULL DEFAULT ''");
   db.exec(`CREATE TABLE IF NOT EXISTS printers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

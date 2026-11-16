@@ -2063,13 +2063,20 @@ Views.settings = {
 
   tab_devices({ devices }) {
     return `<div class="card"><div class="card-head"><h2>${t('Ulangan qurilmalar')}</h2></div>
-      <p class="small muted">${t("Bu qurilmalarda xodimlar ro'yxati va PIN orqali kiriladi. Yo'qolgan yoki begona qurilmani uzing.")}</p>
+      <p class="small muted">${t("Bu qurilmalarda xodimlar ro'yxati va PIN orqali kiriladi. Yo'qolgan yoki begona qurilmani uzing.")}
+        ${t("Turi kim ro'yxatda ko'rinishini belgilaydi. Boshliq boshqa qurilmalarda ⚙ → \"Login va parol bilan kirish\" orqali kiradi.")}</p>
       ${devices.length ? `<div class="table-wrap"><table>${devices.map((x) => `<tr><td>${icon('monitor-smartphone', 18)} <b>${esc(x.name)}</b>${App.device && App.device.name === x.name ? ` <span class="chip green">${t('Shu qurilma')}</span>` : ''}</td>
+        <td>${can('owner') ? `<select data-dev-kind="${x.id}" style="min-height:38px">${DEVICE_KIND_LIST().map(([k, , n]) => `<option value="${k}" ${x.kind === k ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>`
+          : `<b>${esc((DEVICE_KIND_LIST().find(([k]) => k === x.kind) || DEVICE_KIND_LIST()[0])[2])}</b>`}
+          <div class="small muted">${esc((DEVICE_KIND_LIST().find(([k]) => k === x.kind) || DEVICE_KIND_LIST()[0])[3])}</div></td>
         <td class="small muted">${t('Ulandi')}: ${fmtDateTime(x.created_at)}${x.created_by_name ? ` · ${esc(x.created_by_name)}` : ''}<br>${t('Oxirgi faollik')}: ${fmtDateTime(x.last_seen)}</td>
         <td class="actions"><button class="btn sm red-text" data-del-device="${x.id}">${icon('log-out', 16)} ${t('Uzish')}</button></td></tr>`).join('')}</table></div>`
       : emptyState('monitor-smartphone', t("Ulangan qurilma yo'q"))}</div>`;
   },
   bind_devices(root) {
+    root.querySelectorAll('[data-dev-kind]').forEach((s) => s.onchange = async () => {
+      try { await PUT(`/api/devices/${s.dataset.devKind}/kind`, { kind: s.value }); toast(t('Saqlandi'), 'ok'); refreshView(); } catch (e) { toastError(e); refreshView(); }
+    });
     root.querySelectorAll('[data-del-device]').forEach((b) => b.onclick = async () => {
       if (!(await confirmModal(t('Qurilmani uzish'), t('Bu qurilma uzilsinmi?'), t('Uzish')))) return;
       try { await DEL(`/api/devices/${b.dataset.delDevice}`); refreshView(); } catch (e) { toastError(e); }

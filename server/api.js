@@ -349,13 +349,21 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return startSession(checkCredentials(body, ip), 'login');
   }
 
+  // Who may sign in by name and PIN on each kind of device (null: everyone). The boss signs in on the others
+  // only with the full login and password, never by tapping a name.
+  const DEVICE_KINDS = { main: null, extra: ['waiter', 'cashier'], kitchen: ['chef'] };
+  const deviceKind = (k) => (Object.prototype.hasOwnProperty.call(DEVICE_KINDS, k) ? k : 'main');
+  const kindAllows = (device, role) => { const r = DEVICE_KINDS[deviceKind(device && device.kind)]; return !r || r.includes(role); };
+
   // A tablet/PC is connected once with the boss's (or admin's) login; afterwards staff tap their name and type a PIN.
   function registerDevice({ body, ip }) {
     const user = checkCredentials(body, ip);
     if (!MANAGERS.includes(user.role)) throw new HttpError(403, 'Qurilmani faqat boshliq yoki admin ulay oladi');
     const token = devicePrefix + newToken();
     const name = str(body.name, 'Qurilma nomi', { max: 40 }) || 'Qurilma';
-    q('INSERT INTO devices (token, name, created_by, created_at, last_seen) VALUES (?, ?, ?, ?, ?)').run(token, name, user.id, now(), now());
+    // The connect screen always sends the kind; an older program that does not is a till, as before.
+    if (body.kind !== undefined && !Object.prototype.hasOwnProperty.call(DEVICE_KINDS, body.kind)) throw new HttpError(400, 'Qurilma turini tanlang');
+    q('INSERT INTO devices (token, name, kind, created_by, created_at, last_seen) VALUES (?, ?, ?, ?, ?, ?)').run(token, name, deviceKind(body.kind), user.id, now(), now());
     audit(user, 'device_add', name);
     return { device_token: token, name };
   }
@@ -367,9 +375,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     return d || null;
   }
 
-  function deviceStaff() {
+  function deviceStaff({ device } = {}) {
     const order = { owner: 0, admin: 1, cashier: 2, waiter: 3, chef: 4 };
     return q('SELECT * FROM users WHERE active = 1 AND app = 1').all()
+      .filter((u) => kindAllows(device, u.role))
       .sort((a, b) => order[a.role] - order[b.role] || a.name.localeCompare(b.name))
       .map((u) => ({ id: u.id, name: u.name, role: u.role, position: u.position || '', has_pin: !!u.pin_hash || MANAGERS.includes(u.role),
         open: !u.pin_hash && MANAGERS.includes(u.role) }));
@@ -385,6 +394,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     if (tries > 0 && f && f.count >= tries && now() - f.first < mins * MIN) throw new HttpError(429, `Juda ko'p xato. ${mins} daqiqadan keyin urinib ko'ring`);
     const user = q('SELECT * FROM users WHERE id = ? AND active = 1 AND app = 1').get(id);
     if (!user) throw new HttpError(404, 'Xodim topilmadi');
+    // Not on this kind of device (the boss on a hall tablet): refused even if the screen was tampered with.
+    if (!kindAllows(device, user.role)) throw new HttpError(403, 'Bu qurilmada kirib bo\'lmaydi');
     // Boss and admin enter without a password until they set a desktop password (the screen keeps reminding them).
     if (!user.pin_hash && MANAGERS.includes(user.role)) return startSession(user, 'pin_login');
     if (!user.pin_hash) throw new HttpError(400, "PIN o'rnatilmagan. Boshliqqa murojaat qiling");
@@ -401,7 +412,16 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
   }
 
   function listDevices() {
-    return q('SELECT d.id, d.name, d.created_at, d.last_seen, u.name created_by_name FROM devices d LEFT JOIN users u ON u.id = d.created_by ORDER BY d.id DESC').all();
+    return q('SELECT d.id, d.name, d.kind, d.created_at, d.last_seen, u.name created_by_name FROM devices d LEFT JOIN users u ON u.id = d.created_by ORDER BY d.id DESC').all();
+  }
+  // Only the boss changes who may sign in on a device.
+  function setDeviceKind({ user, params, body }) {
+    const d = q('SELECT * FROM devices WHERE id = ?').get(params.id);
+    if (!d) throw new HttpError(404, 'Qurilma topilmadi');
+    if (!Object.prototype.hasOwnProperty.call(DEVICE_KINDS, body.kind)) throw new HttpError(400, "Qurilma turi noto'g'ri");
+    q('UPDATE devices SET kind = ? WHERE id = ?').run(body.kind, d.id);
+    audit(user, 'device_kind', `${d.name}: ${body.kind}`);
+    return { ok: true, kind: body.kind };
   }
 
   function deleteDevice({ user, params }) {
@@ -2583,6 +2603,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['POST', '/api/device/pin', 'device', pinLogin],
     ['GET', '/api/devices', MANAGERS, listDevices],
     ['DELETE', '/api/devices/:id', MANAGERS, deleteDevice],
+    ['PUT', '/api/devices/:id/kind', ['owner'], setDeviceKind],
     ['PUT', '/api/me/pin', ALL, setOwnPin],
     ['GET', '/api/takeaway', ['owner', 'admin', 'cashier', 'waiter'], listTakeaway],
     ['POST', '/api/orders/:id/print', ['owner', 'admin', 'cashier', 'waiter'], printOrder],

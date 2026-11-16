@@ -19,6 +19,12 @@ function longDate(ts = Date.now()) {
   return `${days[d.getDay()]}, ${d.getDate()}-${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+// Who may sign in on a device by tapping a name. Nothing on the device's own screen tells which kind it is.
+const DEVICE_KIND_LIST = () => [
+  ['main', 'wallet', t('Asosiy kassa'), t("Hamma xodim ko'rinadi, boshliq ham")],
+  ['extra', 'monitor-smartphone', t("Qo'shimcha qurilma (zal)"), t('Faqat ofitsant va kassir')],
+  ['kitchen', 'chef-hat', t('Oshxona'), t('Faqat oshpazlar')],
+];
 async function loadInfo(code) {
   App.info = null;
   if (!code) return null;
@@ -77,6 +83,7 @@ Views.setup = {
         <label class="field">${t('Boshliq logini')}<input name="username" autocomplete="username" autocapitalize="none" required></label>
         <label class="field">${t('Parol')}<input name="password" type="password" autocomplete="current-password" required></label>
         <label class="field">${t('Qurilma nomi')}<input name="name" placeholder="${esc(t('Masalan: Kassa'))}"></label>
+        <div class="field"><span>${t('Qurilma turi')}</span><div class="kind-cards">${DEVICE_KIND_LIST().map(([k, ic, n, d]) => `<label class="kind-card"><input type="radio" name="kind" value="${k}" required>${icon(ic, 22)}<span><b>${n}</b><small>${d}</small></span></label>`).join('')}</div></div>
         <button class="btn primary lg block" type="submit">${icon('monitor-smartphone', 20)} ${t('Qurilmani ulash')}</button>
       </div>
       ${App.info && App.info.demo ? `<p class="small muted" style="margin-top:14px">${t('Sinov uchun')}: <b>ega / ega123</b></p>` : ''}
@@ -94,11 +101,13 @@ Views.setup = {
       if (await loadInfo(code)) store('cp_code', code);
       // Keep whatever was typed while the name was loading.
       const cur = document.getElementById('setup-form');
-      const keep = cur ? { u: cur.username.value, p: cur.password.value, n: cur.name.value, focus: document.activeElement && document.activeElement.name } : {};
+      const kindNow = cur && cur.querySelector('[name=kind]:checked');
+      const keep = cur ? { u: cur.username.value, p: cur.password.value, n: cur.name.value, k: kindNow ? kindNow.value : '', focus: document.activeElement && document.activeElement.name } : {};
       await render();
       const f = document.getElementById('setup-form');
       if (f) {
         f.username.value = keep.u || ''; f.password.value = keep.p || ''; f.name.value = keep.n || '';
+        if (keep.k) { const r = f.querySelector(`[name=kind][value="${keep.k}"]`); if (r) r.checked = true; }
         if (keep.focus && f[keep.focus]) f[keep.focus].focus();
       }
     };
@@ -174,8 +183,10 @@ Views.lock = {
         ${keyboardSelect()}
         <button type="button" class="btn block" id="kiosk-bat" style="margin-top:12px">${icon('download', 18)} ${t('Kassa yorlig\'ini yuklab olish (Windows)')}</button>
         <p class="small muted" style="margin-top:6px">${t("Shu yorliq bilan ochilsa, chek chiqqanda chop etish oynasi ochilmaydi — darhol printerdan chiqadi.")}</p>
-        <p class="small muted">${t("Qurilmani uzsangiz, uni qayta ulash uchun boshliq logini kerak bo'ladi.")}</p>`,
+        <p class="small muted">${t("Qurilmani uzsangiz, uni qayta ulash uchun boshliq logini kerak bo'ladi.")}</p>
+        <button type="button" class="btn block" id="pw-login" style="margin-top:4px">${icon('key-round', 18)} ${t('Login va parol bilan kirish')}</button>`,
       onMount: (f) => {
+        f.querySelector('#pw-login').onclick = () => { closeModal(); passwordLogin(); };
         f.querySelector('#kb-mode').onchange = (e) => Keyboard.setMode(e.target.value);
         f.querySelector('#kiosk-bat').onclick = downloadKioskLauncher;
       },
@@ -194,6 +205,18 @@ Views.lock = {
     if (this.step === 'staff') this.timer = setTimeout(() => { if (parseHash().name === 'lock' && !App.user && !document.querySelector('.modal-back')) go('clock'); }, 45000);
   },
 };
+// Signing in with the full login and password on this device (the boss on a hall tablet, whose name is not listed there).
+function passwordLogin() {
+  openModal({
+    title: `${icon('key-round')} ${t('Login va parol bilan kirish')}`,
+    body: `<div class="stack"><label class="field">${t('Login')}<input name="username" autocomplete="username" autocapitalize="none" required></label>
+      <label class="field">${t('Parol')}<input name="password" type="password" autocomplete="current-password" required></label></div>`,
+    actions: [{ label: t('Bekor') }, { label: t('Kirish'), cls: 'primary', icon: 'log-in', onClick: async (f) => {
+      const r = await api('POST', '/api/login', { code: App.device.code, username: f.username.value.trim(), password: f.password.value }, null);
+      await startSession(r.token);
+    } }],
+  });
+}
 // The desktop re-reads the business (background, logo, support line, new version) every few minutes.
 setInterval(() => {
   if (!App.user && App.device && parseHash().name === 'lock' && !document.querySelector('.modal-back')) {

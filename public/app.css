@@ -1490,3 +1490,11 @@ details.ver summary .grow { flex: 1 1 200px; min-width: 0; }
 .hub-stat.warn { background: rgba(245, 158, 11, .14); color: #b45309; }
 .hub-stat.bad { background: rgba(220, 38, 38, .1); color: var(--red); }
 .hub-stat.good { background: rgba(22, 163, 74, .12); color: #15803d; }
+
+/* ---------- Device kinds on the connect screen ---------- */
+.kind-cards { display: grid; gap: 8px; margin-top: 6px; }
+.kind-card { display: flex; gap: 10px; align-items: flex-start; border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; cursor: pointer; background: var(--panel); }
+.kind-card input { margin-top: 4px; }
+.kind-card span { display: flex; flex-direction: column; gap: 2px; }
+.kind-card small { color: var(--muted); font-size: 13px; }
+.kind-card:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }

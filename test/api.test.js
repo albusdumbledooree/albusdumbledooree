@@ -3527,3 +3527,35 @@ test('konkurs bot: anyone opens a giveaway in their channel, subscribers join wi
     tg.close();
   }
 });
+
+test('device kinds: the till shows everyone, a hall tablet only waiters and cashiers, the kitchen only cooks; the boss cannot PIN in on a tablet', async () => {
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  await call('POST', '/api/platform/tenants', admin, { name: 'Qurilma', code: 'qkind', owner_name: 'Ega', owner_username: 'qboss', owner_password: 'parol12345', plan: 'pro' });
+  const boss = await login('qboss', 'parol12345', 'qkind');
+  for (const [u, r] of [['qadmin', 'admin'], ['qkassa', 'cashier'], ['qofit', 'waiter'], ['qosh', 'chef']]) {
+    assert.equal((await call('POST', '/api/users', boss, { name: u, username: u, password: 'parol1', role: r, pin: '4321' })).status, 200);
+  }
+  const reg = async (kind) => (await call('POST', '/api/device/register', null, { code: 'qkind', username: 'qboss', password: 'parol12345', name: `D ${kind}`, ...(kind ? { kind } : {}) })).data.device_token;
+  const roles = async (tok) => (await call('GET', '/api/device/staff', tok)).data.map((u) => u.role).sort();
+  const till = await reg(); const hall = await reg('extra'); const kitchen = await reg('kitchen');
+  assert.deepEqual(await roles(till), ['admin', 'cashier', 'chef', 'owner', 'waiter'], 'an older connect without a kind is the till');
+  assert.deepEqual(await roles(hall), ['cashier', 'waiter']);
+  assert.deepEqual(await roles(kitchen), ['chef']);
+  assert.equal((await call('POST', '/api/device/register', null, { code: 'qkind', username: 'qboss', password: 'parol12345', kind: 'boss' })).status, 400);
+  // The boss (no desktop password yet, which would let anyone in on the till) is refused on the tablet even by id.
+  const ownerId = (await call('GET', '/api/device/staff', till)).data.find((u) => u.role === 'owner').id;
+  assert.equal((await call('POST', '/api/device/pin', hall, { user_id: ownerId, pin: '' })).status, 403);
+  const adminId = (await call('GET', '/api/device/staff', till)).data.find((u) => u.role === 'admin').id;
+  assert.equal((await call('POST', '/api/device/pin', hall, { user_id: adminId, pin: '4321' })).status, 403);
+  const waiterId = (await call('GET', '/api/device/staff', hall)).data.find((u) => u.role === 'waiter').id;
+  assert.equal((await call('POST', '/api/device/pin', hall, { user_id: waiterId, pin: '4321' })).status, 200);
+  assert.equal((await call('POST', '/api/device/pin', kitchen, { user_id: waiterId, pin: '4321' })).status, 403);
+  // The boss changes a device's kind; nobody else can.
+  const list = (await call('GET', '/api/devices', boss)).data;
+  const hallRow = list.find((d) => d.name === 'D extra');
+  assert.equal(hallRow.kind, 'extra');
+  const adm = await login('qadmin', 'parol1', 'qkind');
+  assert.equal((await call('PUT', `/api/devices/${hallRow.id}/kind`, adm, { kind: 'main' })).status, 403);
+  assert.equal((await call('PUT', `/api/devices/${hallRow.id}/kind`, boss, { kind: 'main' })).status, 200);
+  assert.ok((await roles(hall)).includes('owner'));
+});
