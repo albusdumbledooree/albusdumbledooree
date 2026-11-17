@@ -385,8 +385,6 @@ bil = cue('bilasizlar')
 nar, mini, fifty, hoz = cue('narxi'), cue('minimum'), cue('50'), cue('hozir')
 mil, flo, arz, besh, b5 = cue('milliy'), cue('flowi'), cue('arzon'), cue('beshta'), cue('beshinchisi')
 layk, oxir, bir = cue('layk'), cue('oxirigacha'), cue('birinchisi')
-cbg(0, flo['s'] - 0.05)
-cbg(arz['s'] - 0.05, bir['s'] - 0.04)
 ZOOM = [(0, 1.14, 0), (0.02, 1.0, 0.5)]
 z = 1.0
 names = ['CHOYXONA', 'KAFE', 'FAST-FUD', 'MONOBLOK', 'BUYURTMA', 'CHEK', 'HISOB']
@@ -448,22 +446,101 @@ sfx(layk['s'], 'blip')
 chip(oxir['s'], bir['s'], 'OXIRIGACHA KO\'RING', y=1040, kind='white')
 
 
+# --- from section 1 on: collage background, the speaker as a grey cut-out, a dark band under him for the captions
+cbg(bir['s'] - 0.04, SPEECH)
+F.clip(bir['s'] - 0.04, SPEECH, '<div class="band"></div>', z=8)
+
+
+def cws(items, end):
+    """Serif key words behind the head, one after another: [(word dict, text), ...]."""
+    for n, (w, t) in enumerate(items):
+        cword(w['s'], items[n + 1][0]['s'] if n + 1 < len(items) else end, t)
+
+
+def card(t0, t1, src, x, y, w=300, rot=-7):
+    i = B.nid('k')
+    B.clip(t0, t1, f'<div id="{i}" class="pol" style="left:{x}px;top:{y}px"><img src="assets/img/{src}" style="width:{w}px;display:block"></div>', z=3)
+    B.ft(f'#{i}', {'opacity': 0, 'scale': .4, 'rotation': rot - 24}, {'opacity': 1, 'scale': 1, 'rotation': rot}, t0, 0.3)
+    B.to(f'#{i}', {'rotation': rot + 3, 'y': -14}, t0 + 0.3, max(0.3, t1 - t0 - 0.3), 'none')
+    sfx(t0, 'whoosh', .45)
+
+
+def remote(t0, tlive, t1, y=800):
+    """The owner abroad watches the tea house live: a dot keeps travelling the arc, live bars grow."""
+    i = F.nid('r')
+    bars = ''.join(f'<i id="{i}b{n}" style="display:block;width:34px;height:{h}px;background:#fff;transform-origin:bottom center"></i>' for n, h in enumerate([38, 62, 50, 84, 70, 104]))
+    F.clip(t0, t1, f"""<div id="{i}" class="glass" style="left:90px;top:{y}px;width:900px;height:330px">
+<svg viewBox="0 0 900 330" style="position:absolute;inset:0;width:900px;height:330px;overflow:visible"><path id="{i}p" pathLength="1" d="M110 150 Q450 -80 790 150" fill="none" stroke="#fff" stroke-width="5" stroke-dasharray="1" /></svg>
+<i class="sq" id="{i}d" style="left:99px;top:139px;width:22px;height:22px;background:{RED}"></i>
+<i class="sq" style="left:96px;top:136px;width:28px;height:28px;z-index:-1"></i><i class="sq" style="left:776px;top:136px;width:28px;height:28px"></i>
+<div class="px" style="left:40px;top:186px;font-size:26px;text-shadow:none">BOSHLIQ</div><div class="it" style="position:absolute;left:40px;top:222px;font-size:34px">chet elda</div>
+<div class="px" style="right:36px;top:186px;font-size:26px;text-shadow:none">CHOYXONA</div><div class="it" style="position:absolute;right:36px;top:222px;font-size:34px">Toshkentda</div>
+<div id="{i}l" style="position:absolute;left:330px;top:176px;width:240px;height:130px;display:flex;align-items:flex-end;justify-content:center;gap:10px">{bars}</div>
+<div id="{i}j" class="thin" style="position:absolute;left:0;right:0;top:-48px;text-align:center;font-size:26px;letter-spacing:.2em;text-shadow:0 2px 10px #000"><i style="display:inline-block;width:16px;height:16px;background:{RED};margin-right:10px"></i>JONLI</div></div>""", z=14)
+    F.ft(f'#{i}', {'opacity': 0, 'y': 40}, {'opacity': 1, 'y': 0}, t0, 0.22)
+    F.ft(f'#{i}p', {'strokeDashoffset': 1}, {'strokeDashoffset': 0}, t0 + 0.15, 0.45, 'power2.out')
+    t = t0 + 0.6
+    F.raw(f'tl.set("#{i}d",{{x:0,y:0}},0);')
+    while t + 1.0 < t1:
+        F.raw(f'tl.fromTo("#{i}d",{{x:0}},{{x:680,duration:0.9,ease:"none",immediateRender:false}},{t:.3f});tl.fromTo("#{i}d",{{y:0}},{{y:-115,duration:0.45,ease:"sine.out",immediateRender:false}},{t:.3f});tl.to("#{i}d",{{y:0,duration:0.45,ease:"sine.in"}},{t + 0.45:.3f});')
+        sfx(t + 0.9, 'tick', .6)
+        t += 1.2
+    F.ft(f'#{i}j', {'opacity': 0}, {'opacity': 1}, tlive, 0.15)
+    for n in range(6):
+        F.ft(f'#{i}b{n}', {'scaleY': 0}, {'scaleY': 1}, tlive + 0.06 * n, 0.25, 'power3.out')
+        F.to(f'#{i}b{n}', {'scaleY': [0.7, 1.15, 0.85, 1.1, 0.9, 1.2][n]}, tlive + 0.7, 0.5, 'sine.inOut')
+    F.to(f'#{i}', {'opacity': 0}, t1 - 0.1, 0.1)
+    sfx(t0, 'whoosh', .5); sfx(tlive, 'sweep', .4)
+
+
+def debts(t0, tchk, tq1, tq2, t1, y=790):
+    """A debts list: rows slide in, a receipt flies in and becomes a new row, then paid vs owed bars."""
+    i = F.nid('q')
+    rows = ''.join(f'<div id="{i}r{n}" class="row"><i class="sq" style="position:static;width:22px;height:22px"></i><i style="width:{w}px;height:20px;background:#aab0bb"></i><i style="margin-left:auto;width:{a}px;height:20px;background:{RED}"></i></div>' for n, (w, a) in enumerate([(330, 130), (270, 90), (360, 160)]))
+    F.clip(t0, t1, f"""<div id="{i}" class="glass" style="left:90px;top:{y}px;width:900px;height:350px;padding:26px 36px">
+<div class="thin" style="font-size:26px;letter-spacing:.2em;margin-bottom:14px">QARZLAR BO'LIMI</div>{rows}
+<div id="{i}n" class="row" style="background:#fff"><i class="sq" style="position:static;width:22px;height:22px;background:{DARK}"></i><i style="width:300px;height:20px;background:{DARK}"></i><i style="margin-left:auto;width:140px;height:20px;background:{RED}"></i></div>
+<div id="{i}c" class="paper" style="position:absolute;left:40px;top:-150px;padding:26px 30px"><span class="px" style="position:static;color:#3a2f22;font-size:30px;text-shadow:none">CHEK</span></div>
+<div style="position:absolute;left:36px;right:36px;bottom:18px;display:flex;flex-direction:column;gap:8px"><div id="{i}y" style="height:22px;width:560px;background:#fff;transform-origin:left center"></div><div id="{i}z" style="height:22px;width:210px;background:{RED};transform-origin:left center"></div></div></div>""", z=14)
+    F.ft(f'#{i}', {'opacity': 0, 'y': 40}, {'opacity': 1, 'y': 0}, t0, 0.22)
+    for n in range(3): F.ft(f'#{i}r{n}', {'opacity': 0, 'x': -60}, {'opacity': 1, 'x': 0}, t0 + 0.15 + 0.1 * n, 0.2)
+    F.ft(f'#{i}c', {'opacity': 0, 'x': -420, 'y': -260, 'rotation': -30}, {'opacity': 1, 'x': 0, 'y': 0, 'rotation': -6}, tchk, 0.35)
+    F.to(f'#{i}c', {'y': 230, 'scale': .3, 'opacity': 0}, tchk + 0.75, 0.3, 'power2.in')
+    F.ft(f'#{i}n', {'opacity': 0, 'scaleY': 0}, {'opacity': 1, 'scaleY': 1}, tchk + 1.0, 0.18)
+    F.ft(f'#{i}y', {'scaleX': 0}, {'scaleX': 1}, tq1, 0.5, 'power2.out')
+    F.ft(f'#{i}z', {'scaleX': 0}, {'scaleX': 1}, tq2, 0.4, 'power2.out')
+    F.to(f'#{i}', {'opacity': 0}, t1 - 0.1, 0.1)
+    sfx(t0, 'whoosh', .5); sfx(tchk, 'whoosh', .5); sfx(tchk + 1.0, 'blip'); sfx(tq1, 'sweep', .4); sfx(tq2, 'tick')
+
+
+def stock(t0, tin, tleft, tlow, t1, y=800):
+    """Stock levels: goods arrive (bars refill), get used (bars drain), the lowest one turns red."""
+    i = F.nid('o')
+    rows = ''.join(f'<div class="row" style="gap:20px"><span class="px" style="position:static;width:200px;font-size:26px;text-shadow:none">{nm}</span><div style="flex:1;height:30px;border:4px solid #fff"><div id="{i}f{n}" style="height:100%;background:#fff;transform-origin:left center"></div></div></div>' for n, nm in enumerate(["GO'SHT", 'GURUCH', "YOG'"]))
+    F.clip(t0, t1, f'<div id="{i}" class="glass" style="left:90px;top:{y}px;width:900px;height:300px;padding:26px 36px"><div class="thin" style="font-size:26px;letter-spacing:.2em;margin-bottom:14px">OMBOR · JONLI QOLDIQ</div>{rows}</div>', z=14)
+    F.ft(f'#{i}', {'opacity': 0, 'y': 40}, {'opacity': 1, 'y': 0}, t0, 0.22)
+    for n, (lo, hi, end) in enumerate([(.35, 1, .22), (.5, .95, .6), (.3, .9, .45)]):
+        F.ft(f'#{i}f{n}', {'scaleX': lo}, {'scaleX': hi}, tin + 0.1 * n, 0.4, 'power2.out')
+        F.to(f'#{i}f{n}', {'scaleX': end}, tleft + 0.1 * n, max(0.5, tlow - tleft), 'power1.inOut')
+    F.to(f'#{i}f0', {'backgroundColor': RED}, tlow + 0.2, 0.12, 'power2.out')
+    F.to(f'#{i}', {'opacity': 0}, t1 - 0.1, 0.1)
+    sfx(t0, 'whoosh', .5); sfx(tin, 'sweep', .4); sfx(tlow + 0.2, 'slam', .6)
+
+
 # --- 01 online control
 section(bir['s'] - 0.04, '01', 'ONLAYN NAZORAT', 'left')
-dun, inet, ios, andr = cue('dunyoning'), cue('internet'), cue('iphone'), cue('android')
+bosh, dun, inet, ios, andr = cue('boshliq'), cue('dunyoning'), cue('internet'), cue('iphone'), cue('android')
 farq, onl, naz = cue('farqi'), cue('onlayn'), cue('nazorat')
 tg, kun, shub, ogoh = cue('telegram'), cue('kunlik'), cue('shubhali'), cue('ogohlantiradi')
 ikk = cue('ikkinchi')
-chip(dun['s'], inet['s'], 'DUNYONING ISTALGAN JOYIDAN', y=860, size=42)
-chip(inet['s'], ios['s'], 'FAQAT INTERNET BO\'LSA BAS', y=860, size=42)
-transfer(dun['s'] + 0.2, dun['s'] + 0.45, dun['s'] + 0.9, ios['s'], y=985, a='BOSHLIQ', b='CHOYXONA', h=130, bounce=True)
-chip(ios['s'], farq['s'], 'iPHONE', y=860, kind='white')
-chip(andr['s'], farq['s'], 'ANDROID', y=960, kind='white')
-chip(farq['s'], onl['s'], 'XOHLAGAN QURILMADAN', y=900)
-serif(onl['s'], tg['s'], 'ONLAYN NAZORAT', y=850, size=96)
-chip(tg['s'], shub['s'], 'TELEGRAM', y=860, kind='white')
-chip(kun['s'], shub['s'], 'KUNLIK HISOBOT', y=950)
-bubble(kun['s'] + 0.15, shub['s'], y=1050)
+t01 = bir['s'] + 0.82
+cws([(dun, 'DUNYO'), (inet, 'INTERNET'), (ios, 'iPHONE'), (andr, 'ANDROID'), (farq, 'QURILMA'), (onl, 'ONLAYN'), (naz, 'NAZORAT'), (tg, 'TELEGRAM'), (kun, 'HISOBOT'), (shub, 'SHUBHA?'), (ogoh, 'OGOHLANTIRISH')], ikk['s'] - 0.04)
+obj(max(t01, bosh['s']), tg['s'], 'boss.png', 742, 470, 330, 4)
+card(dun['s'], tg['s'], 'dubai.jpg', 24, 500, 270, -7)
+remote(dun['s'] + 0.25, onl['s'], tg['s'])
+chip(tg['s'], shub['s'], 'TELEGRAM', y=820, kind='white')
+chip(kun['s'], shub['s'], 'KUNLIK HISOBOT', y=915)
+bubble(kun['s'] + 0.15, shub['s'], y=1015)
 pulse(chip(shub['s'], ikk['s'], 'SHUBHALI HOLAT', y=860, kind='red'), shub['s'])
 chip(ogoh['s'], ikk['s'], "O'ZI OGOHLANTIRADI", y=960)
 
@@ -471,10 +548,11 @@ chip(ogoh['s'], ikk['s'], "O'ZI OGOHLANTIRADI", y=960)
 section(ikk['s'] - 0.04, '02', "HISOBNI KO'CHIRISH", 'right')
 yet, uni, och, birg, oson, old = cue('yettinchi'), cue("o'ninchi"), cue("o'chirmagan"), cue('birgina'), cue('osongina'), cue('oldinlari')
 endi = cue('endi')
+cws([(yet, '7-STOL'), (uni, '10-KABINA'), (och, "O'CHMAYDI"), (birg, '1 TUGMA'), (oson, 'OSON'), (old, 'OLDIN QIYIN')], endi['s'] - 0.04)
 chip(nxt(ikk, 2)['s'] + 0.9, yet['s'] - 0.05, "BIR HISOBDAN IKKINCHISIGA", y=900, size=42)
-transfer(yet['s'], uni['s'], oson['s'], old['s'])
-chip(och['s'], birg['s'], "HISOB O'CHIRILMAYDI", y=1090, size=40)
-chip(birg['s'], old['s'], '1 TA TUGMA', y=1090, kind='white', size=40)
+transfer(yet['s'], uni['s'], oson['s'], old['s'], y=830)
+chip(och['s'], birg['s'], "HISOB O'CHIRILMAYDI", y=1050, size=40)
+chip(birg['s'], old['s'], '1 TA TUGMA', y=1050, kind='white', size=40)
 italic(old['s'], endi['s'], 'oldinlari ancha qiyin edi…', y=900, size=62)
 
 # --- 03 debts
@@ -482,11 +560,9 @@ section(endi['s'] - 0.04, '03', "QARZLAR BO'LIMI", 'left')
 qq, qb, chk, qan, qsi, belg = cue("qog'oz"), cue('qarzlar'), cue('chek'), cue('qancha'), cue('qanchasi'), cue('belgilash')
 kuni, esl, yig = cue('kuningizni'), cue('eslatma'), cue("yig'ib")
 tor = cue("to'rtinchi")
+cws([(qq, "QOG'OZ?"), (qb, 'QARZLAR'), (chk, 'CHEK'), (qan, 'YOPILDI'), (qsi, 'QARZ'), (belg, 'BELGILASH'), (esl, 'ESLATMA'), (yig, "YIG'ISH")], tor['s'] - 0.04)
 paperx(qq['s'], qb['s'] - 0.3)
-serif(qb['s'] - 0.25, chk['s'], "QARZLAR BO'LIMI", y=850, size=92)
-chip(chk['s'], qan['s'], 'CHEK → QARZLARGA', y=900)
-chip(qan['s'], belg['s'] - 0.4, 'QANCHA HISOB YOPILDI', y=860, size=42)
-chip(qsi['s'], belg['s'] - 0.4, 'QANCHASI QARZGA KETDI', y=960, kind='red', size=42)
+debts(qb['s'] - 0.25, chk['s'], qan['s'], qsi['s'], belg['s'] - 0.3)
 calendar(belg['s'], esl['s'], yig['s'], y=790)
 chip(yig['s'], tor['s'], 'QARZNI YIG\'ISH KUNI — NAZORATDA', y=900, size=40)
 
@@ -495,19 +571,13 @@ section(tor['s'] - 0.04, '04', 'OMBOR NAZORATI', 'right')
 mas, kel, qol, qqol, tel, sh2 = cue('masalliqlar'), cue('kelyapti'), cue('qoldi'), cue('qancha'), cue('telefon'), cue('shubhali')
 mis, kg, yuz, n95, dem, ogr = cue('misol'), cue('10'), cue('100'), cue('95'), cue('demak'), cue("o'g'irlangan")
 bsh = cue('beshinchi')
-serif(mas['s'], kel['s'] - 0.1, 'OMBOR', y=850, size=120)
-chip(kel['s'], tel['s'], 'NIMA KELDI', y=830, size=42)
-chip(qol['s'], tel['s'], 'NIMA QOLDI', y=925, size=42)
-chip(qqol['s'], tel['s'], 'QANCHA QOLDI', y=1020, size=42)
-meter(kel['s'], tel['s'])
-chip(tel['s'], sh2['s'], 'TELEFONDAN, ONLAYN', y=900, kind='white')
+cws([(mas, 'OMBOR'), (kel, 'KELDI'), (qol, 'QOLDI'), (qqol, 'QANCHA?'), (tel, 'TELEFONDA'), (sh2, 'SHUBHA?'), (kg, '10 KG'), (yuz, '100 TA'), (n95, '95 TA'), (dem, '5 TA?')], bsh['s'] - 0.04)
+card(mas['s'], n95['s'], 'meat.jpg', 24, 500, 270, -7)
+stock(mas['s'] + 0.2, kel['s'], qol['s'], qqol['s'], sh2['s'])
 pulse(chip(sh2['s'], mis['s'], 'SHUBHALI HOLAT', y=900, kind='red'), sh2['s'])
-pix(kg['s'], yuz['s'], '10 KG', maxs=230)
-chip(kg['s'] + 0.2, yuz['s'], "GO'SHT", y=900)
-pix(yuz['s'], n95['s'], '100', maxs=300, y=160)
+chip(kg['s'] + 0.2, yuz['s'], "10 KG GO'SHT", y=900)
 grid100(yuz['s'], n95['s'], dem['s'] - 0.25, dem['s'] + 0.2)
 chip(yuz['s'] + 0.2, n95['s'], '100 TA SHASHLIK CHIQISHI KERAK', y=1090, size=38)
-pix(n95['s'], bsh['s'], '95', maxs=185, y=210, color='#ff5a5a', cx=845)
 chip(n95['s'] + 0.1, dem['s'], '95 TA CHIQDI', y=1090, kind='red', size=42)
 bigm = F.nid('m')
 F.clip(dem['s'] + 0.15, bsh['s'], f'<div class="ctr" style="top:800px"><span id="{bigm}" class="ab" style="font-size:200px;color:{RED};text-shadow:0 8px 40px rgba(0,0,0,.6)">−5</span></div>', z=14)
@@ -518,7 +588,7 @@ stamp(ogr['s'], bsh['s'], "O'G'IRLANGAN", y=1030)
 section(bsh['s'] - 0.04, '05', 'NARXI', 'left')
 haf, bep, ust, org, tek, oyi, n369 = cue('hafta'), cue('bepul'), cue('ustanovka'), cue("o'rgatish"), cue('tekin'), cue('oylik'), cue('369')
 siz = cue('sizga')
-pix(haf['s'], ust['s'], '7 KUN', maxs=250)
+cws([(haf, '7 KUN'), (bep, 'BEPUL'), (ust, "O'RNATISH"), (org, "O'RGATISH"), (tek, 'TEKIN'), (oyi, 'OYIGA')], n369['s'])
 chip(bep['s'], ust['s'], 'BEPUL', y=850, kind='green', size=84)
 week7(haf['s'], ust['s'], y=1050)
 chip(ust['s'], oyi['s'], "O'RNATISH", y=840, kind='white')
@@ -533,6 +603,7 @@ sfx(n369['s'], 'sweep', .5)
 # --- more
 tash, tk, br, qr, ofi, xul = cue('tashqari'), cue("to'rt"), cue('brendingizni'), cue('qr'), cue('ofitsiantingiz'), cue('xullas')
 man = cue('mana')
+cws([(tash, 'YANA'), (tk, '÷ 4'), (br, 'LOGOTIP'), (qr, 'QR-KOD'), (ofi, 'OFITSIANT'), (xul, "YANA KO'P")], man['s'])
 chip(tash['s'], tk['s'] - 0.6, '+ YANA', y=900, kind='white', size=64, icon=False)
 split4(tk['s'], br['s'] - 0.3, y=850)
 chip(tk['s'], br['s'] - 0.3, "HISOBNI TENG BO'LISH ÷4", y=1010, size=42)
@@ -542,6 +613,7 @@ chip(qr['s'] + 0.2, ofi['s'] - 0.4, "QR-KOD — ONLAYN TO'LOV", y=1100, size=40)
 chip(ofi['s'], xul['s'], 'OFITSIANT TELEFONIDAN BUYURTMA', y=860, size=38)
 transfer(ofi['s'] + 0.2, ofi['s'] + 0.5, ofi['s'] + 1.0, xul['s'], y=985, a='OFITSIANT', b='OSHXONA', h=130, bounce=True)
 serif(xul['s'], man['s'] - 0.2, "…VA YANA KO'P", y=860, size=92)
+
 
 # --- call to action
 pas, ozi, orn, org2, pas2 = cue('pastda'), cue("o'zimiz"), cue("o'rnatib"), cue("o'rgatib"), cue('pastdagi')
@@ -634,6 +706,9 @@ html,body{{width:1080px;height:1920px;overflow:hidden;background:transparent}}
 .ray{{position:absolute;height:3px;margin-top:-1.5px;background:#fff;transform-origin:left center}}
 .day{{width:96px;height:96px;border:4px solid #fff;background:rgba(7,9,15,.86);display:grid;place-items:center;font-family:'Pixel';font-size:36px}}
 .part{{width:190px;height:110px;margin:0 5px;background:#fff;color:{DARK};display:grid;place-items:center;font-family:'Pixel';font-size:30px}}
+.glass{{position:absolute;background:rgba(7,9,15,.9);border:3px solid rgba(255,255,255,.9);box-shadow:0 24px 60px -12px rgba(0,0,0,.8)}}
+.row{{display:flex;align-items:center;gap:16px;padding:12px 14px;margin-bottom:6px;transform-origin:top center}}
+.band{{position:absolute;left:0;right:0;top:1060px;bottom:0;background:linear-gradient(rgba(26,3,6,0),#1a0306 26%,#1a0306)}}
 .cbg{{background:radial-gradient(120% 75% at 50% 36%,#8f1422 0%,#5c0b15 46%,#1f0408 100%)}}
 .grain{{background:url(assets/img/grain.png);background-size:1080px 1920px;opacity:.16;mix-blend-mode:overlay}}
 .obj{{position:absolute;filter:drop-shadow(0 22px 30px rgba(0,0,0,.6))}}
