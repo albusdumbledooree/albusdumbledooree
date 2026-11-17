@@ -103,7 +103,7 @@ def pix(t0, t1, text, y=175, maxw=930, maxs=240, first=False, color='#fff', blip
 
 def bigserif(t0, t1, html, y=150, size=300, color=CREAM):
     i = B.nid('s')
-    B.clip(t0, t1, f'<div class="ctr" style="top:{y}px;justify-content:flex-end;padding-right:60px"><span id="{i}" class="ab glow" style="font-size:{size}px;color:{color}">{html}</span></div>', z=5)
+    B.clip(t0, t1, f'<div class="ctr" style="top:{y}px;justify-content:flex-end;padding-right:40px"><span id="{i}" class="ab glow" style="font-size:{size}px;color:{color}">{html}</span></div>', z=5)
     B.ft(f'#{i}', {'opacity': 0, 'scale': 1.25}, {'opacity': 1, 'scale': 1}, t0, 0.22)
     return i
 
@@ -343,47 +343,110 @@ def counter(L, sel, a, b, at, dur, spaced=False): L.raw(f'cnt({json.dumps(sel)},
 
 
 # =====================================================================  THE EDIT
-# --- hook: pixel words behind the head, one at a time
-hook = [('choyxona', 'CHOYXONA'), ('kafe', 'KAFE'), ('fast', 'FAST-FUD'), ('monoblok', 'MONOBLOK'), ('buyurtma', 'BUYURTMA'), ('chek', 'CHEK'), ('hisob', 'HISOB')]
-hw = [(cue(q), t) for q, t in hook]
-ZOOM = [(0, 1.14, 0), (0.02, 1.0, 0.5)]            # (time, zoom, ease seconds): pull back on the first word
-z = 1.0
-bil = cue('bilasizlar')
-for n, (w, t) in enumerate(hw):
-    t0 = max(0.12, w['s']) if n == 0 else w['s']
-    t1 = hw[n + 1][0]['s'] if n + 1 < len(hw) else bil['s']
-    t1 = min(t1, t0 + 1.5)
-    pix(t0, t1, t, first=(n == 0))
-    if n: z += 0.018; ZOOM.append((w['s'], round(z, 3), 0.12))
+# --- collage helpers (COLLAGE-STYLE.md): the footage background is replaced, cut-out photos pop in on the word
+COLL = []
 
-# --- "$50": the price of the usual software (story style: a counted number, one red mark)
-nar, mini, fifty = cue('narxi'), cue('minimum'), cue('50')
-hoz = cue('hozir')
-italic(nar['s'], hoz['s'], 'bunday dasturlar narxi', y=830)
-bigserif(mini['s'], hoz['s'], '$<span id="usd">0</span>', y=200, size=210)
+
+def cbg(t0, t1):
+    B.clip(t0, t1, '<div class="full cbg"></div><div class="full grain"></div>', z=1)
+    COLL.append((round(t0, 3), round(t1, 3)))
+
+
+def obj(t0, t1, src, x, y, w, rot=0, z=3):
+    i = B.nid('o')
+    B.clip(t0, t1, f'<img id="{i}" class="obj" src="assets/img/{src}" style="left:{x}px;top:{y}px;width:{w}px">', z=z)
+    B.ft(f'#{i}', {'opacity': 0, 'scale': .3, 'rotation': rot - 28}, {'opacity': 1, 'scale': 1, 'rotation': rot}, t0, 0.3)
+    B.to(f'#{i}', {'rotation': rot + 4, 'y': -18}, t0 + 0.3, max(0.3, t1 - t0 - 0.3), 'none')
+    sfx(t0, 'whoosh', .45)
+    return i
+
+
+def cword(t0, t1, text, y=180, maxs=230, color=CREAM):
+    size = min(maxs, 980 / tw('ab', text, 100) * 100)
+    i = B.nid('w')
+    B.clip(t0, t1, f'<div class="ctr" style="top:{y}px"><span id="{i}" class="ab glow" style="font-size:{size:.0f}px;color:{color}">{text}</span></div>', z=2)
+    B.ft(f'#{i}', {'opacity': 0, 'scale': 1.25}, {'opacity': 1, 'scale': 1}, t0, 0.22)
+    B.to(f'#{i}', {'scale': 1.06}, t0 + 0.22, max(0.2, t1 - t0 - 0.22), 'none')
+    sfx(t0, 'blip', .6)
+
+
+HAND = {'circle': 'M60 10 C100 8 114 40 108 68 C100 104 60 114 34 100 C6 84 6 40 30 20 C44 10 70 6 92 20', 'line': 'M4 66 C40 50 80 74 116 54'}
+
+
+def hand(L, t0, t1, x, y, w, h, kind='circle'):
+    i = L.nid('d')
+    L.clip(t0, t1, f'<svg class="hand" viewBox="0 0 120 120" preserveAspectRatio="none" style="position:absolute;left:{x}px;top:{y}px;width:{w}px;height:{h}px"><path id="{i}" pathLength="1" vector-effect="non-scaling-stroke" d="{HAND[kind]}"/></svg>', z=6)
+    L.ft(f'#{i}', {'strokeDashoffset': 1}, {'strokeDashoffset': 0}, t0, 0.3, 'power2.out')
+
+
+# --- hook as a collage: each thing he names pops in as a cut-out photo, its word in big serif caps behind him
+hw = [cue(q) for q in ('choyxona', 'kafe', 'fast', 'monoblok', 'buyurtma', 'chek', 'hisob')]
+bil = cue('bilasizlar')
+nar, mini, fifty, hoz = cue('narxi'), cue('minimum'), cue('50'), cue('hozir')
+mil, flo, arz, besh, b5 = cue('milliy'), cue('flowi'), cue('arzon'), cue('beshta'), cue('beshinchisi')
+layk, oxir, bir = cue('layk'), cue('oxirigacha'), cue('birinchisi')
+cbg(0, flo['s'] - 0.05)
+cbg(arz['s'] - 0.05, bir['s'] - 0.04)
+ZOOM = [(0, 1.14, 0), (0.02, 1.0, 0.5)]
+z = 1.0
+names = ['CHOYXONA', 'KAFE', 'FAST-FUD', 'MONOBLOK', 'BUYURTMA', 'CHEK', 'HISOB']
+for n, (w, t) in enumerate(zip(hw, names)):
+    t0 = max(0.12, w['s']) if n == 0 else w['s']
+    t1 = hw[n + 1]['s'] if n + 1 < len(hw) else bil['s']
+    cword(t0, t1, t)
+    if n: z += 0.018; ZOOM.append((w['s'], round(z, 3), 0.12))
+obj(max(0.12, hw[0]['s']), bil['s'], 'teapot.png', 24, 430, 370, -8)
+obj(hw[1]['s'], bil['s'], 'cup.png', 742, 500, 270, 8)
+obj(hw[2]['s'], bil['s'], 'burger.png', 0, 930, 400, 6)
+term = obj(hw[3]['s'], bil['s'], 'terminal.png', 668, 850, 380, -6)
+hand(B, hw[3]['s'] + 0.3, bil['s'], 640, 830, 430, 560)
+for w in hw[4:]:
+    B.to(f'#{term}', {'scale': 1.14}, w['s'], 0.1, 'power2.out')
+    B.to(f'#{term}', {'scale': 1}, w['s'] + 0.1, 0.16, 'power2.in')
+
+# --- "$50": what the usual software costs
+cword(nar['s'], mini['s'], 'NARXI?', maxs=260)
+bigserif(mini['s'], hoz['s'], '$<span id="usd">0</span>', y=150, size=330)
 counter(B, '#usd', 0, 50, mini['s'] + 0.05, max(0.4, fifty['e'] - mini['s']))
-chip(fifty['s'], hoz['s'], 'MINIMUM $50 DAN', y=910, kind='red')
+hand(B, fifty['s'] + 0.1, hoz['s'], 560, 120, 500, 400)
+for n, (x, y, s) in enumerate([(70, 480, 150), (160, 900, 110), (60, 1250, 90), (880, 640, 120), (820, 1010, 160), (930, 1300, 80)]):
+    i = B.nid('u')
+    B.clip(mini['s'] + 0.06 * n, hoz['s'], f'<span id="{i}" class="ab" style="position:absolute;left:{x}px;top:{y}px;font-size:{s}px;color:rgba(243,234,216,.5)">$</span>', z=2)
+    B.ft(f'#{i}', {'opacity': 0, 'y': 60, 'rotation': -20 + n * 9}, {'opacity': 1, 'y': 0}, mini['s'] + 0.06 * n, 0.3)
+    B.to(f'#{i}', {'y': -70}, mini['s'] + 0.06 * n + 0.3, 2.0, 'none')
+chip(fifty['s'], hoz['s'], 'MINIMUM $50 DAN', y=1090, kind='red')
 sfx(mini['s'], 'sweep', .5)
 
-# --- "milliy dastur ... FLOWI": line burst and logo card
-mil, flo = cue('milliy'), cue('flowi')
-chip(mil['s'], flo['s'], "O'ZIMIZNING MILLIY DASTUR", y=900)
-arz = cue('arzon')
+# --- "our own national software": a plov photo card, then the line burst and logo card
+cword(mil['s'], flo['s'], 'MILLIY DASTUR')
+pc = B.nid('k')
+B.clip(mil['s'], flo['s'], f'<div id="{pc}" class="pol" style="left:40px;top:760px"><img src="assets/img/plov.jpg" style="width:330px;display:block"></div>', z=3)
+B.ft(f'#{pc}', {'opacity': 0, 'scale': .4, 'rotation': -30}, {'opacity': 1, 'scale': 1, 'rotation': -7}, mil['s'], 0.3)
+chip(mil['s'] + 0.2, flo['s'], "O'ZIMIZNIKI", y=1090, kind='white')
 logo(flo['s'] - 0.05, arz['s'] - 0.05, top='MILLIY DASTUR')
-besh = cue('beshta')
-chip(arz['s'], besh['s'], 'ANCHA ARZON', y=900, kind='green')
-b5 = cue('beshinchisi')
-pix(besh['s'], b5['s'], '5', maxs=250, y=200, cx=860)
-chip(besh['s'] + 0.15, b5['s'], 'TA KATTA QULAYLIK', y=900, kind='white')
-layk, oxir = cue('layk'), cue('oxirigacha')
-chip(b5['s'], layk['s'], '5-SI — NARXI', y=900)
-bir = cue('birinchisi')
+cword(arz['s'], besh['s'], 'ARZON', maxs=300)
+old = B.nid('x')
+B.clip(arz['s'], besh['s'], f'<span id="{old}" class="ab" style="position:absolute;left:60px;top:560px;font-size:170px;color:rgba(243,234,216,.75)">$50</span>', z=3)
+B.ft(f'#{old}', {'opacity': 0, 'x': -60}, {'opacity': 1, 'x': 0}, arz['s'], 0.2)
+hand(B, arz['s'] + 0.25, besh['s'], 30, 540, 420, 220, 'line')
+chip(arz['s'] + 0.1, besh['s'], 'ANCHA ARZON', y=1090, kind='green')
+bigserif(besh['s'], b5['s'], '5', y=130, size=420)
+five = F.nid('f')
+F.clip(besh['s'], b5['s'], '<div class="ctr" style="top:1000px;gap:18px">' + ''.join(f'<i class="sq" id="{five}_{n}" style="position:static;width:70px;height:70px"></i>' for n in range(5)) + '</div>', z=14)
+for n in range(5):
+    F.ft(f'#{five}_{n}', {'scale': 0}, {'scale': 1}, besh['s'] + 0.1 + 0.08 * n, 0.14, 'power4.out')
+    sfx(besh['s'] + 0.1 + 0.08 * n, 'tick')
+chip(besh['s'] + 0.15, b5['s'], 'TA KATTA QULAYLIK', y=1100, kind='white')
+cword(b5['s'], layk['s'], 'NARXI', maxs=280)
+chip(b5['s'], layk['s'], '5-SI — NARXI', y=1090)
+cword(layk['s'], bir['s'], 'LAYK', maxs=300)
 F.clip(layk['s'], bir['s'], f'<div class="ctr" style="top:850px"><svg id="heart" viewBox="0 0 24 24" style="width:150px;height:150px;fill:{RED};filter:drop-shadow(0 10px 30px rgba(255,59,59,.6))"><path d="M12 21s-7.5-4.6-10-9.3C.3 8.300 2 4.5 5.600 4.100 7.900 3.800 10 5 12 7.400 14 5 16.100 3.800 18.400 4.100 22 4.500 23.700 8.300 22 11.700 19.500 16.400 12 21 12 21z"/></svg></div>', z=14)
 F.ft('#heart', {'scale': 0, 'rotation': -20}, {'scale': 1, 'rotation': 0}, layk['s'], 0.22, 'back.out(2.2)')
 F.to('#heart', {'scale': 1.18}, layk['s'] + 0.4, 0.12, 'power2.out')
 F.to('#heart', {'scale': 1}, layk['s'] + 0.52, 0.14, 'power2.in')
 sfx(layk['s'], 'blip')
 chip(oxir['s'], bir['s'], 'OXIRIGACHA KO\'RING', y=1040, kind='white')
+
 
 # --- 01 online control
 section(bir['s'] - 0.04, '01', 'ONLAYN NAZORAT', 'left')
@@ -571,6 +634,10 @@ html,body{{width:1080px;height:1920px;overflow:hidden;background:transparent}}
 .ray{{position:absolute;height:3px;margin-top:-1.5px;background:#fff;transform-origin:left center}}
 .day{{width:96px;height:96px;border:4px solid #fff;background:rgba(7,9,15,.86);display:grid;place-items:center;font-family:'Pixel';font-size:36px}}
 .part{{width:190px;height:110px;margin:0 5px;background:#fff;color:{DARK};display:grid;place-items:center;font-family:'Pixel';font-size:30px}}
+.cbg{{background:radial-gradient(120% 75% at 50% 36%,#8f1422 0%,#5c0b15 46%,#1f0408 100%)}}
+.grain{{background:url(assets/img/grain.png);background-size:1080px 1920px;opacity:.16;mix-blend-mode:overlay}}
+.obj{{position:absolute;filter:drop-shadow(0 22px 30px rgba(0,0,0,.6))}}
+.pol{{position:absolute;padding:14px 14px 54px;background:{CREAM};box-shadow:0 24px 50px -8px rgba(0,0,0,.7)}}
 .br{{position:absolute;display:block;width:90px;height:90px}}
 .cap{{position:absolute;left:0;right:0;top:1196px;display:flex;justify-content:center;gap:.42em;font-weight:900;letter-spacing:.005em;white-space:nowrap;text-shadow:0 0 14px rgba(0,0,0,.9),0 4px 0 rgba(0,0,0,.85),0 0 3px #000}}
 .cap span{{display:inline-block}} .cap.ink{{color:{NAVY};text-shadow:none}}
@@ -604,6 +671,6 @@ tl.seek(0);
 
 open(f'{HERE}/back.html', 'w').write(page(B, 'back'))
 open(f'{HERE}/front.html', 'w').write(page(F, 'front'))
-json.dump({'zoom': ZOOM, 'end': END, 'speech': SPEECH, 'white': WHITE}, open(f'{D}/zoom.json', 'w'))
+json.dump({'zoom': ZOOM, 'end': END, 'speech': SPEECH, 'white': WHITE, 'collage': COLL}, open(f'{D}/zoom.json', 'w'))
 json.dump(sorted(SFX, key=lambda s: s['t']), open(f'{D}/sfx.json', 'w'))
 print(f'back {len(B.html)} clips, front {len(F.html)} clips, {len(groups)} caption groups, {len(SFX)} sfx, end {END}s')

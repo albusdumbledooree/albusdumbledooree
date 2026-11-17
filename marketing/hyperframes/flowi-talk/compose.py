@@ -14,6 +14,7 @@ N = int(round(END * FPS))
 a0 = int(float(sys.argv[3]) * FPS) if len(sys.argv) > 3 else 0
 a1 = int(float(sys.argv[4]) * FPS) if len(sys.argv) > 4 else N
 zoom = Z['zoom']
+COLL = Z.get('collage', [])   # windows where the speaker is shown as a grey cut-out over the collage
 CX, CY = 540, 640
 
 
@@ -66,12 +67,17 @@ for i in range(a1):
     fb = PB[i] if i < len(PB) else None
     if fb and lastm is not None:
         b = cv2.imread(fb, cv2.IMREAD_UNCHANGED)
-        if b is not None and b.shape[2] == 4 and b[..., 3].any():
+        if b is not None and b.shape[2] == 3: b = np.dstack([b, np.full(b.shape[:2], 255, np.uint8)])
+        if b is not None and b[..., 3].any():
             m = cv2.erode(lastm, kern)
             m = cv2.resize(m, (W, H), interpolation=cv2.INTER_LINEAR)
             m = cv2.GaussianBlur(m, (0, 0), 1.6)
             if M is not None: m = cv2.warpAffine(m, M, (W, H), flags=cv2.INTER_LINEAR)
             m = (m.astype(np.float32) / 255)[..., None]
+            if any(c0 <= t < c1 for c0, c1 in COLL):
+                g = img @ np.float32([0.114, 0.587, 0.299])
+                g = np.clip((g - 110) * 1.18 + 118, 0, 255)[..., None]
+                img = img * 0.18 + g * np.float32([0.80, 0.82, 0.84])
             a = (b[..., 3:4].astype(np.float32) / 255) * (1 - m)
             img = img * (1 - a) + b[..., :3].astype(np.float32) * a
     ff = PF[i] if i < len(PF) else None
