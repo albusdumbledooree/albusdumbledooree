@@ -1,7 +1,7 @@
 """Final composite: footage + graphics behind the speaker + speaker cutout + graphics in front.
 
 python3 compose.py <work dir> <out.mp4> [start_s end_s]
-Needs in the work dir: base.mov (tightened cut), matte.webm (person alpha, any size), pngB/ and pngF/ (RGBA
+Needs in the work dir: base.mov (tightened cut), matte.mp4 (person alpha as a grey video, any size), pngB/ and pngF/ (RGBA
 frame sequences rendered from back.html / front.html), zoom.json (punch-ins), mix.wav (final audio).
 """
 import glob, json, subprocess, sys, os
@@ -38,7 +38,9 @@ PB, PF = seq('pngB'), seq('pngF')
 cap = cv2.VideoCapture(f'{D}/base.mov')
 NB = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 mw, mh = 540, 960
-mp = subprocess.Popen(['ffmpeg', '-loglevel', 'error', '-c:v', 'libvpx-vp9', '-i', f'{D}/matte.webm', '-vf', f'alphaextract,scale={mw}:{mh},format=gray', '-f', 'rawvideo', '-'], stdout=subprocess.PIPE)
+MATTE = os.environ.get('MATTE', f'{D}/matte.mp4')   # grey video of the person alpha; MOFF = base frame its first frame belongs to
+MOFF = int(os.environ.get('MOFF', '0'))
+mp = subprocess.Popen(['ffmpeg', '-loglevel', 'error', '-i', MATTE, '-vf', f'scale={mw}:{mh},format=gray', '-f', 'rawvideo', '-'], stdout=subprocess.PIPE)
 audio = ['-i', f'{D}/mix.wav'] if os.path.exists(f'{D}/mix.wav') and a0 == 0 and a1 == N else []
 enc = subprocess.Popen(['ffmpeg', '-loglevel', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{W}x{H}', '-r', str(FPS), '-i', '-'] + audio +
                        ['-c:v', 'libx264', '-crf', '19', '-preset', 'medium', '-pix_fmt', 'yuv420p', '-g', '60'] + (['-c:a', 'aac', '-b:a', '192k', '-shortest'] if audio else []) + ['-movflags', '+faststart', OUT], stdin=subprocess.PIPE)
@@ -50,7 +52,7 @@ kern = np.ones((3, 3), np.uint8)
 for i in range(a1):
     ok, fr = cap.read() if i < NB else (False, None)
     if ok: last = fr
-    raw = mp.stdout.read(mw * mh) if i < NB else b''
+    raw = mp.stdout.read(mw * mh) if MOFF <= i < NB else b''
     if len(raw) == mw * mh: lastm = np.frombuffer(raw, np.uint8).reshape(mh, mw)
     if i < a0: continue
     t = i / FPS
