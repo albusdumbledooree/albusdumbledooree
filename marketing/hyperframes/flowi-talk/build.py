@@ -320,7 +320,7 @@ def paperx(t0, t1, y=850):
     i = F.nid('n')
     F.clip(t0, t1, f'''<div class="ctr" style="top:{y}px"><div id="{i}" class="paper"><span class="it" style="color:#3a2f22;font-size:50px">qog'oz-qalam</span>
 <svg class="hand" viewBox="0 0 300 160" style="position:absolute;inset:-10px;width:calc(100% + 20px);height:calc(100% + 20px)"><path id="{i}a" pathLength="1" d="M18 14 C90 60 200 110 284 148"/><path id="{i}b" pathLength="1" d="M280 12 C210 60 100 108 16 150"/></svg></div></div>''', z=14)
-    F.ft(f'#{i}', {'opacity': 0, 'rotation': -14, 'scale': .8}, {'opacity': 1, 'rotation': -5, 'scale': 1}, t0, 0.2)
+    F.ft(f'#{i}', {'opacity': 0, 'rotation': -14, 'scale': .8}, {'opacity': 1, 'rotation': -5, 'scale': 1.9}, t0, 0.2)
     F.ft(f'#{i}a', {'strokeDashoffset': 1}, {'strokeDashoffset': 0}, t0 + 0.3, 0.16, 'power2.out')
     F.ft(f'#{i}b', {'strokeDashoffset': 1}, {'strokeDashoffset': 0}, t0 + 0.46, 0.16, 'power2.out')
     F.to(f'#{i}', {'opacity': 0}, t1 - 0.1, 0.1)
@@ -404,6 +404,7 @@ for w in hw[4:]:
 
 # --- "$50": what the usual software costs
 cword(nar['s'], mini['s'], 'NARXI?', maxs=260)
+obj(nar['s'], hoz['s'], 'terminal.png', 330, 520, 400, -6)
 bigserif(mini['s'], hoz['s'], '$<span id="usd">0</span>', y=150, size=330)
 counter(B, '#usd', 0, 50, mini['s'] + 0.05, max(0.4, fifty['e'] - mini['s']))
 hand(B, fifty['s'] + 0.1, hoz['s'], 560, 120, 500, 400)
@@ -412,43 +413,41 @@ for n, (x, y, s) in enumerate([(70, 480, 150), (160, 900, 110), (60, 1250, 90), 
     B.clip(mini['s'] + 0.06 * n, hoz['s'], f'<span id="{i}" class="ab" style="position:absolute;left:{x}px;top:{y}px;font-size:{s}px;color:rgba(243,234,216,.5)">$</span>', z=2)
     B.ft(f'#{i}', {'opacity': 0, 'y': 60, 'rotation': -20 + n * 9}, {'opacity': 1, 'y': 0}, mini['s'] + 0.06 * n, 0.3)
     B.to(f'#{i}', {'y': -70}, mini['s'] + 0.06 * n + 0.3, 2.0, 'none')
-chip(fifty['s'], hoz['s'], 'MINIMUM $50 DAN', y=1090, kind='red')
+chip(fifty['s'], hoz['s'], 'MINIMUM $50 DAN', y=1010, kind='red', size=64)
 sfx(mini['s'], 'sweep', .5)
 
 # --- "our own national software": a plov photo card, then the line burst and logo card
 cword(mil['s'], flo['s'], 'MILLIY DASTUR')
 pc = B.nid('k')
-B.clip(mil['s'], flo['s'], f'<div id="{pc}" class="pol" style="left:40px;top:760px"><img src="assets/img/plov.jpg" style="width:330px;display:block"></div>', z=3)
+B.clip(mil['s'], flo['s'], f'<div id="{pc}" class="pol" style="left:290px;top:450px"><img src="assets/img/plov.jpg" style="width:470px;display:block"></div>', z=3)
 B.ft(f'#{pc}', {'opacity': 0, 'scale': .4, 'rotation': -30}, {'opacity': 1, 'scale': 1, 'rotation': -7}, mil['s'], 0.3)
-chip(mil['s'] + 0.2, flo['s'], "O'ZIMIZNIKI", y=1090, kind='white')
+chip(mil['s'] + 0.2, flo['s'], "O'ZIMIZNIKI", y=1040, kind='white', size=64)
 logo(flo['s'] - 0.05, arz['s'] - 0.05, top='MILLIY DASTUR')
 cword(arz['s'], besh['s'], 'ARZON', maxs=300)
 old = B.nid('x')
-B.clip(arz['s'], besh['s'], f'<span id="{old}" class="ab" style="position:absolute;left:60px;top:560px;font-size:170px;color:rgba(243,234,216,.75)">$50</span>', z=3)
+B.clip(arz['s'], besh['s'], f'<span id="{old}" class="ab" style="position:absolute;left:300px;top:520px;font-size:260px;color:rgba(243,234,216,.75)">$50</span>', z=3)
 B.ft(f'#{old}', {'opacity': 0, 'x': -60}, {'opacity': 1, 'x': 0}, arz['s'], 0.2)
-hand(B, arz['s'] + 0.25, besh['s'], 30, 540, 420, 220, 'line')
-chip(arz['s'] + 0.1, besh['s'], 'ANCHA ARZON', y=1090, kind='green')
-bigserif(besh['s'], b5['s'], '5', y=130, size=420)
+hand(B, arz['s'] + 0.25, besh['s'], 250, 530, 600, 260, 'line')
+chip(arz['s'] + 0.1, besh['s'], 'ANCHA ARZON', y=900, kind='green', size=84)
+
 five = F.nid('f')
-F.clip(besh['s'], b5['s'], '<div class="ctr" style="top:1000px;gap:18px">' + ''.join(f'<i class="sq" id="{five}_{n}" style="position:static;width:70px;height:70px"></i>' for n in range(5)) + '</div>', z=14)
+F.clip(besh['s'], b5['s'], '<div class="ctr" style="top:600px;gap:26px">' + ''.join(f'<i class="sq" id="{five}_{n}" style="position:static;width:130px;height:130px"></i>' for n in range(5)) + '</div>', z=14)
 for n in range(5):
     F.ft(f'#{five}_{n}', {'scale': 0}, {'scale': 1}, besh['s'] + 0.1 + 0.08 * n, 0.14, 'power4.out')
     sfx(besh['s'] + 0.1 + 0.08 * n, 'tick')
-chip(besh['s'] + 0.15, b5['s'], 'TA KATTA QULAYLIK', y=1100, kind='white')
+chip(besh['s'] + 0.15, b5['s'], '5 TA KATTA QULAYLIK', y=820, kind='white', size=64)
 cword(b5['s'], layk['s'], 'NARXI', maxs=280)
-chip(b5['s'], layk['s'], '5-SI — NARXI', y=1090)
+chip(b5['s'], layk['s'], '5-SI — NARXI', y=640, size=84)
 cword(layk['s'], bir['s'], 'LAYK', maxs=300)
-F.clip(layk['s'], bir['s'], f'<div class="ctr" style="top:850px"><svg id="heart" viewBox="0 0 24 24" style="width:150px;height:150px;fill:{RED};filter:drop-shadow(0 10px 30px rgba(255,59,59,.6))"><path d="M12 21s-7.5-4.6-10-9.3C.3 8.300 2 4.5 5.600 4.100 7.900 3.800 10 5 12 7.400 14 5 16.100 3.800 18.400 4.100 22 4.500 23.700 8.300 22 11.700 19.500 16.400 12 21 12 21z"/></svg></div>', z=14)
+F.clip(layk['s'], bir['s'], f'<div class="ctr" style="top:500px"><svg id="heart" viewBox="0 0 24 24" style="width:340px;height:340px;fill:{RED};filter:drop-shadow(0 10px 30px rgba(255,59,59,.6))"><path d="M12 21s-7.5-4.6-10-9.3C.3 8.300 2 4.5 5.600 4.100 7.900 3.800 10 5 12 7.400 14 5 16.100 3.800 18.400 4.100 22 4.500 23.700 8.300 22 11.700 19.500 16.400 12 21 12 21z"/></svg></div>', z=14)
 F.ft('#heart', {'scale': 0, 'rotation': -20}, {'scale': 1, 'rotation': 0}, layk['s'], 0.22, 'back.out(2.2)')
 F.to('#heart', {'scale': 1.18}, layk['s'] + 0.4, 0.12, 'power2.out')
 F.to('#heart', {'scale': 1}, layk['s'] + 0.52, 0.14, 'power2.in')
 sfx(layk['s'], 'blip')
-chip(oxir['s'], bir['s'], 'OXIRIGACHA KO\'RING', y=1040, kind='white')
+chip(oxir['s'], bir['s'], 'OXIRIGACHA KO\'RING', y=920, kind='white', size=64)
 
 
 # --- from section 1 on: collage background, the speaker as a grey cut-out, a dark band under him for the captions
-cbg(bir['s'] - 0.04, SPEECH)
-F.clip(bir['s'] - 0.04, SPEECH, '<div class="band"></div>', z=8)
 
 
 def cws(items, end):
@@ -527,6 +526,20 @@ def stock(t0, tin, tleft, tlow, t1, y=800):
     sfx(t0, 'whoosh', .5); sfx(tin, 'sweep', .4); sfx(tlow + 0.2, 'slam', .6)
 
 
+def hero(t0, t1, html, y=470, layer=None):
+    """A big centred visual in the middle of a full-screen scene."""
+    L = layer or F
+    i = L.nid('v')
+    L.clip(t0, t1, f'<div class="ctr" style="top:{y}px"><div id="{i}">{html}</div></div>', z=12)
+    L.ft(f'#{i}', {'opacity': 0, 'scale': .5, 'rotation': -12}, {'opacity': 1, 'scale': 1, 'rotation': 0}, t0, 0.28)
+    L.to(f'#{i}', {'opacity': 0}, t1 - 0.1, 0.1)
+    sfx(t0, 'whoosh', .45)
+    return i
+
+
+PLANE = '<svg viewBox="0 0 24 24" style="width:300px;height:300px;fill:#fff;filter:drop-shadow(0 20px 40px rgba(0,0,0,.5))"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>'
+WARN = f'<svg viewBox="0 0 24 24" style="width:300px;height:300px;filter:drop-shadow(0 20px 40px rgba(0,0,0,.5))"><path fill="{RED}" d="M1 21h22L12 2 1 21z"/><path fill="#fff" d="M11 10h2v5h-2zm0 7h2v2h-2z"/></svg>'
+
 # --- 01 online control
 section(bir['s'] - 0.04, '01', 'ONLAYN NAZORAT', 'left')
 bosh, dun, inet, ios, andr = cue('boshliq'), cue('dunyoning'), cue('internet'), cue('iphone'), cue('android')
@@ -535,25 +548,27 @@ tg, kun, shub, ogoh = cue('telegram'), cue('kunlik'), cue('shubhali'), cue('ogoh
 ikk = cue('ikkinchi')
 t01 = bir['s'] + 0.82
 cws([(dun, 'DUNYO'), (inet, 'INTERNET'), (ios, 'iPHONE'), (andr, 'ANDROID'), (farq, 'QURILMA'), (onl, 'ONLAYN'), (naz, 'NAZORAT'), (tg, 'TELEGRAM'), (kun, 'HISOBOT'), (shub, 'SHUBHA?'), (ogoh, 'OGOHLANTIRISH')], ikk['s'] - 0.04)
-obj(max(t01, bosh['s']), tg['s'], 'boss.png', 742, 470, 330, 4)
-card(dun['s'], tg['s'], 'dubai.jpg', 24, 500, 270, -7)
-remote(dun['s'] + 0.25, onl['s'], tg['s'])
-chip(tg['s'], shub['s'], 'TELEGRAM', y=820, kind='white')
-chip(kun['s'], shub['s'], 'KUNLIK HISOBOT', y=915)
-bubble(kun['s'] + 0.15, shub['s'], y=1015)
-pulse(chip(shub['s'], ikk['s'], 'SHUBHALI HOLAT', y=860, kind='red'), shub['s'])
-chip(ogoh['s'], ikk['s'], "O'ZI OGOHLANTIRADI", y=960)
+obj(max(t01, bosh['s']), tg['s'], 'boss.png', 110, 430, 330, -3)
+card(dun['s'], tg['s'], 'dubai.jpg', 560, 450, 360, 6)
+remote(dun['s'] + 0.25, onl['s'], tg['s'], y=850)
+hero(tg['s'], shub['s'], PLANE, y=440)
+chip(tg['s'], shub['s'], 'TELEGRAM', y=770, kind='white')
+chip(kun['s'], shub['s'], 'KUNLIK HISOBOT', y=870)
+bubble(kun['s'] + 0.15, shub['s'], y=980)
+pulse(hero(shub['s'], ikk['s'], WARN, y=440), shub['s'], 4)
+chip(shub['s'], ikk['s'], 'SHUBHALI HOLAT', y=800, kind='red', size=60)
+chip(ogoh['s'], ikk['s'], "O'ZI OGOHLANTIRADI", y=930, size=54)
 
 # --- 02 moving a bill
 section(ikk['s'] - 0.04, '02', "HISOBNI KO'CHIRISH", 'right')
 yet, uni, och, birg, oson, old = cue('yettinchi'), cue("o'ninchi"), cue("o'chirmagan"), cue('birgina'), cue('osongina'), cue('oldinlari')
 endi = cue('endi')
 cws([(yet, '7-STOL'), (uni, '10-KABINA'), (och, "O'CHMAYDI"), (birg, '1 TUGMA'), (oson, 'OSON'), (old, 'OLDIN QIYIN')], endi['s'] - 0.04)
-chip(nxt(ikk, 2)['s'] + 0.9, yet['s'] - 0.05, "BIR HISOBDAN IKKINCHISIGA", y=900, size=42)
-transfer(yet['s'], uni['s'], oson['s'], old['s'], y=830)
-chip(och['s'], birg['s'], "HISOB O'CHIRILMAYDI", y=1050, size=40)
-chip(birg['s'], old['s'], '1 TA TUGMA', y=1050, kind='white', size=40)
-italic(old['s'], endi['s'], 'oldinlari ancha qiyin edi…', y=900, size=62)
+chip(nxt(ikk, 2)['s'] + 0.9, yet['s'] - 0.05, "BIR HISOBDAN IKKINCHISIGA", y=620, size=50)
+transfer(yet['s'], uni['s'], oson['s'], old['s'], y=530, h=250)
+chip(och['s'], birg['s'], "HISOB O'CHIRILMAYDI", y=860, size=54)
+chip(birg['s'], old['s'], '1 TA TUGMA', y=860, kind='white', size=72)
+italic(old['s'], endi['s'], 'oldinlari ancha qiyin edi…', y=640, size=72)
 
 # --- 03 debts
 section(endi['s'] - 0.04, '03', "QARZLAR BO'LIMI", 'left')
@@ -561,10 +576,10 @@ qq, qb, chk, qan, qsi, belg = cue("qog'oz"), cue('qarzlar'), cue('chek'), cue('q
 kuni, esl, yig = cue('kuningizni'), cue('eslatma'), cue("yig'ib")
 tor = cue("to'rtinchi")
 cws([(qq, "QOG'OZ?"), (qb, 'QARZLAR'), (chk, 'CHEK'), (qan, 'YOPILDI'), (qsi, 'QARZ'), (belg, 'BELGILASH'), (esl, 'ESLATMA'), (yig, "YIG'ISH")], tor['s'] - 0.04)
-paperx(qq['s'], qb['s'] - 0.3)
-debts(qb['s'] - 0.25, chk['s'], qan['s'], qsi['s'], belg['s'] - 0.3)
-calendar(belg['s'], esl['s'], yig['s'], y=790)
-chip(yig['s'], tor['s'], 'QARZNI YIG\'ISH KUNI — NAZORATDA', y=900, size=40)
+paperx(qq['s'], qb['s'] - 0.3, y=620)
+debts(qb['s'] - 0.25, chk['s'], qan['s'], qsi['s'], belg['s'] - 0.3, y=620)
+calendar(belg['s'], esl['s'], yig['s'], y=540)
+chip(yig['s'], tor['s'], 'QARZNI YIG\'ISH KUNI — NAZORATDA', y=660, size=46)
 
 # --- 04 stock
 section(tor['s'] - 0.04, '04', 'OMBOR NAZORATI', 'right')
@@ -572,47 +587,53 @@ mas, kel, qol, qqol, tel, sh2 = cue('masalliqlar'), cue('kelyapti'), cue('qoldi'
 mis, kg, yuz, n95, dem, ogr = cue('misol'), cue('10'), cue('100'), cue('95'), cue('demak'), cue("o'g'irlangan")
 bsh = cue('beshinchi')
 cws([(mas, 'OMBOR'), (kel, 'KELDI'), (qol, 'QOLDI'), (qqol, 'QANCHA?'), (tel, 'TELEFONDA'), (sh2, 'SHUBHA?'), (kg, '10 KG'), (yuz, '100 TA'), (n95, '95 TA'), (dem, '5 TA?')], bsh['s'] - 0.04)
-card(mas['s'], n95['s'], 'meat.jpg', 24, 500, 270, -7)
-stock(mas['s'] + 0.2, kel['s'], qol['s'], qqol['s'], sh2['s'])
-pulse(chip(sh2['s'], mis['s'], 'SHUBHALI HOLAT', y=900, kind='red'), sh2['s'])
-chip(kg['s'] + 0.2, yuz['s'], "10 KG GO'SHT", y=900)
-grid100(yuz['s'], n95['s'], dem['s'] - 0.25, dem['s'] + 0.2)
-chip(yuz['s'] + 0.2, n95['s'], '100 TA SHASHLIK CHIQISHI KERAK', y=1090, size=38)
-chip(n95['s'] + 0.1, dem['s'], '95 TA CHIQDI', y=1090, kind='red', size=42)
+card(mas['s'], sh2['s'], 'meat.jpg', 385, 430, 300, -5)
+stock(mas['s'] + 0.2, kel['s'], qol['s'], qqol['s'], sh2['s'], y=850)
+pulse(hero(sh2['s'], mis['s'], WARN, y=440), sh2['s'], 3)
+chip(sh2['s'], mis['s'], 'SHUBHALI HOLAT', y=800, kind='red', size=60)
+card(kg['s'], n95['s'], 'meat.jpg', 100, 440, 250, -6)
+chip(kg['s'] + 0.2, yuz['s'], "10 KG GO'SHT", y=560, size=60)
+grid100(yuz['s'], n95['s'], dem['s'] - 0.25, dem['s'] + 0.2, y=760)
+chip(yuz['s'] + 0.2, n95['s'], '100 TA SHASHLIK CHIQISHI KERAK', y=1010, size=42)
+chip(n95['s'] + 0.1, dem['s'], '95 TA CHIQDI', y=1010, kind='red', size=56)
 bigm = F.nid('m')
-F.clip(dem['s'] + 0.15, bsh['s'], f'<div class="ctr" style="top:800px"><span id="{bigm}" class="ab" style="font-size:200px;color:{RED};text-shadow:0 8px 40px rgba(0,0,0,.6)">−5</span></div>', z=14)
+F.clip(dem['s'] + 0.15, bsh['s'], f'<div class="ctr" style="top:480px"><span id="{bigm}" class="ab" style="font-size:330px;color:{RED};text-shadow:0 8px 40px rgba(0,0,0,.6)">−5</span></div>', z=14)
 F.ft(f'#{bigm}', {'opacity': 0, 'scale': 1.6}, {'opacity': 1, 'scale': 1}, dem['s'] + 0.15, 0.18)
-stamp(ogr['s'], bsh['s'], "O'G'IRLANGAN", y=1030)
+stamp(ogr['s'], bsh['s'], "O'G'IRLANGAN", y=880, size=100)
 
 # --- 05 price
 section(bsh['s'] - 0.04, '05', 'NARXI', 'left')
 haf, bep, ust, org, tek, oyi, n369 = cue('hafta'), cue('bepul'), cue('ustanovka'), cue("o'rgatish"), cue('tekin'), cue('oylik'), cue('369')
 siz = cue('sizga')
-cws([(haf, '7 KUN'), (bep, 'BEPUL'), (ust, "O'RNATISH"), (org, "O'RGATISH"), (tek, 'TEKIN'), (oyi, 'OYIGA')], n369['s'])
-chip(bep['s'], ust['s'], 'BEPUL', y=850, kind='green', size=84)
-week7(haf['s'], ust['s'], y=1050)
-chip(ust['s'], oyi['s'], "O'RNATISH", y=840, kind='white')
-chip(org['s'], oyi['s'], "O'RGATISH", y=935, kind='white')
-chip(tek['s'], oyi['s'], 'MUTLAQO BEPUL', y=1030, kind='green')
-italic(oyi['s'], siz['s'], "oylik to'lovi atigi", y=820, size=60)
-B.clip(n369['s'], siz['s'], f'<div class="ctr" style="top:190px"><span id="sum" class="ab glow" style="font-size:170px;color:{CREAM}">0</span></div>', z=5)
-counter(B, '#sum', 0, 369000, n369['s'], 0.7, True)
-chip(n369['s'] + 0.3, siz['s'], "SO'M / OY", y=900, kind='green', size=64)
+cws([(haf, '7 KUN'), (bep, 'BEPUL'), (ust, "O'RNATISH"), (org, "O'RGATISH"), (tek, 'TEKIN'), (oyi, 'OYIGA')], siz['s'])
+chip(bep['s'], ust['s'], 'BEPUL', y=540, kind='green', size=130)
+week7(haf['s'], ust['s'], y=850)
+chip(ust['s'], oyi['s'], "O'RNATISH", y=540, kind='white', size=70)
+chip(org['s'], oyi['s'], "O'RGATISH", y=680, kind='white', size=70)
+chip(tek['s'], oyi['s'], 'MUTLAQO BEPUL', y=820, kind='green', size=70)
+italic(oyi['s'], siz['s'], "oylik to'lovi atigi", y=500, size=72)
+F.clip(n369['s'], siz['s'], f'<div class="ctr" style="top:600px"><span id="sum" class="ab glow" style="font-size:200px;color:{CREAM}">0</span></div>', z=12)
+counter(F, '#sum', 0, 369000, n369['s'], 0.7, True)
+chip(n369['s'] + 0.3, siz['s'], "SO'M / OY", y=850, kind='green', size=80)
 sfx(n369['s'], 'sweep', .5)
 
 # --- more
 tash, tk, br, qr, ofi, xul = cue('tashqari'), cue("to'rt"), cue('brendingizni'), cue('qr'), cue('ofitsiantingiz'), cue('xullas')
 man = cue('mana')
-cws([(tash, 'YANA'), (tk, '÷ 4'), (br, 'LOGOTIP'), (qr, 'QR-KOD'), (ofi, 'OFITSIANT'), (xul, "YANA KO'P")], man['s'])
-chip(tash['s'], tk['s'] - 0.6, '+ YANA', y=900, kind='white', size=64, icon=False)
-split4(tk['s'], br['s'] - 0.3, y=850)
-chip(tk['s'], br['s'] - 0.3, "HISOBNI TENG BO'LISH ÷4", y=1010, size=42)
-chip(br['s'], qr['s'] - 0.8, 'CHEKDA BRENDINGIZ LOGOSI', y=900, size=42)
-qrcode(qr['s'], ofi['s'] - 0.4)
-chip(qr['s'] + 0.2, ofi['s'] - 0.4, "QR-KOD — ONLAYN TO'LOV", y=1100, size=40)
-chip(ofi['s'], xul['s'], 'OFITSIANT TELEFONIDAN BUYURTMA', y=860, size=38)
-transfer(ofi['s'] + 0.2, ofi['s'] + 0.5, ofi['s'] + 1.0, xul['s'], y=985, a='OFITSIANT', b='OSHXONA', h=130, bounce=True)
-serif(xul['s'], man['s'] - 0.2, "…VA YANA KO'P", y=860, size=92)
+STAGE_END = words[man['i'] - 1]['s'] - 0.02
+cws([(tash, 'YANA'), (tk, '÷ 4'), (br, 'LOGOTIP'), (qr, 'QR-KOD'), (ofi, 'OFITSIANT'), (xul, "YANA KO'P")], STAGE_END)
+chip(tash['s'], tk['s'] - 0.6, '+ YANA', y=600, kind='white', size=110, icon=False)
+split4(tk['s'], br['s'] - 0.3, y=560)
+chip(tk['s'], br['s'] - 0.3, "HISOBNI TENG BO'LISH ÷4", y=800, size=50)
+hero(br['s'], qr['s'] - 0.8, f'<div class="paper" style="padding:50px 60px 70px;display:flex;flex-direction:column;align-items:center;gap:26px"><img src="assets/flowi-navy.svg" style="width:300px"><i style="display:block;width:300px;height:14px;background:#b9ad95"></i><i style="display:block;width:220px;height:14px;background:#b9ad95"></i><i style="display:block;width:260px;height:14px;background:#b9ad95"></i></div>', y=450)
+chip(br['s'] + 0.2, qr['s'] - 0.8, 'CHEKDA BRENDINGIZ LOGOSI', y=900, size=46)
+qrcode(qr['s'], ofi['s'] - 0.4, y=470)
+chip(qr['s'] + 0.2, ofi['s'] - 0.4, "QR-KOD — ONLAYN TO'LOV", y=820, size=50)
+chip(ofi['s'], xul['s'], 'OFITSIANT TELEFONIDAN BUYURTMA', y=560, size=44)
+transfer(ofi['s'] + 0.2, ofi['s'] + 0.5, ofi['s'] + 1.0, xul['s'], y=700, a='OFITSIANT', b='OSHXONA', h=150, bounce=True)
+serif(xul['s'], STAGE_END, "…VA YANA KO'P", y=620, size=110)
+cbg(bil['s'], flo['s'] - 0.05)
+cbg(arz['s'] - 0.05, STAGE_END)
 
 
 # --- call to action
@@ -705,12 +726,12 @@ html,body{{width:1080px;height:1920px;overflow:hidden;background:transparent}}
 .calg{{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}} .calg b{{font-family:'Abril';font-weight:400;font-size:44px;height:62px;display:grid;place-items:center}}
 .ray{{position:absolute;height:3px;margin-top:-1.5px;background:#fff;transform-origin:left center}}
 .day{{width:96px;height:96px;border:4px solid #fff;background:rgba(7,9,15,.86);display:grid;place-items:center;font-family:'Pixel';font-size:36px}}
-.part{{width:190px;height:110px;margin:0 5px;background:#fff;color:{DARK};display:grid;place-items:center;font-family:'Pixel';font-size:30px}}
+.part{{width:230px;height:160px;margin:0 6px;background:#fff;color:{DARK};display:grid;place-items:center;font-family:'Pixel';font-size:30px}}
 .glass{{position:absolute;background:rgba(7,9,15,.9);border:3px solid rgba(255,255,255,.9);box-shadow:0 24px 60px -12px rgba(0,0,0,.8)}}
 .row{{display:flex;align-items:center;gap:16px;padding:12px 14px;margin-bottom:6px;transform-origin:top center}}
 .band{{position:absolute;left:0;right:0;top:1060px;bottom:0;background:linear-gradient(rgba(26,3,6,0),#1a0306 26%,#1a0306)}}
-.cbg{{background:radial-gradient(120% 75% at 50% 36%,#8f1422 0%,#5c0b15 46%,#1f0408 100%)}}
-.grain{{background:url(assets/img/grain.png);background-size:1080px 1920px;opacity:.16;mix-blend-mode:overlay}}
+.cbg{{background:radial-gradient(120% 75% at 50% 34%,#16406e 0%,#0b2440 46%,#050d18 100%)}}
+.grain{{background:url(assets/img/grain.png);background-size:1080px 1920px;opacity:.06}}
 .obj{{position:absolute;filter:drop-shadow(0 22px 30px rgba(0,0,0,.6))}}
 .pol{{position:absolute;padding:14px 14px 54px;background:{CREAM};box-shadow:0 24px 50px -8px rgba(0,0,0,.7)}}
 .br{{position:absolute;display:block;width:90px;height:90px}}

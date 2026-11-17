@@ -68,7 +68,9 @@ for i in range(a1):
     if fb and lastm is not None:
         b = cv2.imread(fb, cv2.IMREAD_UNCHANGED)
         if b is not None and b.shape[2] == 3: b = np.dstack([b, np.full(b.shape[:2], 255, np.uint8)])
-        if b is not None and b[..., 3].any():
+        if b is not None and b[..., 3].min() == 255:
+            img = b[..., :3].astype(np.float32)      # full-screen scene: no speaker
+        elif b is not None and b[..., 3].any():
             m = cv2.erode(lastm, kern)
             m = cv2.resize(m, (W, H), interpolation=cv2.INTER_LINEAR)
             m = cv2.GaussianBlur(m, (0, 0), 1.6)
