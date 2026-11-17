@@ -14,7 +14,7 @@ D = sys.argv[1]
 HERE = os.path.dirname(os.path.abspath(__file__))
 WD = json.load(open(f'{D}/words.json'))
 words, SPEECH = WD['words'], WD['dur']
-TAIL = 3.0
+TAIL = 3.6
 END = round(SPEECH + TAIL, 3)
 DARK, VIOLET, RED, GREEN, CREAM, NAVY = '#07090f', '#7c5cff', '#ff3b3b', '#b6ff3c', '#f3ead8', '#071726'
 FONTS = {'px': 'PressStart2P.ttf', 'ab': 'Abril.ttf', 'in': 'InterDisplay-Black.otf'}
@@ -177,7 +177,7 @@ def logo(t0, t1, top='', line='', final=False):
         rays += f'<i class="sq" id="{i}e{n}" style="left:{cx - 9}px;top:{cy - 9}px;width:18px;height:18px"></i>'
     extra = ''
     if final:
-        extra = f'<div class="ctr" style="top:1010px"><div id="{i}f" class="chip white" style="font-size:54px"><i class="sq" style="position:relative;width:.42em;height:.42em;background:{NAVY}"></i><span>7 KUN BEPUL</span></div></div><div class="ctr" style="top:1130px"><span id="{i}k" class="thin" style="font-size:42px;color:{NAVY};letter-spacing:.06em">flowi.uz &nbsp;·&nbsp; @Flowisupport_bot</span></div>'
+        extra = f'<div class="ctr" style="top:1010px"><div id="{i}f" class="chip white" style="font-size:54px"><i class="sq" style="position:relative;width:.42em;height:.42em;background:{NAVY}"></i><span>7 KUN BEPUL</span></div></div><div class="ctr" style="top:1135px"><span id="{i}k" style="font-family:Inter;font-weight:900;font-size:74px;color:{NAVY};letter-spacing:.01em">+998 88 270 98 00</span></div><div class="ctr" style="top:1250px"><span id="{i}k2" class="thin" style="font-size:34px;color:{NAVY};letter-spacing:.06em;text-transform:none">flowi.uz &nbsp;·&nbsp; @Flowisupport_bot</span></div>'
     topw = f'<div class="ctr" style="top:300px"><span id="{i}w" class="px" style="position:relative;font-size:{min(120, 900 / tw("px", top or "X", 100) * 100):.0f}px">{top}</span></div>' if top else ''
     F.clip(t0, t1, f'''<div class="full dark"><div class="vglow" style="background:radial-gradient(55% 40% at 50% 46%,{VIOLET}66,transparent 70%)"></div>{sq}{topw}
 <i class="sq" id="{i}m" style="left:{cx - 22}px;top:{cy - 22}px;width:44px;height:44px"></i>{rays}
@@ -200,29 +200,119 @@ def logo(t0, t1, top='', line='', final=False):
     F.ft(f'#{i}l', {'opacity': 0}, {'opacity': 1}, tp + 0.42, 0.25)
     if final:
         F.ft(f'#{i}f', {'opacity': 0, 'y': 30}, {'opacity': 1, 'y': 0}, tp + 0.7, 0.25)
-        F.ft(f'#{i}k', {'opacity': 0}, {'opacity': 1}, tp + 0.95, 0.3)
+        F.ft(f'#{i}k', {'opacity': 0, 'y': 20}, {'opacity': 1, 'y': 0}, tp + 0.95, 0.3)
+        F.ft(f'#{i}k2', {'opacity': 0}, {'opacity': 1}, tp + 1.2, 0.3)
     WHITE.append((tp + 0.1, t1))
     sfx(t0, 'whoosh')
     sfx(tb - 0.28, 'sweep')
     sfx(tp + 0.1, 'hit')
 
 
-def transfer(ta, tb, tgo, t1, y=880):
-    """7-STOL -> 10-KABINA: a square carries the bill across."""
+def transfer(ta, tb, tgo, t1, y=880, a='7-STOL', b='10-KABINA', h=190, bounce=False):
+    """A -> B: a white square carries it across (bounce: it keeps going back and forth)."""
     i = F.nid('r')
-    F.clip(ta, t1, f'''<div class="abs" style="left:80px;top:{y}px;width:920px;height:190px">
-<div id="{i}a" class="box px" style="left:0">7-STOL</div>
-<div id="{i}l" class="dash" style="left:372px;top:92px;width:176px"></div>
-<i class="sq" id="{i}s" style="left:372px;top:80px;width:28px;height:28px"></i>
-<div id="{i}b" class="box px" style="right:0">10-KABINA</div></div>''', z=14)
+    F.clip(ta, t1, f'''<div class="abs" style="left:80px;top:{y}px;width:920px;height:{h}px">
+<div id="{i}a" class="box px" style="left:0;height:{h}px">{a}</div>
+<div id="{i}l" class="dash" style="left:372px;top:{h / 2 - 3}px;width:176px"></div>
+<i class="sq" id="{i}s" style="left:372px;top:{h / 2 - 14}px;width:28px;height:28px"></i>
+<div id="{i}b" class="box px" style="right:0;height:{h}px">{b}</div></div>''', z=14)
     F.ft(f'#{i}a', {'opacity': 0, 'x': -40}, {'opacity': 1, 'x': 0}, ta, 0.2)
     F.ft(f'#{i}b', {'opacity': 0, 'x': 40}, {'opacity': 1, 'x': 0}, tb, 0.2)
     F.ft(f'#{i}l', {'scaleX': 0}, {'scaleX': 1}, tb, 0.25)
     F.ft(f'#{i}s', {'opacity': 0, 'x': 0}, {'opacity': 1, 'x': 0}, tb + 0.1, 0.1)
-    F.to(f'#{i}s', {'x': 150}, tgo, 0.4, 'power3.inOut')
-    F.to(f'#{i}a', {'opacity': .35}, tgo + 0.3, 0.2, 'power2.out')
-    F.to(f'#{i}b', {'backgroundColor': '#fff', 'color': DARK}, tgo + 0.36, 0.12, 'power2.out')
-    sfx(ta, 'tick'); sfx(tb, 'tick'); sfx(tgo, 'whoosh', .6); sfx(tgo + 0.38, 'blip')
+    if bounce:
+        t, k = tgo, 0
+        while t + 0.45 < t1:
+            F.to(f'#{i}s', {'x': 150 if k % 2 == 0 else 0}, t, 0.4, 'power3.inOut')
+            F.to(f'#{i}{"b" if k % 2 == 0 else "a"}', {'backgroundColor': '#fff', 'color': DARK}, t + 0.36, 0.1, 'power2.out')
+            F.to(f'#{i}{"b" if k % 2 == 0 else "a"}', {'backgroundColor': 'rgba(7,9,15,.86)', 'color': '#fff'}, t + 0.62, 0.2, 'power2.out')
+            if k < 3: sfx(t + 0.38, 'tick')
+            t += 0.75; k += 1
+    else:
+        F.to(f'#{i}s', {'x': 150}, tgo, 0.4, 'power3.inOut')
+        F.to(f'#{i}a', {'opacity': .35}, tgo + 0.3, 0.2, 'power2.out')
+        F.to(f'#{i}b', {'backgroundColor': '#fff', 'color': DARK}, tgo + 0.36, 0.12, 'power2.out')
+        sfx(tgo, 'whoosh', .6); sfx(tgo + 0.38, 'blip')
+    F.to(f'#{i}a', {'opacity': 0}, t1 - 0.1, 0.1); F.to(f'#{i}b', {'opacity': 0}, t1 - 0.1, 0.1)
+    sfx(ta, 'tick'); sfx(tb, 'tick')
+
+
+def grid100(t0, tred, tdrop, t1, y=850):
+    """100 squares = 100 skewers; the last five turn red and drop out."""
+    i = F.nid('g')
+    cells = ''.join(f'<i class="sq" id="{i}_{n}" style="position:static;width:34px;height:34px"></i>' for n in range(100))
+    F.clip(t0, t1, f'<div class="abs" style="left:122px;top:{y}px;width:836px;display:grid;grid-template-columns:repeat(20,34px);gap:8.2px">{cells}</div>', z=14)
+    for n in range(100):
+        F.ft(f'#{i}_{n}', {'scale': 0}, {'scale': 1}, t0 + 0.008 * n, 0.12, 'power4.out')
+    for k, n in enumerate(range(95, 100)):
+        F.to(f'#{i}_{n}', {'backgroundColor': RED}, tred + 0.07 * k, 0.08, 'power2.out')
+        F.to(f'#{i}_{n}', {'y': 160, 'rotation': 50, 'opacity': 0}, tdrop + 0.06 * k, 0.4, 'power2.in')
+        sfx(tred + 0.07 * k, 'tick')
+    sfx(t0, 'sweep', .5)
+
+
+def week7(t0, t1, y=1040):
+    """Seven day squares fill up one by one."""
+    i = F.nid('w')
+    cells = ''.join(f'<div id="{i}_{n}" class="day">{n + 1}</div>' for n in range(7))
+    F.clip(t0, t1, f'<div class="ctr" style="top:{y}px;gap:14px">{cells}</div>', z=14)
+    for n in range(7):
+        F.ft(f'#{i}_{n}', {'opacity': 0, 'y': 20}, {'opacity': 1, 'y': 0}, t0 + 0.05 * n, 0.14)
+        F.to(f'#{i}_{n}', {'backgroundColor': GREEN, 'color': DARK, 'borderColor': GREEN}, t0 + 0.45 + 0.1 * n, 0.08, 'power2.out')
+        sfx(t0 + 0.45 + 0.1 * n, 'tick', .8)
+
+
+def split4(t0, t1, y=850):
+    """One bill splits into four equal parts."""
+    i = F.nid('v')
+    parts = ''.join(f'<div id="{i}_{n}" class="part">1/4</div>' for n in range(4))
+    F.clip(t0, t1, f'<div class="ctr" style="top:{y}px">{parts}</div>', z=14)
+    for n in range(4):
+        F.ft(f'#{i}_{n}', {'opacity': 0, 'x': (1.5 - n) * 22, 'color': 'rgba(7,9,15,0)'}, {'opacity': 1}, t0, 0.15)
+        F.to(f'#{i}_{n}', {'x': 0, 'color': DARK}, t0 + 0.5, 0.3, 'power3.out')
+    sfx(t0 + 0.5, 'blip')
+
+
+def qrcode(t0, t1, y=785):
+    """A QR-like block assembles from squares (illustration, not a real code)."""
+    i = F.nid('q')
+    N = 11
+    def on(r, c):
+        for (a, b) in ((0, 0), (0, N - 3), (N - 3, 0)):
+            if a <= r < a + 3 and b <= c < b + 3: return not (r == a + 1 and c == b + 1)
+        return (r * 7 + c * 13 + r * c) % 3 == 0
+    cells = ''.join(f'<i class="sq" id="{i}_{r * N + c}" style="position:static;width:22px;height:22px;background:{DARK if on(r, c) else "transparent"}"></i>' for r in range(N) for c in range(N))
+    F.clip(t0, t1, f'<div class="ctr" style="top:{y}px"><div id="{i}" style="padding:20px;background:#fff;display:grid;grid-template-columns:repeat({N},22px);gap:2px;box-shadow:0 24px 60px -10px rgba(0,0,0,.7)">{cells}</div></div>', z=14)
+    F.ft(f'#{i}', {'opacity': 0, 'scale': .8}, {'opacity': 1, 'scale': 1}, t0, 0.18)
+    for n in range(N * N):
+        F.ft(f'#{i}_{n}', {'scale': 0}, {'scale': 1}, t0 + 0.1 + 0.004 * ((n * 37) % (N * N)), 0.1, 'power4.out')
+    F.to(f'#{i}', {'opacity': 0}, t1 - 0.1, 0.1)
+    sfx(t0 + 0.1, 'sweep', .4)
+
+
+def meter(t0, t1, y=1118):
+    """Stock level draining: what is left is always visible."""
+    i = F.nid('m')
+    F.clip(t0, t1, f'<div class="abs" style="left:190px;top:{y}px;width:700px;height:30px;border:4px solid #fff;background:rgba(7,9,15,.8)"><div id="{i}" style="position:absolute;inset:0;background:#fff;transform-origin:left center"></div></div>', z=14)
+    F.ft(f'#{i}', {'scaleX': 1}, {'scaleX': .32}, t0 + 0.1, max(0.6, t1 - t0 - 0.3), 'power1.inOut')
+    F.to(f'#{i}', {'backgroundColor': RED}, t0 + (t1 - t0) * .7, 0.15, 'power2.out')
+
+
+def bubble(t0, t1, y=1050):
+    """A message arriving: two lines typing in."""
+    i = F.nid('u')
+    F.clip(t0, t1, f'<div class="ctr" style="top:{y}px"><div id="{i}" style="width:520px;padding:22px 26px;background:#fff;display:flex;flex-direction:column;gap:14px"><div id="{i}a" style="height:16px;width:88%;background:{DARK};transform-origin:left center"></div><div id="{i}b" style="height:16px;width:60%;background:#9aa0aa;transform-origin:left center"></div></div></div>', z=14)
+    F.ft(f'#{i}', {'opacity': 0, 'x': -80}, {'opacity': 1, 'x': 0}, t0, 0.22)
+    F.ft(f'#{i}a', {'scaleX': 0}, {'scaleX': 1}, t0 + 0.2, 0.35, 'power2.out')
+    F.ft(f'#{i}b', {'scaleX': 0}, {'scaleX': 1}, t0 + 0.45, 0.3, 'power2.out')
+    F.to(f'#{i}', {'opacity': 0}, t1 - 0.1, 0.1)
+    sfx(t0, 'blip', .7)
+
+
+def pulse(i, t0, n=2):
+    for k in range(n):
+        F.to(f'#{i}', {'scale': 1.1}, t0 + 0.3 + k * 0.4, 0.12, 'power2.out')
+        F.to(f'#{i}', {'scale': 1}, t0 + 0.42 + k * 0.4, 0.16, 'power2.in')
 
 
 def paperx(t0, t1, y=850):
@@ -246,7 +336,7 @@ def calendar(t0, tbell, t1, y=840):
     F.ft(f'#{i}c', {'strokeDashoffset': 1}, {'strokeDashoffset': 0}, t0 + 0.35, 0.3, 'power2.out')
     F.to(f'#{i}', {'opacity': 0}, t1 - 0.1, 0.1)
     sfx(t0, 'tick')
-    chip(tbell, t1, 'ESLATMA KELADI', y=y + 300, kind='white')
+    pulse(chip(tbell, t1, 'ESLATMA KELADI', y=y + 285, kind='white'), tbell)
 
 
 def counter(L, sel, a, b, at, dur, spaced=False): L.raw(f'cnt({json.dumps(sel)},{a},{b},{at:.3f},{dur},{str(spaced).lower()});')
@@ -301,15 +391,17 @@ dun, inet, ios, andr = cue('dunyoning'), cue('internet'), cue('iphone'), cue('an
 farq, onl, naz = cue('farqi'), cue('onlayn'), cue('nazorat')
 tg, kun, shub, ogoh = cue('telegram'), cue('kunlik'), cue('shubhali'), cue('ogohlantiradi')
 ikk = cue('ikkinchi')
-chip(dun['s'], inet['s'], 'DUNYONING ISTALGAN JOYIDAN', y=900, size=42)
-chip(inet['s'], ios['s'], 'FAQAT INTERNET BO\'LSA BAS', y=900, size=42)
+chip(dun['s'], inet['s'], 'DUNYONING ISTALGAN JOYIDAN', y=860, size=42)
+chip(inet['s'], ios['s'], 'FAQAT INTERNET BO\'LSA BAS', y=860, size=42)
+transfer(dun['s'] + 0.2, dun['s'] + 0.45, dun['s'] + 0.9, ios['s'], y=985, a='BOSHLIQ', b='CHOYXONA', h=130, bounce=True)
 chip(ios['s'], farq['s'], 'iPHONE', y=860, kind='white')
 chip(andr['s'], farq['s'], 'ANDROID', y=960, kind='white')
 chip(farq['s'], onl['s'], 'XOHLAGAN QURILMADAN', y=900)
 serif(onl['s'], tg['s'], 'ONLAYN NAZORAT', y=850, size=96)
 chip(tg['s'], shub['s'], 'TELEGRAM', y=860, kind='white')
-chip(kun['s'], shub['s'], 'KUNLIK HISOBOT', y=960)
-chip(shub['s'], ikk['s'], 'SHUBHALI HOLAT', y=860, kind='red')
+chip(kun['s'], shub['s'], 'KUNLIK HISOBOT', y=950)
+bubble(kun['s'] + 0.15, shub['s'], y=1050)
+pulse(chip(shub['s'], ikk['s'], 'SHUBHALI HOLAT', y=860, kind='red'), shub['s'])
 chip(ogoh['s'], ikk['s'], "O'ZI OGOHLANTIRADI", y=960)
 
 # --- 02 moving a bill
@@ -332,7 +424,7 @@ serif(qb['s'] - 0.25, chk['s'], "QARZLAR BO'LIMI", y=850, size=92)
 chip(chk['s'], qan['s'], 'CHEK → QARZLARGA', y=900)
 chip(qan['s'], belg['s'] - 0.4, 'QANCHA HISOB YOPILDI', y=860, size=42)
 chip(qsi['s'], belg['s'] - 0.4, 'QANCHASI QARZGA KETDI', y=960, kind='red', size=42)
-calendar(belg['s'], esl['s'], yig['s'])
+calendar(belg['s'], esl['s'], yig['s'], y=790)
 chip(yig['s'], tor['s'], 'QARZNI YIG\'ISH KUNI — NAZORATDA', y=900, size=40)
 
 # --- 04 stock
@@ -344,17 +436,19 @@ serif(mas['s'], kel['s'] - 0.1, 'OMBOR', y=850, size=120)
 chip(kel['s'], tel['s'], 'NIMA KELDI', y=830, size=42)
 chip(qol['s'], tel['s'], 'NIMA QOLDI', y=925, size=42)
 chip(qqol['s'], tel['s'], 'QANCHA QOLDI', y=1020, size=42)
+meter(kel['s'], tel['s'])
 chip(tel['s'], sh2['s'], 'TELEFONDAN, ONLAYN', y=900, kind='white')
-chip(sh2['s'], mis['s'], 'SHUBHALI HOLAT', y=900, kind='red')
+pulse(chip(sh2['s'], mis['s'], 'SHUBHALI HOLAT', y=900, kind='red'), sh2['s'])
 pix(kg['s'], yuz['s'], '10 KG', maxs=230)
 chip(kg['s'] + 0.2, yuz['s'], "GO'SHT", y=900)
 pix(yuz['s'], n95['s'], '100', maxs=300, y=160)
-chip(yuz['s'] + 0.2, n95['s'], 'TA SHASHLIK CHIQISHI KERAK', y=900, size=40)
+grid100(yuz['s'], n95['s'], dem['s'] - 0.25, dem['s'] + 0.2)
+chip(yuz['s'] + 0.2, n95['s'], '100 TA SHASHLIK CHIQISHI KERAK', y=1090, size=38)
 pix(n95['s'], bsh['s'], '95', maxs=185, y=210, color='#ff5a5a', cx=845)
-chip(n95['s'] + 0.2, dem['s'], 'TA CHIQDI', y=900, kind='red')
+chip(n95['s'] + 0.1, dem['s'], '95 TA CHIQDI', y=1090, kind='red', size=42)
 bigm = F.nid('m')
-F.clip(dem['s'], bsh['s'], f'<div class="ctr" style="top:800px"><span id="{bigm}" class="ab" style="font-size:200px;color:{RED};text-shadow:0 8px 40px rgba(0,0,0,.6)">−5</span></div>', z=14)
-F.ft(f'#{bigm}', {'opacity': 0, 'scale': 1.6}, {'opacity': 1, 'scale': 1}, dem['s'], 0.18)
+F.clip(dem['s'] + 0.15, bsh['s'], f'<div class="ctr" style="top:800px"><span id="{bigm}" class="ab" style="font-size:200px;color:{RED};text-shadow:0 8px 40px rgba(0,0,0,.6)">−5</span></div>', z=14)
+F.ft(f'#{bigm}', {'opacity': 0, 'scale': 1.6}, {'opacity': 1, 'scale': 1}, dem['s'] + 0.15, 0.18)
 stamp(ogr['s'], bsh['s'], "O'G'IRLANGAN", y=1030)
 
 # --- 05 price
@@ -362,7 +456,8 @@ section(bsh['s'] - 0.04, '05', 'NARXI', 'left')
 haf, bep, ust, org, tek, oyi, n369 = cue('hafta'), cue('bepul'), cue('ustanovka'), cue("o'rgatish"), cue('tekin'), cue('oylik'), cue('369')
 siz = cue('sizga')
 pix(haf['s'], ust['s'], '7 KUN', maxs=250)
-chip(bep['s'], ust['s'], 'BEPUL', y=880, kind='green', size=84)
+chip(bep['s'], ust['s'], 'BEPUL', y=850, kind='green', size=84)
+week7(haf['s'], ust['s'], y=1050)
 chip(ust['s'], oyi['s'], "O'RNATISH", y=840, kind='white')
 chip(org['s'], oyi['s'], "O'RGATISH", y=935, kind='white')
 chip(tek['s'], oyi['s'], 'MUTLAQO BEPUL', y=1030, kind='green')
@@ -376,19 +471,22 @@ sfx(n369['s'], 'sweep', .5)
 tash, tk, br, qr, ofi, xul = cue('tashqari'), cue("to'rt"), cue('brendingizni'), cue('qr'), cue('ofitsiantingiz'), cue('xullas')
 man = cue('mana')
 chip(tash['s'], tk['s'] - 0.6, '+ YANA', y=900, kind='white', size=64, icon=False)
-chip(tk['s'], br['s'] - 0.3, "HISOBNI TENG BO'LISH ÷4", y=900, size=42)
+split4(tk['s'], br['s'] - 0.3, y=850)
+chip(tk['s'], br['s'] - 0.3, "HISOBNI TENG BO'LISH ÷4", y=1010, size=42)
 chip(br['s'], qr['s'] - 0.8, 'CHEKDA BRENDINGIZ LOGOSI', y=900, size=42)
-chip(qr['s'], ofi['s'] - 0.4, "QR-KOD — ONLAYN TO'LOV", y=900, size=42)
-chip(ofi['s'], xul['s'], 'OFITSIANT TELEFONIDAN BUYURTMA', y=900, size=38)
+qrcode(qr['s'], ofi['s'] - 0.4)
+chip(qr['s'] + 0.2, ofi['s'] - 0.4, "QR-KOD — ONLAYN TO'LOV", y=1100, size=40)
+chip(ofi['s'], xul['s'], 'OFITSIANT TELEFONIDAN BUYURTMA', y=860, size=38)
+transfer(ofi['s'] + 0.2, ofi['s'] + 0.5, ofi['s'] + 1.0, xul['s'], y=985, a='OFITSIANT', b='OSHXONA', h=130, bounce=True)
 serif(xul['s'], man['s'] - 0.2, "…VA YANA KO'P", y=860, size=92)
 
 # --- call to action
 pas, ozi, orn, org2, pas2 = cue('pastda'), cue("o'zimiz"), cue("o'rnatib"), cue("o'rgatib"), cue('pastdagi')
-chip(pas['s'], SPEECH, '@Flowisupport_bot  ·  flowi.uz', y=1085, kind='white', size=44, icon=False)
+pulse(chip(pas['s'], SPEECH, '+998 88 270 98 00', y=1052, kind='white', size=60), pas['s'], 3)
 chip(orn['s'], pas2['s'], "O'ZIMIZ O'RNATAMIZ", y=860)
 chip(org2['s'], pas2['s'], "O'RGATIB BERAMIZ", y=960)
 # stacked closing title with corner brackets (PIXEL-REEL-SPEC beat 7)
-F.clip(pas2['s'], SPEECH, f'''<div class="abs" style="left:96px;top:790px;width:888px;height:270px">
+F.clip(pas2['s'], SPEECH, f'''<div class="abs" style="left:96px;top:770px;width:888px;height:270px">
 <span id="st1" class="px" style="left:24px;top:18px;font-size:130px">7 KUN</span>
 <span id="st2" class="px" style="left:430px;top:164px;font-size:52px">BEPUL</span>
 <span id="st3" class="px" style="left:430px;top:226px;font-size:30px">SINAB KO'RING</span>
@@ -464,13 +562,15 @@ html,body{{width:1080px;height:1920px;overflow:hidden;background:transparent}}
 .chip.green{{background:{GREEN};border-color:{GREEN};color:{DARK}}} .chip.green .sq{{background:{DARK}}}
 .hand{{overflow:visible}} .hand path{{fill:none;stroke:{RED};stroke-width:9;stroke-linecap:round;stroke-dasharray:1}}
 .stamp{{padding:.16em .4em;border:10px solid {RED};color:{RED};background:rgba(7,9,15,.55);letter-spacing:.04em}}
-.box{{position:absolute;top:0;width:372px;height:190px;border:6px solid #fff;display:grid;place-items:center;font-size:34px;position:absolute;background:rgba(7,9,15,.86);text-shadow:none}}
+.box{{position:absolute;top:0;width:372px;height:190px;border:6px solid #fff;display:grid;place-items:center;font-size:34px;background:rgba(7,9,15,.86);text-shadow:none}}
 .dash{{position:absolute;height:6px;background:repeating-linear-gradient(90deg,#fff 0 16px,transparent 16px 30px);transform-origin:left center}}
 .paper{{position:relative;padding:44px 64px;background:repeating-linear-gradient({CREAM} 0 38px,#c9bfa8 38px 40px);box-shadow:0 24px 60px -10px rgba(0,0,0,.7)}}
 .cal{{position:relative;width:560px;padding:26px 30px 30px;background:{CREAM};color:#2a2118;box-shadow:0 24px 60px -10px rgba(0,0,0,.7)}}
 .calh{{font-size:26px;letter-spacing:.14em;margin-bottom:18px;color:#6b5a45}}
 .calg{{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}} .calg b{{font-family:'Abril';font-weight:400;font-size:44px;height:62px;display:grid;place-items:center}}
 .ray{{position:absolute;height:3px;margin-top:-1.5px;background:#fff;transform-origin:left center}}
+.day{{width:96px;height:96px;border:4px solid #fff;background:rgba(7,9,15,.86);display:grid;place-items:center;font-family:'Pixel';font-size:36px}}
+.part{{width:190px;height:110px;margin:0 5px;background:#fff;color:{DARK};display:grid;place-items:center;font-family:'Pixel';font-size:30px}}
 .br{{position:absolute;display:block;width:90px;height:90px}}
 .cap{{position:absolute;left:0;right:0;top:1196px;display:flex;justify-content:center;gap:.42em;font-weight:900;letter-spacing:.005em;white-space:nowrap;text-shadow:0 0 14px rgba(0,0,0,.9),0 4px 0 rgba(0,0,0,.85),0 0 3px #000}}
 .cap span{{display:inline-block}} .cap.ink{{color:{NAVY};text-shadow:none}}

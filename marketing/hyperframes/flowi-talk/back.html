@@ -29,19 +29,21 @@ html,body{width:1080px;height:1920px;overflow:hidden;background:transparent}
 .chip.green{background:#b6ff3c;border-color:#b6ff3c;color:#07090f} .chip.green .sq{background:#07090f}
 .hand{overflow:visible} .hand path{fill:none;stroke:#ff3b3b;stroke-width:9;stroke-linecap:round;stroke-dasharray:1}
 .stamp{padding:.16em .4em;border:10px solid #ff3b3b;color:#ff3b3b;background:rgba(7,9,15,.55);letter-spacing:.04em}
-.box{position:absolute;top:0;width:372px;height:190px;border:6px solid #fff;display:grid;place-items:center;font-size:34px;position:absolute;background:rgba(7,9,15,.86);text-shadow:none}
+.box{position:absolute;top:0;width:372px;height:190px;border:6px solid #fff;display:grid;place-items:center;font-size:34px;background:rgba(7,9,15,.86);text-shadow:none}
 .dash{position:absolute;height:6px;background:repeating-linear-gradient(90deg,#fff 0 16px,transparent 16px 30px);transform-origin:left center}
 .paper{position:relative;padding:44px 64px;background:repeating-linear-gradient(#f3ead8 0 38px,#c9bfa8 38px 40px);box-shadow:0 24px 60px -10px rgba(0,0,0,.7)}
 .cal{position:relative;width:560px;padding:26px 30px 30px;background:#f3ead8;color:#2a2118;box-shadow:0 24px 60px -10px rgba(0,0,0,.7)}
 .calh{font-size:26px;letter-spacing:.14em;margin-bottom:18px;color:#6b5a45}
 .calg{display:grid;grid-template-columns:repeat(7,1fr);gap:8px} .calg b{font-family:'Abril';font-weight:400;font-size:44px;height:62px;display:grid;place-items:center}
 .ray{position:absolute;height:3px;margin-top:-1.5px;background:#fff;transform-origin:left center}
+.day{width:96px;height:96px;border:4px solid #fff;background:rgba(7,9,15,.86);display:grid;place-items:center;font-family:'Pixel';font-size:36px}
+.part{width:190px;height:110px;margin:0 5px;background:#fff;color:#07090f;display:grid;place-items:center;font-family:'Pixel';font-size:30px}
 .br{position:absolute;display:block;width:90px;height:90px}
 .cap{position:absolute;left:0;right:0;top:1196px;display:flex;justify-content:center;gap:.42em;font-weight:900;letter-spacing:.005em;white-space:nowrap;text-shadow:0 0 14px rgba(0,0,0,.9),0 4px 0 rgba(0,0,0,.85),0 0 3px #000}
 .cap span{display:inline-block} .cap.ink{color:#071726;text-shadow:none}
 </style></head>
 <body>
-<div id="root" data-composition-id="back" data-start="0" data-duration="142.833" data-width="1080" data-height="1920" data-fps="30">
+<div id="root" data-composition-id="back" data-start="0" data-duration="143.433" data-width="1080" data-height="1920" data-fps="30">
 <div id="c2" class="clip" data-start="1.041" data-duration="0.433" style="z-index:5;"><div class="pxw" style="left:75.0px;top:175px;width:930.0px;height:116.3px"><span id="p1" class="px" style="font-size:116.3px;color:#fff;left:0.0px">CHOYXONA</span><i class="sq" id="p1q0" style="left:-36.0px;top:-36.0px;width:20px;height:20px"></i><i class="sq" id="p1q1" style="left:946.0px;top:-36.0px;width:20px;height:20px"></i><i class="sq" id="p1q2" style="left:-36.0px;top:132.2px;width:20px;height:20px"></i><i class="sq" id="p1q3" style="left:946.0px;top:132.2px;width:20px;height:20px"></i></div></div>
 <div id="c4" class="clip" data-start="1.474" data-duration="0.260" style="z-index:5;"><div class="pxw" style="left:75.0px;top:175px;width:930.0px;height:232.5px"><span id="p3" class="px" style="font-size:232.5px;color:#fff;left:0.0px">KAFE</span><i class="sq" id="p3q0" style="left:-36.0px;top:-36.0px;width:20px;height:20px"></i><i class="sq" id="p3q1" style="left:946.0px;top:-36.0px;width:20px;height:20px"></i><i class="sq" id="p3q2" style="left:-36.0px;top:248.5px;width:20px;height:20px"></i><i class="sq" id="p3q3" style="left:946.0px;top:248.5px;width:20px;height:20px"></i></div></div>
 <div id="c6" class="clip" data-start="1.734" data-duration="0.998" style="z-index:5;"><div class="pxw" style="left:75.0px;top:175px;width:930.0px;height:116.3px"><span id="p5" class="px" style="font-size:116.3px;color:#fff;left:0.0px">FAST-FUD</span><i class="sq" id="p5q0" style="left:-36.0px;top:-36.0px;width:20px;height:20px"></i><i class="sq" id="p5q1" style="left:946.0px;top:-36.0px;width:20px;height:20px"></i><i class="sq" id="p5q2" style="left:-36.0px;top:132.2px;width:20px;height:20px"></i><i class="sq" id="p5q3" style="left:946.0px;top:132.2px;width:20px;height:20px"></i></div></div>
@@ -156,7 +158,7 @@ tl.set("#p35q1",{"x": 70, "y": -70, "opacity": 0},0);tl.fromTo("#p35q1",{"x": 70
 tl.set("#p35q2",{"x": -70, "y": 70, "opacity": 0},0);tl.fromTo("#p35q2",{"x": -70, "y": 70, "opacity": 0},{"x": 0, "y": 0, "opacity": 1, "duration": 0.2, "ease": "power4.out", "immediateRender": false},100.204);
 tl.set("#p35q3",{"x": 70, "y": 70, "opacity": 0},0);tl.fromTo("#p35q3",{"x": 70, "y": 70, "opacity": 0},{"x": 0, "y": 0, "opacity": 1, "duration": 0.2, "ease": "power4.out", "immediateRender": false},100.204);
 cnt("#sum",0,369000,108.904,0.7,true);
-tl.set({},{},142.833);
+tl.set({},{},143.433);
 window.__timelines = window.__timelines || {};
 window.__timelines["back"] = tl;
 tl.seek(0);
