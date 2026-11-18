@@ -393,6 +393,88 @@ Views.money = {
   },
 };
 
+// ---------- The shared catalog: ready dishes, ticked and priced, go onto the menu ----------
+async function catalogDialog() {
+  let rows;
+  try { rows = (await GET('/api/catalog/dishes')).rows; } catch (e) { return toastError(e); }
+  const picked = {}; // id -> price
+  let sec = ''; let term = '';
+  const sections = [...new Set(rows.map((r) => r.category).filter(Boolean))];
+  const form = openModal({
+    title: `${icon('book-open')} ${t("Tayyor katalogdan qo'shish")}`, size: 'wide',
+    body: `<p class="small muted" style="margin-top:0">${t("Keraklilariga belgi qo'ying va narxini yozing. Rasm, bo'lim va tayyorlanish vaqti o'zi qo'yiladi.")}</p>
+      <input type="search" id="ct-q" placeholder="${esc(t('Qidirish: osh, kabob, choy…'))}" style="width:100%;margin-bottom:8px">
+      <div class="ct-tabs" id="ct-tabs"></div><div class="ct-grid" id="ct-grid"></div>
+      <div class="ct-foot"><b class="grow" id="ct-count"></b><span class="small muted">${t("Narx keyin ham o'zgartiriladi")}</span></div>`,
+    actions: [{ label: t('Bekor') }, { label: t("Qo'shish"), cls: 'primary', icon: 'check', onClick: async () => {
+      const items = Object.keys(picked).map((id) => ({ id: Number(id), price: Number(picked[id]) }));
+      if (!items.length) { toast(t('Hech narsa tanlanmagan'), 'warn'); return false; }
+      const miss = items.filter((x) => !(x.price > 0));
+      if (miss.length) { toast(t('Tanlangan taomlarning narxini yozing ({0} ta)', miss.length), 'warn'); return false; }
+      const r = await POST('/api/catalog/dishes', { items });
+      toast(t("{0} ta taom menyuga qo'shildi", r.added), 'ok');
+      refreshView();
+    } }],
+  });
+  const grid = form.querySelector('#ct-grid');
+  const draw = () => {
+    form.querySelector('#ct-tabs').innerHTML = [['', `${t('Hammasi')} (${rows.length})`], ...sections.map((s) => [s, s])]
+      .map(([k, n]) => `<button type="button" class="${sec === k ? 'on' : ''}" data-sec="${esc(k)}">${esc(n)}</button>`).join('');
+    const list = rows.filter((r) => (!sec || r.category === sec) && (!term || r.name.toLowerCase().includes(term)));
+    grid.innerHTML = list.length ? list.map((r) => {
+      const on = picked[r.id] !== undefined;
+      return `<div class="ct-card ${on ? 'on' : ''} ${r.have ? 'have' : ''}" data-ct="${r.id}" role="button" tabindex="0"><span class="ct-chk">${on ? icon('check', 14) : ''}</span>
+        <div class="ct-img">${r.photo ? `<img src="${esc(r.photo)}" alt="" loading="lazy">` : esc(r.emoji || '🍽️')}</div><b>${esc(r.name)}</b>
+        <small>${r.have ? t('Menyuda bor') : esc(r.category)}</small>
+        ${on ? `<input type="number" inputmode="numeric" min="0" data-price="${r.id}" value="${esc(picked[r.id])}" placeholder="${esc(t('Narxi'))}">` : ''}</div>`;
+    }).join('') : `<p class="muted">${t('Hech narsa topilmadi')}</p>`;
+    const n = Object.keys(picked).length;
+    form.querySelector('#ct-count').textContent = t('{0} ta taom tanlandi', n);
+    form.querySelectorAll('[data-sec]').forEach((b) => b.onclick = () => { sec = b.dataset.sec; draw(); });
+    grid.querySelectorAll('[data-ct]').forEach((c) => c.onclick = (e) => {
+      if (e.target.closest('input')) return;
+      const id = c.dataset.ct; const r = rows.find((x) => String(x.id) === id);
+      if (r.have) return;
+      if (picked[id] !== undefined) delete picked[id]; else picked[id] = '';
+      draw();
+      const inp = grid.querySelector(`[data-price="${id}"]`); if (inp) inp.focus();
+    });
+    grid.querySelectorAll('[data-price]').forEach((i) => i.oninput = () => { picked[i.dataset.price] = i.value; });
+  };
+  form.querySelector('#ct-q').oninput = (e) => { term = e.target.value.trim().toLowerCase(); draw(); };
+  draw();
+}
+
+// A product form in a shop: a scanned code the shared base knows fills in the name, section and unit.
+function catalogBarcodeFill(f, categories) {
+  if (!f.barcode) return;
+  let last = '';
+  const look = async () => {
+    const code = f.barcode.value.trim();
+    if (!/^\d{8,14}$/.test(code) || code === last || f.name.value.trim()) return;
+    last = code;
+    let r;
+    try { r = await GET(`/api/catalog/barcode/${code}`); } catch (e) { return; }
+    if (!r.found || f.name.value.trim()) return;
+    f.name.value = r.name;
+    const cat = (categories || []).find((c) => c.name.toLowerCase() === String(r.category || '').toLowerCase());
+    if (cat && f.category_id && !f.category_id.value) f.category_id.value = cat.id;
+    if (f.unit && r.unit && [...f.unit.options || []].some((o) => o.value === r.unit)) f.unit.value = r.unit;
+    if (f.icon && r.emoji) f.icon.value = r.emoji;
+    let note = f.querySelector('.cat-found');
+    if (!note) {
+      note = document.createElement('div'); note.className = 'notice green cat-found'; note.style.marginBottom = '12px';
+      const grid = f.querySelector('.form-grid'); grid.parentNode.insertBefore(note, grid);
+    }
+    note.innerHTML = `${icon('circle-check', 18)} <span><b>${t('FLOWI bazasidan topildi')}</b> — ${t("nomi va bo'limi qo'yildi. Narx va qoldiqni yozing.")}</span>`;
+    const price = f.price || f.querySelector('[name=price]'); if (price) price.focus();
+  };
+  f.barcode.addEventListener('change', look);
+  f.barcode.addEventListener('blur', look);
+  f.barcode.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); look(); } });
+  return look;
+}
+
 // ---------- Boshqaruv: everyday management in the open (customers, store, staff, regular costs) ----------
 const HUB_PAGES = () => [
   ['customers', 'book-user', t('Mijozlar'), t('Qarz daftari, keshbek va doimiy mijozlar')],
@@ -1151,11 +1233,12 @@ Views.menuadmin = {
     const idish = isIdish();
     return `<div class="page-head"><h1>${idish ? t('Ombor') : W('Menyu')}</h1>
       <input type="search" id="menu-search" placeholder="${esc(shop ? t('Shtrix-kod yoki nomi') : t('Qidirish'))}" value="${esc(UI.menuSearch || '')}" style="max-width:240px">
-      ${shop ? '' : `<button class="btn" id="menu-import">${icon('upload', 18)} ${t('Import')}</button>`}
+      ${shop ? '' : `<button class="btn" id="menu-catalog">${icon('book-open', 18)} ${t('Tayyor katalog')}</button><button class="btn" id="menu-import">${icon('upload', 18)} ${t('Import')}</button>`}
       ${shop ? `<button class="btn ok" id="mol-keldi">${icon('package-plus', 18)} ${t('Mol keldi')}</button><button class="btn" id="mol-import">${icon('file-spreadsheet', 18)} Excel</button><button class="btn" id="mol-labels">${icon('scan-barcode', 18)} ${t('Yorliq')}</button>` : ''}
       ${shop ? '' : `<button class="btn" id="mods-btn">${icon('list', 18)} ${t("Qo'shimcha tanlovlar")}</button>`}
       <button class="btn" id="add-cat">${icon('plus', 18)} ${t("Bo'lim")}</button><button class="btn primary" id="add-dish">${icon('plus', 18)} ${W('Taom')}</button></div>
       ${idish ? idishStockKpis(dishes) : ''}
+      ${!shop && !q && dishes.length < 15 && can('owner', 'admin') ? `<div class="notice blue">${icon('sparkles', 18)} <span>${t("Menyuni tez to'ldiring: tayyor taomlar rasmi va bo'limi bilan — faqat narxini yozasiz.")} <a href="#" id="menu-catalog-2">${t('Katalogni ochish')}</a></span></div>` : ''}
       ${shop && low.length ? `<div class="notice">${icon('triangle-alert', 18)} ${t('Kam qolgan: {0}', low.map((d) => `${esc(d.name)}${d.size ? ` ${esc(d.size)}` : ''} (${idish ? esc(stockLabel(d)) : d.stock})`).join(', '))}</div>` : ''}
       ${groups.filter((g) => (g.c.id && !q) || g.ds.length).map(({ c, ds }) => `<div class="card"><div class="card-head"><h2>${c.id ? `<i class="cat-dot" style="background:${catColor({ categories }, c.id)}"></i>` : ''}${esc(c.icon)} ${esc(c.name)}</h2>
         ${c.id ? `<button class="icon-btn" data-edit-cat="${c.id}">${icon('pencil', 18)}</button><button class="icon-btn danger" data-del-cat="${c.id}">${icon('trash-2', 18)}</button>` : ''}</div>
@@ -1180,6 +1263,7 @@ Views.menuadmin = {
     const mk = root.querySelector('#mol-keldi'); if (mk) mk.onclick = () => purchaseDialog();
     const mi = root.querySelector('#mol-import'); if (mi) mi.onclick = () => importDialog();
     const mn = root.querySelector('#menu-import'); if (mn) mn.onclick = () => menuImportDialog(categories);
+    ['#menu-catalog', '#menu-catalog-2'].forEach((s) => { const b = root.querySelector(s); if (b) b.onclick = (e) => { e.preventDefault(); catalogDialog(); }; });
     const ml = root.querySelector('#mol-labels'); if (ml) ml.onclick = () => labelsDialog();
     const editCat = (c = {}) => openModal({
       title: `${icon('list')} ${c.id ? t("Bo'limni tahrirlash") : t("Yangi bo'lim")}`,
@@ -1237,7 +1321,8 @@ Views.menuadmin = {
         <label class="field" style="margin-top:12px">${t('Qisqa tavsif (mijozga)')}<textarea name="description" rows="2" maxlength="300" placeholder="${esc(t("Masalan: mol go'shti, sabzi, no'xat — 400 g"))}">${esc(d.description || '')}</textarea></label>` : ''}`,
       onMount: (f) => {
         const camBtn = f.querySelector('[data-cam]');
-        if (camBtn) camBtn.onclick = () => Scanner.open({ title: t('Shtrix-kodni skanerlang'), once: true, onCode: (code) => { f.barcode.value = code; return { ok: true, text: code }; } });
+        const fill = shop && !d.id ? catalogBarcodeFill(f, categories) : null;
+        if (camBtn) camBtn.onclick = () => Scanner.open({ title: t('Shtrix-kodni skanerlang'), once: true, onCode: (code) => { f.barcode.value = code; if (fill) fill(); return { ok: true, text: code }; } });
         const file = f.querySelector('#dp-file');
         if (!file) return;
         const prev = f.querySelector('#dp-prev');
@@ -1676,6 +1761,9 @@ Views.settings = {
       ${isIdish() ? `<h3 style="margin:18px 0 10px">${icon('package', 18)} ${t('Katta optom')}</h3>
       <div class="form-grid"><label class="field">${t('Bir xil moldan necha karobka olinsa katta optom narxi qo\'yiladi')}<input type="number" name="big_box_from" min="0" value="${nn(s.big_box_from, 10)}"></label></div>
       <p class="small muted" style="margin-top:8px">${t("0 — faqat \"Katta optom\" mijozlarga. Mijozning narxi Mijozlar bo'limida belgilanadi.")}</p>` : ''}
+      ${isShop() ? `<h3 style="margin:18px 0 10px">${icon('scan-barcode', 18)} ${t('FLOWI shtrix-kod bazasi')}</h3>
+      <label class="check"><input type="checkbox" name="catalog_share" ${s.catalog_share !== false ? 'checked' : ''}> ${t("Yangi tovar nomlarini umumiy bazaga ulashish")}</label>
+      <p class="small muted" style="margin-top:6px">${t("Faqat shtrix-kod va tovar nomi ulashiladi — narx, qoldiq va sotuvlar hech kimga ko'rinmaydi. Buning evaziga skanerlangan tovarning nomi o'zi chiqadi.")}</p>` : ''}
       ${isShop() ? '' : `<h3 style="margin:18px 0 10px">${icon('truck', 18)} ${t('Dostavka')}</h3>
       <div class="form-grid"><label class="field">${t('Yetkazib berish haqi')} (${esc(s.currency)})<input type="number" name="delivery_fee" min="0" step="1000" value="${s.delivery_fee || 0}"></label></div>
       <p class="small muted" style="margin-top:8px">${t("Har bir dostavka chekiga avtomatik qo'shiladi. 0 — qo'shilmaydi.")}</p>`}
@@ -1714,6 +1802,7 @@ Views.settings = {
       d.expense_categories = [...new Set(rows.map((r) => r.name))];
       if (rows.some((r) => r.group)) d.expense_groups = Object.fromEntries(rows.filter((r) => r.group).map((r) => [r.name, r.group]));
       d.income_categories = d.income_categories.split('\n').map((x) => x.trim()).filter(Boolean);
+      if (f.catalog_share) d.catalog_share = f.catalog_share.checked;
       try { App.settings = await PUT('/api/settings', d); toast(t('Saqlandi'), 'ok'); render(); } catch (err) { toastError(err); }
     };
   },

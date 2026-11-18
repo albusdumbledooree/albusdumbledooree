@@ -3559,3 +3559,52 @@ test('device kinds: the till shows everyone, a hall tablet only waiters and cash
   assert.equal((await call('PUT', `/api/devices/${hallRow.id}/kind`, boss, { kind: 'main' })).status, 200);
   assert.ok((await roles(hall)).includes('owner'));
 });
+
+test('catalog: ready dishes onto the menu with their section and photo, a shop name offered to the barcode base, checked by the platform, then found by others', async () => {
+  const { realBarcode } = require('../server/catalog');
+  assert.equal(realBarcode('4600494001222'), true); assert.equal(realBarcode('4600494001223'), false, 'check digit');
+  assert.equal(realBarcode('2000000000015'), false, "a shop's own code"); assert.equal(realBarcode('12345'), false);
+  const admin = (await call('POST', '/api/platform/login', null, { username: 'superadmin', password: 'super123' })).data.token;
+  await call('POST', '/api/platform/tenants', admin, { name: 'Katalog choyxona', code: 'katc', owner_name: 'E', owner_username: 'katb', owner_password: 'parol12345', plan: 'start' });
+  const boss = await login('katb', 'parol12345', 'katc');
+  // The platform gives one dish a photo and an MXIK code.
+  let ov = (await call('GET', '/api/platform/catalog', admin)).data;
+  assert.ok(ov.stats.dishes >= 60);
+  const osh = ov.rows.find((d) => d.name === 'Osh (palov)');
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  assert.equal((await call('PUT', `/api/platform/catalog/dishes/${osh.id}`, admin, { mxik: '123' })).status, 400, 'MXIK is 17 digits');
+  const saved = (await call('PUT', `/api/platform/catalog/dishes/${osh.id}`, admin, { mxik: '10901001001000000', photo: png })).data;
+  assert.ok(saved.photo); assert.equal((await fetch(`${base}${saved.photo}`)).status, 200);
+  // The business: the list, then adding three dishes (one is already on the menu by name).
+  await call('POST', '/api/dishes', boss, { name: "Lag'mon", price: 30000 });
+  const list = (await call('GET', '/api/catalog/dishes', boss)).data.rows;
+  assert.equal(list.find((d) => d.name === "Lag'mon").have, true);
+  const pick = (n) => list.find((d) => d.name === n).id;
+  const r = (await call('POST', '/api/catalog/dishes', boss, { items: [{ id: pick('Osh (palov)'), price: 45000 }, { id: pick("Ko'k choy (choynak)"), price: 5000 }, { id: pick("Lag'mon"), price: 1 }] })).data;
+  assert.deepEqual(r, { added: 2, skipped: 1, categories: 2 });
+  const menu = (await call('GET', '/api/menu', boss)).data;
+  const m = menu.dishes.find((d) => d.name === 'Osh (palov)');
+  assert.equal(m.price, 45000); assert.ok(m.photo, 'the photo was copied'); assert.equal(menu.categories.find((c) => c.id === m.category_id).name, 'Quyuq taomlar');
+  assert.equal(menu.dishes.find((d) => d.name === "Ko'k choy (choynak)").needs_kitchen, 0);
+  assert.equal((await call('POST', '/api/catalog/dishes', boss, { items: [{ id: 999999, price: 1 }] })).status, 404);
+  ov = (await call('GET', '/api/platform/catalog', admin)).data;
+  assert.equal(ov.rows.find((d) => d.id === osh.id).uses, 1);
+  // Shops: the first one saves a product with a real barcode; the second finds it only after the platform checks it.
+  await call('POST', '/api/platform/tenants', admin, { name: 'Market A', code: 'mkta', owner_name: 'E', owner_username: 'mkta', owner_password: 'parol12345', plan: 'start', business_type: 'market' });
+  await call('POST', '/api/platform/tenants', admin, { name: 'Market B', code: 'mktb', owner_name: 'E', owner_username: 'mktb', owner_password: 'parol12345', plan: 'start', business_type: 'market' });
+  const shopA = await login('mkta', 'parol12345', 'mkta'); const shopB = await login('mktb', 'parol12345', 'mktb');
+  assert.equal((await call('POST', '/api/dishes', shopA, { name: 'Coca-Cola 1 L', price: 12000, cost: 9000, barcode: '4600494001222', unit: 'dona' })).status, 200);
+  await call('POST', '/api/dishes', shopA, { name: 'Ichki tovar', price: 1000, barcode: '2000000000015' });
+  assert.equal((await call('GET', '/api/catalog/barcode/4600494001222', shopB)).data.found, false, 'not checked yet');
+  const pend = (await call('GET', '/api/platform/catalog?kind=pending', admin)).data;
+  assert.equal(pend.rows.length, 1); assert.equal(pend.rows[0].name, 'Coca-Cola 1 L'); assert.equal(pend.rows[0].from, 'Market A');
+  assert.ok(!JSON.stringify(pend).includes('12000') && !JSON.stringify(pend).includes('9000'), 'no prices leave the shop');
+  await call('PUT', '/api/platform/catalog/goods/4600494001222', admin, { status: 'ok', name: 'Coca-Cola 1 L (shisha)', category: 'Ichimliklar' });
+  const found = (await call('GET', '/api/catalog/barcode/4600494001222', shopB)).data;
+  assert.equal(found.found, true); assert.equal(found.name, 'Coca-Cola 1 L (shisha)'); assert.equal(found.category, 'Ichimliklar');
+  // A shop that turned sharing off offers nothing.
+  await call('PUT', '/api/settings', shopB, { catalog_share: false });
+  await call('POST', '/api/dishes', shopB, { name: 'Fanta', price: 11000, barcode: '4600494001239' });
+  assert.equal((await call('GET', '/api/platform/catalog?kind=pending', admin)).data.rows.length, 0);
+  assert.equal((await call('GET', '/api/platform/catalog', boss)).status, 401);
+});

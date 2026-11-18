@@ -19,6 +19,7 @@ const { snapshot, listTenantBackups, stampNow } = require('./backup');
 const { createLeads } = require('./leads');
 const { createHelpBot } = require('./helpbot');
 const { createGiveaway } = require('./giveaway');
+const { createCatalog } = require('./catalog');
 const { createSecretBox } = require('./secret');
 const { verifyInput } = require('./seo');
 const { hashPassword, verifyPassword, newToken, HttpError, str, int } = require('./util');
@@ -148,7 +149,7 @@ function createPlatform(dataDir) {
     const hub = createHub();
     ctx = { id, db, hub, row, file };
     ctx.api = createApi(db, { hub, tokenPrefix: `t${id}_`, tenant: () => ctx.row, plan: () => planFor(ctx.row), branches: () => branchesOf(id), file, telegram: telegramFor(id), helpbot: helpbot.forTenant(id), secret, academy: () => academy.content(),
-      academyRegister: (info) => academy.register({ ...info, tenant_id: id, tenant_name: ctx.row.name }), academyDuels: duels });
+      academyRegister: (info) => academy.register({ ...info, tenant_id: id, tenant_name: ctx.row.name }), academyDuels: duels, catalog: catalog.forTenant(id) });
     contexts.set(id, ctx);
     return ctx;
   }
@@ -198,6 +199,8 @@ function createPlatform(dataDir) {
   const leads = createLeads({ pdb, pget, pset, now });
   // FLOWI Akademiya: the lessons every business gets (editable here) and the open test on the site.
   const academy = createPublicAcademy(pdb, { pget, pset, now });
+  // The shared catalog: ready dishes and the barcode base (businesses read it; only the platform changes it).
+  const catalog = createCatalog(pdb, { now, tenantName: (id) => { const r = pdb.prepare('SELECT name FROM tenants WHERE id = ?').get(id); return r ? r.name : ''; } });
   // Bellashuv: duels between workers (of one business or of any), site visitors, or by a link; a result reaches the worker's screen.
   const duels = createDuels(pdb, { content: () => academy.content(), now,
     notify: (tid, data) => { const c = contexts.get(tid); if (c) c.hub.publish('duel', data, { userIds: [data.to] }); },
@@ -940,6 +943,12 @@ function createPlatform(dataDir) {
       return { ok: true, global: pget('academy_duel_global', '1') !== '0', site: pget('academy_duel_site', '1') !== '0' };
     }],
     ['GET', '/api/platform/academy/certs', true, ({ query }) => { syncAcademyCerts(); return academy.certs({ query }); }],
+    ['GET', '/api/platform/catalog', true, catalog.overview],
+    ['POST', '/api/platform/catalog/dishes', true, catalog.saveDish],
+    ['PUT', '/api/platform/catalog/dishes/:id', true, catalog.saveDish],
+    ['DELETE', '/api/platform/catalog/dishes/:id', true, catalog.deleteDish],
+    ['PUT', '/api/platform/catalog/goods/:id', true, catalog.saveGood],
+    ['DELETE', '/api/platform/catalog/goods/:id', true, catalog.deleteGood],
     ['GET', '/api/platform/giveaway', true, giveaway.overview],
     ['PUT', '/api/platform/giveaway', true, giveaway.setToken],
     ['DELETE', '/api/platform/giveaway', true, giveaway.unlink],
@@ -1004,7 +1013,7 @@ function createPlatform(dataDir) {
     pdb.close();
   }
 
-  return { handle, byCode, byToken, byGuestKey, remindTick, tgBackupTick, sendBackups, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, seoVerify, desktopTick, submitLead: leads.submit, academyStart: academy.start, academyFinish: academy.finish, academyCert: academy.cert, duels, duelSiteOn: () => pget('academy_duel_site', '1') !== '0' && academy.siteOn(), helpRemindTick: (o) => helpbot.remindTick(o), giveawayTick: () => giveaway.tick() };
+  return { handle, byCode, byToken, byGuestKey, remindTick, tgBackupTick, sendBackups, assertActive, close, supportFor, restoreTenant, planFor, publicInfo, seoVerify, desktopTick, submitLead: leads.submit, academyStart: academy.start, academyFinish: academy.finish, academyCert: academy.cert, duels, duelSiteOn: () => pget('academy_duel_site', '1') !== '0' && academy.siteOn(), helpRemindTick: (o) => helpbot.remindTick(o), giveawayTick: () => giveaway.tick(), catalogPhoto: (id) => catalog.photo(id) };
 }
 
 module.exports = { createPlatform };

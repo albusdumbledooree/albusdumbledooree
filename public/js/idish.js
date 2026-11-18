@@ -105,6 +105,7 @@ function idishDishForm(d, categories, suppliers) {
       </div>
       <p class="small muted">${t('Tannarx har "Mol keldi"da o\'zi yangilanadi (yo\'lkira bilan).')}</p>`,
     onMount: (f) => {
+      if (!d.id) catalogBarcodeFill(f, categories);
       const cur = () => ({ ...d, price: Number(f.price.value) || 0, pack_size: Number(f.pack_size.value) || 0, box_size: Number(f.box_size.value) || 0, tiers: readTiers(f) });
       const draw = () => {
         const x = cur();

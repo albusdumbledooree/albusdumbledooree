@@ -82,7 +82,7 @@ function routeModule(pattern) {
 // opts.hub: live-event hub of this choyxona; opts.tokenPrefix marks which choyxona a session token belongs to;
 // opts.tenant(): the choyxona's platform record (code, name, paid_until); opts.plan(): its plan (sections, staff limit);
 // opts.file: its database file.
-function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () => null, branches = () => [], file = null, telegram = null, helpbot = null, secret = NO_BOX, academy = null, academyRegister = null, academyDuels = null } = {}) {
+function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () => null, branches = () => [], file = null, telegram = null, helpbot = null, secret = NO_BOX, academy = null, academyRegister = null, academyDuels = null, catalog = null } = {}) {
   const events = hub;
   // Shared devices (the staff-list screen) get tokens of their own: "d<choyxona>_…".
   const devicePrefix = tokenPrefix.replace(/^t/, 'd');
@@ -202,6 +202,8 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     for (const [k, d] of Object.entries(ALERT_DEFAULTS)) { const v = out[k] === undefined || out[k] === '' ? d : out[k]; out[k] = k === 'alert_on' || k === 'alert_delete' ? v === '1' : Number(v) || 0; }
     // Off until the boss turns them on: the "rate us" QR and the payment QRs on the check.
     for (const k of ['rating_on', 'pay_payme_on', 'pay_click_on', 'booking_on']) out[k] = out[k] === '1';
+    // A shop's product names go to the shared barcode base unless the boss turned it off.
+    out.catalog_share = out.catalog_share !== '0';
     for (const k of ['pay_payme_id', 'pay_payme_field', 'pay_click_service', 'pay_click_merchant']) out[k] = out[k] || '';
     out.duel_on = out.duel_on !== '0';
     out.duel_global = out.duel_global !== '0';
@@ -598,7 +600,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
 
   // ---------- Settings ----------
   function updateSettings({ user, body }) {
-    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'receipt_logo_size', 'receipt_group', 'receipt_per_person', 'room_assign', 'delivery_fee', 'big_box_from', 'cashier_sums', 'duel_on', 'duel_global', 'duel_work', 'rating_on', 'booking_on', 'pay_payme_on', 'pay_click_on', 'pay_payme_id', 'pay_payme_field', 'pay_click_service', 'pay_click_merchant', 'alert_on', 'alert_cancel_n', 'alert_discount_pct', 'alert_delete', 'alert_open_hours', 'alert_shift_diff',
+    const allowed = ['name', 'address', 'phone', 'service_pct', 'service_type', 'service_per_guest', 'currency', 'receipt_footer', 'receipt_width', 'receipt_logo_size', 'receipt_group', 'receipt_per_person', 'room_assign', 'delivery_fee', 'big_box_from', 'cashier_sums', 'duel_on', 'duel_global', 'duel_work', 'rating_on', 'booking_on', 'catalog_share', 'pay_payme_on', 'pay_click_on', 'pay_payme_id', 'pay_payme_field', 'pay_click_service', 'pay_click_merchant', 'alert_on', 'alert_cancel_n', 'alert_discount_pct', 'alert_delete', 'alert_open_hours', 'alert_shift_diff',
       'expense_categories', 'income_categories', 'waiter_cancel', 'cancel_code', 'auto_lock_minutes', 'lock_bg', 'logo',
       'receipt_logo', 'receipt_logo_id', 'pin_lock_attempts', 'pin_lock_minutes', 'room_types', 'staff_meal_price', 'cashback_pct', 'qr_order', 'qr_from', 'qr_to',
       'geo_lat', 'geo_lng', 'geo_radius', 'work_from', 'expense_groups', 'staff_types', ...GEO_FLAGS, ...OWNER_SETTINGS];
@@ -681,7 +683,7 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
       }
       if (k === 'waiter_cancel') v = v ? '1' : '0';
       if (k === 'cashier_sums' || k === 'duel_on' || k === 'duel_global' || k === 'duel_work' || k === 'alert_on' || k === 'alert_delete') v = v ? '1' : '0';
-      if (k === 'rating_on' || k === 'pay_payme_on' || k === 'pay_click_on' || k === 'booking_on') v = v ? '1' : '0';
+      if (k === 'rating_on' || k === 'pay_payme_on' || k === 'pay_click_on' || k === 'booking_on' || k === 'catalog_share') v = v ? '1' : '0';
       if (['pay_payme_id', 'pay_payme_field', 'pay_click_service', 'pay_click_merchant'].includes(k)) {
         v = String(v || '').trim();
         if (!/^[\w-]{0,64}$/.test(v)) throw new HttpError(400, "To'lov tizimi ID'si faqat harf va raqamlardan iborat bo'lsin");
@@ -1168,6 +1170,10 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     }
     audit(user, prev.id ? 'dish_update' : 'dish_create', d.name);
     events.publish('menu');
+    if (catalog && d.barcode && SHOP_TYPES.includes(businessType()) && settings().catalog_share) {
+      const cat = d.category_id ? q('SELECT name FROM categories WHERE id = ?').get(d.category_id) : null;
+      try { catalog.offer({ barcode: d.barcode, name: d.name, category: cat ? cat.name : '', unit: d.unit, emoji: d.icon }); } catch (e) { /* the base never stops a sale */ }
+    }
     return q('SELECT * FROM dishes WHERE id = ?').get(id);
   }
 
@@ -1203,6 +1209,54 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     audit(user, 'menu_import', `${added} ta yangi, ${updated} ta yangilandi`);
     events.publish('menu');
     return { added, updated, categories: newCats };
+  }
+
+  // ---------- The shared catalog ----------
+  function needCatalog() { if (!catalog) throw new HttpError(404, 'Katalog mavjud emas'); }
+  // Ready dishes, with the ones already on the menu (by name) marked.
+  function catalogDishes() {
+    needCatalog();
+    const have = new Set(q('SELECT LOWER(name) n FROM dishes WHERE active = 1').all().map((r) => r.n));
+    return { rows: catalog.dishes().map((d) => ({ ...d, have: have.has(d.name.toLowerCase()) })) };
+  }
+  // The ticked dishes go onto the menu with their section (made if missing), emoji, cooking time and photo.
+  function addCatalogDishes({ user, body }) {
+    needCatalog();
+    if (!Array.isArray(body.items) || !body.items.length) throw new HttpError(400, 'Taom tanlanmagan');
+    if (body.items.length > 300) throw new HttpError(400, "Bir martada 300 tadan ko'p taom qo'shib bo'lmaydi");
+    const cats = new Map(q('SELECT id, name FROM categories').all().map((c) => [c.name.toLowerCase(), c.id]));
+    let added = 0; let skipped = 0; let newCats = 0; const used = [];
+    tx(() => {
+      body.items.forEach((it, i) => {
+        const c = catalog.dish(it.id);
+        if (!c) throw new HttpError(404, `${i + 1}-taom katalogda topilmadi`);
+        const price = int(it.price, `${c.name}: narxi`, { required: true, max: 10_000_000_000 });
+        if (q('SELECT 1 FROM dishes WHERE active = 1 AND LOWER(name) = LOWER(?)').get(c.name)) { skipped++; return; }
+        let catId = null;
+        if (c.category) {
+          catId = cats.get(c.category.toLowerCase());
+          if (!catId) {
+            catId = Number(q('INSERT INTO categories (name, icon, sort) VALUES (?, ?, ?)').run(c.category, catalog.sectionIcon(c.category), cats.size).lastInsertRowid);
+            cats.set(c.category.toLowerCase(), catId); newCats++;
+          }
+        }
+        let photo = null;
+        if (c.photo_mime && c.photo) photo = Number(q("INSERT INTO assets (kind, mime, data, created_at) VALUES ('dish', ?, ?, ?)").run(c.photo_mime, c.photo, now()).lastInsertRowid);
+        q("INSERT INTO dishes (category_id, name, price, cost, prep_minutes, unit, needs_kitchen, icon, photo, available, created_at) VALUES (?, ?, ?, 0, ?, 'porsiya', ?, ?, ?, 1, ?)")
+          .run(catId, c.name, price, c.prep_minutes, c.kitchen ? 1 : 0, c.emoji || '', photo, now());
+        used.push(c.id); added++;
+      });
+    });
+    catalog.used(used);
+    audit(user, 'menu_catalog', `${added} ta taom katalogdan qo'shildi`);
+    events.publish('menu');
+    return { added, skipped, categories: newCats };
+  }
+  // A scanned code that the shared base knows: name, section, unit (only names the platform checked).
+  function catalogBarcode({ params }) {
+    needCatalog();
+    const g = catalog.good(params.id);
+    return g ? { found: true, ...g } : { found: false };
   }
 
   function deleteDish({ user, params }) {
@@ -2746,6 +2800,9 @@ function createApi(db, { hub, tokenPrefix = '', tenant = () => null, plan = () =
     ['GET', '/api/work/log', MANAGERS, work.log],
     ['GET', '/api/work/:id/photo', MANAGERS, work.photo],
     ['GET', '/api/customers', MONEY, pro.listCustomers],
+    ['GET', '/api/catalog/dishes', MANAGERS, catalogDishes],
+    ['POST', '/api/catalog/dishes', MANAGERS, addCatalogDishes],
+    ['GET', '/api/catalog/barcode/:id', MANAGERS, catalogBarcode],
     ['GET', '/api/hub', MONEY, hubSummary],
     ['POST', '/api/customers', MONEY, pro.saveCustomer],
     ['GET', '/api/customers/:id', MONEY, pro.customerDetail],

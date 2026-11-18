@@ -112,6 +112,14 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
     // For the platform's activity view: what went wrong, for whom (filled in below once the business is known).
     const seen = { api: null, user: null, pattern: '' };
     try {
+      // A dish photo of the shared catalog (the same for every business): /catalog-photo/<id>
+      const cph = /^\/catalog-photo\/(\d+)$/.exec(pathname);
+      if (cph) {
+        const a = platform.catalogPhoto(Number(cph[1]));
+        if (!a) throw new HttpError(404, 'Topilmadi');
+        res.writeHead(200, { 'Content-Type': a.mime, 'Cache-Control': 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' });
+        return res.end(a.data);
+      }
       // A choyxona's own pictures (logo, desktop background): /media/<code>/<id>
       const media = /^\/media\/([a-z0-9-]+)\/(\d+)$/.exec(pathname);
       if (media) {

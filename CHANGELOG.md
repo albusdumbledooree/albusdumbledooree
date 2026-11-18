@@ -2,6 +2,12 @@
 
 Har bir yangilanishda versiya raqami oshadi va ekran chetida (pastki qator, ish stoli, platforma) ko'rinadi.
 
+## 1.49.0 — Tayyor taomlar katalogi va shtrix-kod bazasi
+
+- **Tayyor katalog** (choyxona, restoran, fast food): Menyu → "Tayyor katalog". 75 ta taom 9 bo'limda (osh, manti, lag'mon, kaboblar, salatlar, non, ichimliklar, shirinliklar, fast food). Keraklisiga belgi qo'yib, narxini yozasiz — bo'lim (yo'q bo'lsa o'zi yaratiladi), belgi, tayyorlanish vaqti va rasm o'zi qo'yiladi. Menyuda bor taom qaytadan qo'shilmaydi. Menyu kichik bo'lsa, tepada eslatma chiqadi.
+- **Shtrix-kod bazasi** (do'konlar): yangi tovarni skanerlaganda, kod FLOWI bazasida bo'lsa, nomi, bo'limi va o'lchovi o'zi to'ladi — faqat narx va qoldiqni yozasiz. Baza do'konlar kiritgan tovarlardan o'sadi: faqat shtrix-kod va nom yuboriladi, narx, qoldiq va sotuvlar hech qachon chiqmaydi. Do'konning o'z kodlari (2 bilan boshlanadi) va noto'g'ri kodlar yuborilmaydi. Sozlamalar → Muassasa'da o'chirib qo'yish mumkin.
+- **Platforma → Katalog**: taomlarni qo'shish, tahrirlash, rasm yuklash va MXIK kodini kiritish; do'konlardan kelgan nomlarni tekshirish (tasdiqlash, tuzatish, rad etish). Faqat tasdiqlangan nomlar boshqa do'konlarga ko'rinadi.
+
 ## 1.48.0 — Qurilma turlari: asosiy kassa, zal, oshxona
 
 - Qurilmani ulashda **turi** tanlanadi: **Asosiy kassa** (hamma xodim, boshliq ham), **Qo'shimcha qurilma (zal)** — faqat ofitsant va kassir, **Oshxona** — faqat oshpazlar.

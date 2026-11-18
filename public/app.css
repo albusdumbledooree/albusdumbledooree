@@ -1498,3 +1498,25 @@ details.ver summary .grow { flex: 1 1 200px; min-width: 0; }
 .kind-card span { display: flex; flex-direction: column; gap: 2px; }
 .kind-card small { color: var(--muted); font-size: 13px; }
 .kind-card:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+
+/* ---------- The shared catalog (ready dishes) ---------- */
+.ct-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 12px; }
+.ct-tabs button { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 999px; padding: 6px 12px; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer; }
+.ct-tabs button.on { background: var(--text); color: var(--panel); border-color: var(--text); }
+.ct-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; max-height: 52vh; overflow: auto; padding: 2px; }
+.ct-card { border: 1.5px solid var(--line); border-radius: 14px; padding: 10px; background: var(--panel); display: flex; flex-direction: column; gap: 6px; position: relative; cursor: pointer; }
+.ct-card.on { border-color: var(--primary); background: var(--primary-soft); }
+.ct-card.have { opacity: .5; cursor: default; }
+.ct-img { height: 84px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 44px; background: var(--panel-2); overflow: hidden; }
+.ct-img img { width: 100%; height: 100%; object-fit: cover; }
+.ct-card b { font-size: 15px; line-height: 1.25; }
+.ct-card small { color: var(--muted); font-size: 12.5px; }
+.ct-card input { min-height: 38px; padding: 6px 10px; font: inherit; width: 100%; }
+.ct-chk { position: absolute; top: 8px; right: 8px; width: 22px; height: 22px; border-radius: 7px; border: 2px solid var(--line); background: var(--panel); display: flex; align-items: center; justify-content: center; color: #fff; }
+.ct-card.on .ct-chk { background: var(--primary); border-color: var(--primary); }
+.ct-foot { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+@media (max-width: 600px) { .ct-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 56vh; } .ct-img { height: 64px; font-size: 34px; } }
+.notice.green { background: rgba(22, 163, 74, .1); color: #15803d; }
+.pc-thumb { display: inline-flex; width: 40px; height: 40px; border-radius: 10px; background: var(--panel-2); align-items: center; justify-content: center; font-size: 22px; overflow: hidden; }
+.pc-thumb img, .pc-photo img { width: 100%; height: 100%; object-fit: cover; }
+.pc-photo { width: 110px; height: 110px; border-radius: 14px; background: var(--panel-2); display: flex; align-items: center; justify-content: center; font-size: 54px; overflow: hidden; flex: none; }
